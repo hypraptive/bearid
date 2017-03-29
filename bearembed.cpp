@@ -472,6 +472,7 @@ int main(int argc, char** argv)
           string emb_str = objs[i][j];
           //cout << "Image: " << img_str << endl;
           load_image(image, img_str);
+          // get embedding
           matrix<float,0,1> embedded = embedding_net(image);
           boost::replace_first(emb_str, src_path.string(), dst_path.string());
           boost::filesystem::path emb_path(emb_str);
