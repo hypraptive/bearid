@@ -77,6 +77,10 @@ int main(int argc, char** argv)
     }
     for (size_t j = 0; j < objs[i].size(); ++j)
     {
+      if (j==0)
+      {
+        cout << i << " : " << objs[i][j] << endl;
+      }
       sample_type embedded;
       deserialize(objs[i][j]) >> embedded;
       samples.push_back(embedded);
