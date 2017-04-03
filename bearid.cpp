@@ -210,12 +210,16 @@ int main(int argc, char** argv) try
   one_vs_one_decision_function<ovo_trainer,
   decision_function<kernel_type>    // This is the output of the linear_trainer
   > df;
+  std::vector <string> ids;
+  double id_idx;
   deserialize("bear_svm.dat") >> df;
+  deserialize("bear_svm_ids.dat") >> ids;
 
   for (auto&& chip : face_chips)
   {
     matrix<float,0,1> embedded = embedding_net(chip);
-    cout << "predicted label: "<< df(embedded) << endl;
+    id_idx = df(embedded);
+    cout << "predicted label: "<< id_idx << " == " << ids[id_idx] << endl;
   }
 }
 

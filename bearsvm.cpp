@@ -8,6 +8,7 @@ Train a linear SVM to classify bears from bear face embeddings
 #include <dlib/svm_threaded.h>
 #include <dlib/svm.h>
 #include <dlib/image_io.h>
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace dlib;
@@ -49,6 +50,8 @@ int main(int argc, char** argv)
   typedef matrix<float,128,1> sample_type;
   std::vector<sample_type> samples;
   std::vector<double> labels;
+  std::vector <string> fields;
+  std::vector <string> ids;
 
   // Onve vs One trainer
   typedef one_vs_one_trainer<any_trainer<sample_type> > ovo_trainer;
@@ -79,7 +82,10 @@ int main(int argc, char** argv)
     {
       if (j==0)
       {
-        cout << i << " : " << objs[i][j] << endl;
+        boost::split( fields, objs[i][j], boost::is_any_of( "/" ));
+        //cout << fields.size() << " token[s-2] " << fields[fields.size() - 2] << endl;
+        cout << i << " : " << fields[fields.size() - 2] << endl;
+        ids.push_back(fields[fields.size() - 2]);
       }
       sample_type embedded;
       deserialize(objs[i][j]) >> embedded;
@@ -103,11 +109,14 @@ int main(int argc, char** argv)
   one_vs_one_decision_function<ovo_trainer,
   decision_function<kernel_type>    // This is the output of the linear_trainer
   > df2, df3;
-
   df2 = df;
   serialize("bear_svm.dat") << df2;
+  serialize("bear_svm_ids.dat") << ids;
 
+  // Check serialization
+  std::vector <string> ids2;
+  deserialize("bear_svm_ids.dat") >> ids2;
   deserialize("bear_svm.dat") >> df3;
-  cout << "predicted label: "<< df3(samples[0])  << ", true label: "<< labels[0] << endl;
+  cout << "predicted label: "<< df3(samples[0])  << ", true label: "<< labels[0] << " == " << ids2[labels[0]] << endl;
 
 }
