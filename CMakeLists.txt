@@ -8,7 +8,11 @@ cmake_minimum_required(VERSION 2.8.4)
 
 PROJECT(examples)
 
-include(../dlib/cmake)
+if (NOT DEFINED DLIB_PATH)
+   set(DLIB_PATH "..") 
+endif()
+
+include(${DLIB_PATH}/dlib/cmake)
 
 
 # Since there are a lot of examples I'm going to use a macro to simply this
