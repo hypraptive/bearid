@@ -3,7 +3,7 @@ Hypraptive BearID project code repository
 
 ## Programs
 * Bearchip - finds bear faces, aligns and crops
-  * ./bearchip ../../../dlib-data/mmod_dog_hipsterizer.dat <IMG or DIR>
+  * ./bearchip <mmod_dog_hipsterizer.dat> <image_file or image_path>
 * Bearembed - uses a set of bear faces to train a 128D embedding
   * ./bearembed -train <face_chip_dir>
   * ./bearembed -test <face_chip_dir>
