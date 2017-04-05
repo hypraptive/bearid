@@ -1,7 +1,22 @@
 # bearid
 Hypraptive BearID project code repository
 
-## Programs
+## Pre-Requisites
+* [dlib](http://dlib.net/) - download and install somwhere. You should have OpenCV and CUDA and other packages which are helpful for dlib.
+* [boost](http://www.boost.org/)
+
+## Build
+Uses cmake flow:
+
+```
+cd bearid
+mkdir build
+cd build
+cmake -DDLIB_PATH=<path_to_dlib> ..
+cmake --build . --config Release
+```
+
+## Running
 * Bearchip - finds bear faces, aligns and crops
   * ./bearchip <mmod_dog_hipsterizer.dat> <image_file or image_path>
 * Bearembed - uses a set of bear faces to train a 128D embedding
