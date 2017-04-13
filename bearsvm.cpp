@@ -1,5 +1,9 @@
+// The contents of this file are licensed under the MIT license.
+// See LICENSE.txt for more information.
+
 /*
-Train a linear SVM to classify bears from bear face embeddings
+  This program will train a linear SVM to classify bears from bear face
+  embeddings.
 */
 
 #include <iostream>

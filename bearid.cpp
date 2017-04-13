@@ -1,8 +1,11 @@
-/*
-This program will attempt to identify any bears in the input image
-from the database of know bears.
+// The contents of this file are licensed under the MIT license.
+// See LICENSE.txt for more information.
 
-It makes extensive use of dlib (http://dlib.net).
+/*
+  This program will attempt to identify any bears in the input image
+  from the database of know bears.
+
+  It makes extensive use of dlib (http://dlib.net).
 */
 
 #include <boost/filesystem.hpp>

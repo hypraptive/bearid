@@ -1,46 +1,24 @@
-// The contents of this file are in the public domain. See LICENSE_FOR_EXAMPLE_PROGRAMS.txt
+// The contents of this file are licensed under the MIT license.
+// See LICENSE.txt for more information.
+
 /*
-    This example shows how to run a CNN based dog face detector using dlib.  The
-    example loads a pretrained model and uses it to find dog faces in images.
-    We also use the dlib::shape_predictor to find the location of the eyes and
-    nose and then draw glasses and a mustache onto each dog found :)
+  This program takes a set of photos or videos of brown bears and outputs a set
+  of face chips. The steps are:
+  
+    - find all faces and face landmarks
+    - align each face based on the landmarks
+    - crop the faces to form face chips
 
+  The face detector uses a pretrained CNN from the dlib example:
 
-    Users who are just learning about dlib's deep learning API should read the
-    dnn_introduction_ex.cpp and dnn_introduction2_ex.cpp examples to learn how
-    the API works.  For an introduction to the object detection method you
-    should read dnn_mmod_ex.cpp
+  https://github.com/davisking/dlib/blob/master/examples/dnn_mmod_dog_hipsterizer.cpp
 
+  While the model was trained for dogs, it works reasonably well for bears. The
+  pretrained CNN data can be found here:
 
+  http://dlib.net/files/mmod_dog_hipsterizer.dat.bz2
 
-    TRAINING THE MODEL
-        Finally, users interested in how the dog face detector was trained should
-        read the dnn_mmod_ex.cpp example program.  It should be noted that the
-        dog face detector used in this example uses a bigger training dataset and
-        larger CNN architecture than what is shown in dnn_mmod_ex.cpp, but
-        otherwise training is the same.  If you compare the net_type statements
-        in this file and dnn_mmod_ex.cpp you will see that they are very similar
-        except that the number of parameters has been increased.
-
-        Additionally, the following training parameters were different during
-        training: The following lines in dnn_mmod_ex.cpp were changed from
-            mmod_options options(face_boxes_train, 40*40);
-            trainer.set_iterations_without_progress_threshold(300);
-        to the following when training the model used in this example:
-            mmod_options options(face_boxes_train, 80*80);
-            trainer.set_iterations_without_progress_threshold(8000);
-
-        Also, the random_cropper was left at its default settings,  So we didn't
-        call these functions:
-            cropper.set_chip_dims(200, 200);
-            cropper.set_min_object_height(0.2);
-
-        The training data used to create the model is also available at
-        http://dlib.net/files/data/CU_dogs_fully_labeled.tar.gz
-
-        Lastly, the shape_predictor was trained with default settings except we
-        used the following non-default settings: cascade depth=20, tree
-        depth=5, padding=0.2
+  Videos are handled using OpenCV's VideoCapture module to extract frames.
 */
 
 #include <boost/filesystem.hpp>
@@ -90,14 +68,14 @@ std::vector<matrix<rgb_pixel>> find_face_chips (
     return(faces);
   }
 
-  // Upsampling the image will allow us to find smaller dog faces but will use more
+  // Upsampling the image will allow us to find smaller faces but will use more
   // computational resources.
   //pyramid_up(img);
 
   auto dets = net(img);
   //win_wireframe.clear_overlay();
   //win_wireframe.set_image(img);
-  // We will also draw a wireframe on each dog's face so you can see where the
+  // We will also draw a wireframe on each face so you can see where the
   // shape_predictor is identifying face landmarks.
   //std::vector<image_window::overlay_line> lines;
   //cout << "dets size: " << dets.size() << endl;
@@ -135,7 +113,7 @@ std::vector<matrix<rgb_pixel>> find_face_chips (
       // print the rectangle
       //cout << "Rectangle:" << d.rect << endl;
 
-      // get the landmarks for this dog's face
+      // get the landmarks for this face
       auto shape = sp(img, d.rect);
 
       const rgb_pixel color(0,255,0);
@@ -226,7 +204,7 @@ int main(int argc, char** argv) try
     if (argc < 3)
     {
         cout << "Call this program like this:" << endl;
-        cout << "./dnn_mmod_dog_hipsterizer mmod_dog_hipsterizer.dat faces/dogs.jpg" << endl;
+        cout << "./bearchip mmod_dog_hipsterizer.dat <image_file>" << endl;
         cout << "\nYou can get the mmod_dog_hipsterizer.dat file from:\n";
         cout << "http://dlib.net/files/mmod_dog_hipsterizer.dat.bz2" << endl;
         return 0;
