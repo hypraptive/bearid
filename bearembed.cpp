@@ -1,29 +1,19 @@
-// The contents of this file are in the public domain. See LICENSE_FOR_EXAMPLE_PROGRAMS.txt
+// The contents of this file are licensed under the MIT license.
+// See LICENSE.txt for more information.
+
 /*
-This is an example illustrating the use of the deep learning tools from the
-dlib C++ Library.  In it, we will show how to use the loss_metric layer to do
-metric learning on images.
+  This program takes a set of face chips and trains a network for face
+  embedding.
 
-The main reason you might want to use this kind of algorithm is because you
-would like to use a k-nearest neighbor classifier or similar algorithm, but
-you don't know a good way to calculate the distance between two things.  A
-popular example would be face recognition.  There are a whole lot of papers
-that train some kind of deep metric learning algorithm that embeds face
-images in some vector space where images of the same person are close to each
-other and images of different people are far apart.  Then in that vector
-space it's very easy to do face recognition with some kind of k-nearest
-neighbor classifier.
+  This program is based on the following example from dlib:
 
-In this example we will use a version of the ResNet network from the
-dnn_imagenet_ex.cpp example to learn to map images into some vector space where
-pictures of the same person are close and pictures of different people are far
-apart.
+  https://github.com/davisking/dlib/blob/master/examples/dnn_metric_learning_ex.cpp
 
-You might want to read the simpler introduction to the deep metric learning
-API, dnn_metric_learning_ex.cpp, before reading this example.  You should
-also have read the examples that introduce the dlib DNN API before
-continuing.  These are dnn_introduction_ex.cpp and dnn_introduction2_ex.cpp.
-
+  The program had 3 usage modes:
+    1. train: using a set of face chips, train an embedding network
+    2. test:  using a set of face chips, test the network for accuracy
+    3. embed: use the trained network to create embeddings fro each provided
+              face chip.
 */
 
 #include <dlib/dnn.h>
@@ -36,7 +26,6 @@ continuing.  These are dnn_introduction_ex.cpp and dnn_introduction2_ex.cpp.
 
 using namespace dlib;
 using namespace std;
-//using namespace boost;
 
 // ----------------------------------------------------------------------------------------
 
