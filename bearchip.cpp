@@ -166,12 +166,13 @@ std::vector<matrix<rgb_pixel>> find_face_chips (
       //const double mean_face_shape_x[] = { 0, 0, 0.62, 0.54, 0, 0.38 }; // derrived from HOG image
       //const double mean_face_shape_y[] = { 0, 0, 0.45, 0.62, 0, 0.45 }; // derrived from HOG image
       const unsigned long size = 150;
-      const double padding = 0.0;
+      //const double padding = 0.0;
+      const double padding = -0.12; // using negative padding so we don't have to adjust mean face shape
       chip_details face_chip_details;
 
       std::vector<dlib::vector<double,2> > from_points, to_points;
-      //for (unsigned long i = 0; i < 6; ++i)
-      for (unsigned long i : {3, 5, 2})  // follow the order from face pose (nose, reye, leye)
+      //for (unsigned long i : {3, 5, 2})  // follow the order from face pose (nose, reye, leye)
+      for (unsigned long i : {5, 2}) // follow order from face pose (reye, leye) EYES_ONLY
       {
           // Ignore top and ears
           if ((i == 0) || (i == 1) || (i == 4))
@@ -195,7 +196,7 @@ std::vector<matrix<rgb_pixel>> find_face_chips (
       const rgb_pixel color_r(255,0,0);
       point_transform_affine pta = get_mapping_to_chip(face_chip_details);
       auto leye_new = pta(shape.part(2));
-      auto nose_new = pta(shape.part(3));
+      //auto nose_new = pta(shape.part(3)); // EYES_ONLY
       auto reye_new = pta(shape.part(5));
       //chip_lines.push_back(image_window::overlay_line(leye_new, nose_new,  color_r));
       //chip_lines.push_back(image_window::overlay_line(nose_new, reye_new,  color_r));
@@ -271,7 +272,7 @@ int main(int argc, char** argv) try
           }
         }
         // For Video files
-        else if (orig_ext.compare(".mp4") == 0)
+        else if ((orig_ext.compare(".mp4") == 0) || (orig_ext.compare(".AVI") == 0))
         {
           cout << "Video type " << orig_ext << endl;
           cv::VideoCapture cap(argv[i]);
