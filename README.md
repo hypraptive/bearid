@@ -1,5 +1,5 @@
 # bearid
-Hypraptive BearID project code repository
+Hypraptive BearID project code repository. For more information, read the [hypraptive blog](https://hypraptive.github.io/).
 
 ## Pre-Requisites
 * [dlib](http://dlib.net/) - download and install somwhere. You should have OpenCV and CUDA and other packages which are helpful for dlib.
