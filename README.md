@@ -35,3 +35,5 @@ cmake --build . --config Release
 * [Ike Fitz on Flickr](https://www.flickr.com/photos/ikefitz/albums)
   * [Brooks River Wildlife 2015](https://www.flickr.com/photos/ikefitz/albums/72157666514167600)
   * [Brooks River Wildlife 2016](https://www.flickr.com/photos/ikefitz/albums/72157665026099739)
+* Larinor (provided via direct transfer)
+* [Ranger Jeanne](https://www.flickr.com/photos/jeanner/albums)
