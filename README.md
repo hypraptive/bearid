@@ -29,6 +29,7 @@ cmake --build . --config Release
   * ./bearid <image_file>
 
 ## Data Sources
+* [Anna-Marie_AZ on Flickr](https://www.flickr.com/photos/105187918@N03/albums)
 * [Carla Farris on Flickr](https://www.flickr.com/photos/129908461@N03/albums/with/72157672138992512)
   * [Brooks Falls 2015](https://www.flickr.com/photos/129908461@N03/albums/72157657150224152)
   * [Brooks Falls 2016](https://www.flickr.com/photos/129908461@N03/albums/72157672138992512)
