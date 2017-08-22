@@ -19,6 +19,7 @@
 */
 
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 #include <iostream>
 #include <dlib/dnn.h>
 #include <dlib/data_io.h>
@@ -48,7 +49,8 @@ void find_faces (
   net_type& net,
   shape_predictor& sp,
   matrix<rgb_pixel>& img,
-  std::vector<image_dataset_metadata::box>& faces
+  std::vector<image_dataset_metadata::box>& faces,
+  std::string bearID
 )
 {
   bool bUpscaled = false;
@@ -97,6 +99,7 @@ void find_faces (
 
       // fill in the data to faces
       image_dataset_metadata::box face;
+
       if (bUpscaled)
       {
         cout << "File was upscaled" << endl;
@@ -128,6 +131,7 @@ void find_faces (
         face.parts["rear"] = shape.part(4);
         face.parts["reye"] = shape.part(5);
       }
+	  face.label = bearID;
       faces.push_back(face);
   }
 }
@@ -160,6 +164,8 @@ int main(int argc, char** argv) try
     load_image_dataset_metadata(data, argv[2]);
 
     //Handle list of images
+	std::vector <string> fields;
+	std::string bearID;
     for (int i = 0; i < data.images.size(); ++i)
     {
         matrix<rgb_pixel> img;
@@ -167,8 +173,11 @@ int main(int argc, char** argv) try
         cout << "File: " << data.images[i].filename.c_str() << endl;
         load_image(img, data.images[i].filename.c_str());
 
+		std::string fullpathfile = data.images[i].filename;
+        boost::split( fields, fullpathfile, boost::is_any_of( "/" ));
+        bearID = fields[fields.size() - 2];
         std::vector<image_dataset_metadata::box> faces;
-        find_faces (net, sp, img, faces);
+        find_faces (net, sp, img, faces, bearID);
         data.images[i].boxes = faces;
 
         cout << "Faces found: " << to_string(faces.size()) << endl;
