@@ -96,13 +96,17 @@ void add_overlay_circle (
 
 //------------------------------------------------------------------------
 // Find Face Chips
-//  input : vector of boxes (box around bear face & coords of face features
-//  output: vector of facechips.
+//  args: : vector of boxes (bounds bear face & coords of face features)
+//  		image of bear
+//			bearIDs: filled in label for each face
+//			face_features: to be filled in for transformed features
+//  return: vector of facechips.
 //  actions:write out 
 //------------------------------------------------------------------------
 std::vector<matrix<rgb_pixel>> find_chips (
   std::vector<image_dataset_metadata::box>& boxes,
   matrix<rgb_pixel>& img,
+  std::vector<std::string>& bear_ids, // id label from each face/box
   std::vector<dlib::vector<double,2> >& face_features // for all features
 )
 {
@@ -113,6 +117,7 @@ std::vector<matrix<rgb_pixel>> find_chips (
   const rgb_pixel color_r(255,0,0);
   const rgb_pixel color_g(0,255,0);
   const rgb_pixel color_b(0,0,255);
+  std::string bearID;
   //---------------
   for (auto&& b : boxes)  // for each face
   {
@@ -122,6 +127,7 @@ std::vector<matrix<rgb_pixel>> find_chips (
       part[3] = b.parts["nose"];
       part[4] = b.parts["rear"];
       part[5] = b.parts["reye"];
+	  bear_ids.push_back (b.label);
 
       // chip_details based on get_face_chip_details
       //const double mean_face_shape_x[] = { 0, 0, 0.65, 0.50, 0, 0.35 };
@@ -220,6 +226,7 @@ int main(int argc, char** argv) try
     {
         matrix<rgb_pixel> img;
 		std::vector<dlib::vector<double,2> > face_features; // for all features
+		std::vector<std::string> bear_ids;
 
         boost::filesystem::path orig_path(data.images[i].filename.c_str());
         std::string orig_ext = orig_path.extension().string();
@@ -230,7 +237,7 @@ int main(int argc, char** argv) try
         load_image(img, data.images[i].filename.c_str());
 
         std::vector<matrix<rgb_pixel>> faces;
-        faces = find_chips (data.images[i].boxes, img, face_features);
+        faces = find_chips (data.images[i].boxes, img, bear_ids, face_features);
         cout << "Faces found: " << to_string(faces.size()) << endl;
 		/*  check for more than one face.  shouldn't happen yet
 		if (faces.size() > 1)
@@ -246,13 +253,13 @@ int main(int argc, char** argv) try
           std::string chip_file = orig_path.stem().string() + "_chip_" + to_string(i) + ".jpg";
 
 		  ptree &xml_chip = chips.add ("chip", "");
-		  xml_chip.add ("<xmlattr>.file", chip_file);
 		  // write image out to chips.xml
 		  int j = i*3; // # of features we care about {leye, nose, reye}
 		  auto leye = face_features[j];
 		  auto nose = face_features[j+1];
 		  auto reye = face_features[j+2];
 		  // xml_add_chip_part (g_cur_chip, "leye", leye.x(), leye.y());
+		  xml_chip.add ("label", bear_ids[i]);
 		  ptree &xml_part_leye = xml_chip.add ("part", "");
 		  xml_part_leye.add ("<xmlattr>.name", "leye");
 		  xml_part_leye.add ("<xmlattr>.x", (int)leye.x());
@@ -269,11 +276,14 @@ int main(int argc, char** argv) try
 		  // xml_add_chip_part (g_cur_chip, "nose", nose.x(), nose.y());
           cout << argv[i] << ": extracted chip " << to_string(i) << " to " << chip_file << endl;
           save_jpeg(faces[i], chip_file, 95);
+		  boost::filesystem::path cur_dir = boost::filesystem::current_path();
+		  std::string pathed_chip_file = cur_dir.string() + "/" + chip_file;
+		  xml_chip.add ("<xmlattr>.file", pathed_chip_file);
         }
 
     }
 	boost::filesystem::path xml_file (argv[1]);
-	std::string chips_jpg_file = xml_file.filename().stem().string() + "_chip_composite.jpg";
+	std::string chips_jpg_file = xml_file.stem().string() + "_chip_composite.jpg";
 	std::string chips_xml_file = xml_file.filename().stem().string() + "_chips.xml";
     save_jpeg(g_composite_features, chips_jpg_file, 95);
     cout << "Total faces found: " << total_faces << endl;
