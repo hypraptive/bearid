@@ -145,10 +145,11 @@ int main(int argc, char** argv) try
 
     if (argc != 3)
     {
-        cout << "Call this program like this:" << endl;
-        cout << "./bearface mmod_dog_hipsterizer.dat <metadata_file>" << endl;
-        cout << "\nYou can get the mmod_dog_hipsterizer.dat file from:\n";
-        cout << "http://dlib.net/files/mmod_dog_hipsterizer.dat.bz2" << endl;
+        cout << "\nUsage:" << endl;
+        cout << "\t./bearface mmod_dog_hipsterizer.dat <source_img_file>" << endl;
+		cout << "\nDetect bear faces in images.\n" << endl;
+        cout << "mmod_dog_hipsterizer.dat can be found at:\n";
+        cout << "\t /home/bearid/dlib-data/mmod_dog_hipsterizer.dat\n" << endl;
         return 0;
     }
 
@@ -184,7 +185,10 @@ int main(int argc, char** argv) try
         total_faces += faces.size();
     }
     cout << "Total faces found: " << total_faces << endl;
-    save_image_dataset_metadata(data, "faces.xml");
+	boost::filesystem::path orig_path(argv[2]);
+	std::string faces_file = orig_path.stem().string() + "_faces.xml";
+    save_image_dataset_metadata(data, faces_file);
+	cout << "\n\tGenerated : " << faces_file << "\n" << endl;
 }
 catch(std::exception& e)
 {
