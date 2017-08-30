@@ -25,7 +25,7 @@
 #include <dlib/data_io.h>
 #include <dlib/image_processing.h>
 #include <dlib/gui_widgets.h>
-
+#include <dlib/image_io.h>
 
 using namespace std;
 using namespace dlib;
@@ -42,7 +42,8 @@ using net_type = loss_mmod<con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<input_rgb
 
 // ----------------------------------------------------------------------------------------
 
-const unsigned MAX_SIZE = 5000*3500;
+const unsigned MAX_LONG_SIDE = 5000;
+const unsigned MAX_SIZE = MAX_LONG_SIDE*3500;
 
 // Find Faces and face landmarks
 void find_faces (
@@ -54,12 +55,30 @@ void find_faces (
 )
 {
   bool bUpscaled = false;
+  bool bDownscaled = false;
+  float pxRatio;
 
-  cout << "Image size: " << img.size() << endl;
+  cout << "Image size: " << img.size() << " NR: " << img.nr() << " NC: " << img.nc() << endl;
+
+  // If the image is too big (this is a memory constraint), we need to downsample it
   if (img.size() > (MAX_SIZE))
   {
-    cout << "File TOO BIG" << endl;
-    return;
+    if (img.nc() > img.nr())
+      pxRatio = (float)MAX_LONG_SIDE / (float)img.nc();
+    else
+      pxRatio = (float)MAX_LONG_SIDE / (float)img.nr();
+    cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
+    //cout << "New X: " << (int)(img.nc() * pxRatio) << " New Y: " << (int)(img.nr() * pxRatio) << endl;
+    matrix<rgb_pixel> smimg((int)(img.nr() * pxRatio), (int)(img.nc() * pxRatio));
+    resize_image(img, smimg);
+    //resize_image((double)2.0, img);
+    //resize_image(img, smimg, interpolate_billinear());
+    //resize_image((double)(MAX_SIZE / img.size()), itImage);
+    //pyramid_down(img);
+    //cout << "Rescaled image size: " << smimg.size() << " NR: " << smimg.nr() << " NC: " << smimg.nc() << endl;
+    bDownscaled = true;
+    img = smimg;
+    //return;
   }
 
   // Upsampling the image will allow us to find smaller faces but will use more
@@ -70,7 +89,7 @@ void find_faces (
   auto dets = net(img);
 
   // if no faces, try with upscaling
-  if (dets.size() == 0)
+  if ((dets.size() == 0) && !bDownscaled)
   {
     if (img.size() > (MAX_SIZE/4))
     {
@@ -120,6 +139,27 @@ void find_faces (
         face.parts["rear"].y() = shape.part(4).y() / 2;
         face.parts["reye"].x() = shape.part(5).x() / 2;
         face.parts["reye"].y() = shape.part(5).y() / 2;
+      }
+      else if (bDownscaled)
+      {
+        cout << "File was downscaled" << endl;
+        // TODO figure out the scale factor from pyramid_up
+        face.rect.set_left((int)((float)d.rect.left() / pxRatio));
+        face.rect.set_top((int)((float)d.rect.top() / pxRatio));
+        face.rect.set_right((int)((float)d.rect.right() / pxRatio));
+        face.rect.set_bottom((int)((float)d.rect.bottom() / pxRatio));
+        face.parts["top"].x()  = (int)((float)shape.part(0).x() / pxRatio);
+        face.parts["top"].y()  = (int)((float)shape.part(0).y() / pxRatio);
+        face.parts["lear"].x() = (int)((float)shape.part(1).x() / pxRatio);
+        face.parts["lear"].y() = (int)((float)shape.part(1).y() / pxRatio);
+        face.parts["leye"].x() = (int)((float)shape.part(2).x() / pxRatio);
+        face.parts["leye"].y() = (int)((float)shape.part(2).y() / pxRatio);
+        face.parts["nose"].x() = (int)((float)shape.part(3).x() / pxRatio);
+        face.parts["nose"].y() = (int)((float)shape.part(3).y() / pxRatio);
+        face.parts["rear"].x() = (int)((float)shape.part(4).x() / pxRatio);
+        face.parts["rear"].y() = (int)((float)shape.part(4).y() / pxRatio);
+        face.parts["reye"].x() = (int)((float)shape.part(5).x() / pxRatio);
+        face.parts["reye"].y() = (int)((float)shape.part(5).y() / pxRatio);
       }
       else
       {
