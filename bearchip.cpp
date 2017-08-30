@@ -248,6 +248,7 @@ int main(int argc, char** argv) try
 		}
 		*/
         total_faces += faces.size();
+		std::string chip_dim = std::to_string(g_chip_size) + " " + std::to_string(g_chip_size);
         for (size_t i = 0; i < faces.size(); ++i)
         {
           // save the face chip_dims
@@ -261,7 +262,8 @@ int main(int argc, char** argv) try
 		  auto reye = face_features[j+2];
 		  // xml_add_chip_part (g_cur_chip, "leye", leye.x(), leye.y());
 		  xml_chip.add ("label", boxes[i].label);
-		  xml_chip.add ("size", boxes[i].rect.width() * boxes[i].rect.height());
+		  xml_chip.add ("resolution", boxes[i].rect.width() * boxes[i].rect.height());
+		  xml_chip.add ("chip_dimensions", chip_dim);
 		  xml_chip.add ("transform_features", transform_features);
 		  ptree &xml_part_leye = xml_chip.add ("part", "");
 		  xml_part_leye.add ("<xmlattr>.name", "leye");
