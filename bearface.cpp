@@ -26,6 +26,10 @@
 #include <dlib/image_processing.h>
 #include <dlib/gui_widgets.h>
 #include <dlib/image_io.h>
+// #include <ctype.h>
+// #include <stdio.h>
+// #include <stdlib.h>
+#include <unistd.h>
 
 using namespace std;
 using namespace dlib;
@@ -58,7 +62,7 @@ void find_faces (
   bool bDownscaled = false;
   float pxRatio;
 
-  cout << "Image size: " << img.size() << " NR: " << img.nr() << " NC: " << img.nc() << endl;
+  // cout << "Image size: " << img.size() << " NR: " << img.nr() << " NC: " << img.nc() << endl;
 
   // If the image is too big (this is a memory constraint), we need to downsample it
   if (img.size() > (MAX_SIZE))
@@ -183,52 +187,78 @@ int main(int argc, char** argv) try
     //image_window win_wireframe;
     int total_faces = 0;
 
-    if (argc != 3)
-    {
-        cout << "\nUsage:" << endl;
-        cout << "\t./bearface mmod_dog_hipsterizer.dat <source_img_file>" << endl;
-		cout << "\nDetect bear faces in images.\n" << endl;
-        cout << "mmod_dog_hipsterizer.dat can be found at:\n";
-        cout << "\t /home/bearid/dlib-data/mmod_dog_hipsterizer.dat\n" << endl;
-        return 0;
-    }
+	//----------------------------------------------------------------------
+	int aflag = 0;
+	int bflag = 0;
+	char *lvalue = NULL;
+	int index;
+	int c;
+	std::string bearID;
 
+	while ((c = getopt (argc, argv, "l:")) != -1)
+	  switch (c)
+		{
+		case 'l':
+		  bearID = optarg;
+		  break;
+		default:
+		  cout << "unrecognized argument: " << c << endl;
+		  cout << "\nUsage:" << endl;
+		  cout << "\t./bearface [-l label] mmod_dog_hipsterizer.dat <source_img_file>" << endl;
+		  cout << "\nDetect bear faces in images.\n" << endl;
+		  cout << "mmod_dog_hipsterizer.dat can be found at:\n";
+		  cout << "\t /home/bearid/dlib-data/mmod_dog_hipsterizer.dat\n" << endl;
+		  return 0;
+    }
+	if ((argc - optind) != 2)
+	{
+		cout << "\nUsage:" << endl;
+		cout << "\t./bearface [-l label] mmod_dog_hipsterizer.dat <source_img_file>" << endl;
+		cout << "\nDetect bear faces in images.\n" << endl;
+		cout << "mmod_dog_hipsterizer.dat can be found at:\n";
+		cout << "\t /home/bearid/dlib-data/mmod_dog_hipsterizer.dat\n" << endl;
+		return 0;
+	}
+	std::string network = argv[optind];
+	std::string imgs_file = argv[optind+1];
 
     // load the models as well as glasses and mustache.
     net_type net;
     shape_predictor sp;
     matrix<rgb_alpha_pixel> glasses, mustache;
-    deserialize(argv[1]) >> net >> sp >> glasses >> mustache;
+    deserialize(network) >> net >> sp >> glasses >> mustache;
 
     // Load XML metadata file
     dlib::image_dataset_metadata::dataset data;
-    load_image_dataset_metadata(data, argv[2]);
+    load_image_dataset_metadata(data, imgs_file);
 
     //Handle list of images
 	std::vector <string> fields;
-	std::string bearID;
     for (int i = 0; i < data.images.size(); ++i)
     {
         matrix<rgb_pixel> img;
 
-        cout << "File: " << data.images[i].filename.c_str() << endl;
+        cout << data.images[i].filename.c_str() << "...";
         load_image(img, data.images[i].filename.c_str());
 
-		std::string fullpathfile = data.images[i].filename;
-        boost::split( fields, fullpathfile, boost::is_any_of( "/" ));
-        bearID = fields[fields.size() - 2];
+		if (bearID.empty ())
+		{
+			std::string fullpathfile = data.images[i].filename;
+			boost::split( fields, fullpathfile, boost::is_any_of( "/" ));
+			bearID = fields[fields.size() - 2];
+		}
         std::vector<image_dataset_metadata::box> faces;
         find_faces (net, sp, img, faces, bearID);
         data.images[i].boxes = faces;
 
-        cout << "Faces found: " << to_string(faces.size()) << endl;
+        cout << "faces found: " << to_string(faces.size()) << endl;
         total_faces += faces.size();
     }
     cout << "Total faces found: " << total_faces << endl;
-	boost::filesystem::path orig_path(argv[2]);
+	boost::filesystem::path orig_path(imgs_file);
 	std::string faces_file = orig_path.stem().string() + "_faces.xml";
     save_image_dataset_metadata(data, faces_file);
-	cout << "\n\tGenerated : " << faces_file << "\n" << endl;
+	cout << "\n\tGenerated with label " << bearID <<  ": " << faces_file << "\n" << endl;
 }
 catch(std::exception& e)
 {
