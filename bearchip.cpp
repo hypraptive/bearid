@@ -63,9 +63,6 @@ int xml_add_chip_part (ptree &chip, std::string part_name, int x, int y)
 
 int xml_write_file (ptree g_xml_tree, std::string xml_filename)
 {
-    // write_xml(xml_filename, g_xml_tree,
-        // std::locale(), xml_writer_settings<char>(' ', 4));
-
     write_xml(xml_filename, g_xml_tree,std::locale(),
 	    boost::property_tree::xml_writer_make_settings<std::string>(' ', 4, "utf-8"));
 
@@ -98,15 +95,15 @@ void add_overlay_circle (
 // Find Face Chips
 //  args: : vector of boxes (bounds bear face & coords of face features)
 //  		image of bear
-//			bearIDs: filled in label for each face
-//			face_features: to be filled in for transformed features
+//			transform_features: return features used
+//			face_features: return transformed features
 //  return: vector of facechips.
 //  actions:write out 
 //------------------------------------------------------------------------
 std::vector<matrix<rgb_pixel>> find_chips (
   std::vector<image_dataset_metadata::box>& boxes,
   matrix<rgb_pixel>& img,
-  std::vector<std::string>& bear_ids, // id label from each face/box
+  std::string& transform_features,    // features used in transformation
   std::vector<dlib::vector<double,2> >& face_features // for all features
 )
 {
@@ -127,7 +124,6 @@ std::vector<matrix<rgb_pixel>> find_chips (
       part[3] = b.parts["nose"];
       part[4] = b.parts["rear"];
       part[5] = b.parts["reye"];
-	  bear_ids.push_back (b.label);
 
       // chip_details based on get_face_chip_details
       //const double mean_face_shape_x[] = { 0, 0, 0.65, 0.50, 0, 0.35 };
@@ -142,6 +138,10 @@ std::vector<matrix<rgb_pixel>> find_chips (
 
       std::vector<dlib::vector<double,2> > from_points, to_points;
       //for (unsigned long i : {3, 5, 2})  // follow the order from face pose (nose, reye, leye)
+	  // --------------------!!!!!!!
+	  transform_features = "reye leye";
+	  // --------------------!!!!!!!
+	  // MAKE SURE transform_features REFLECTS FEATURES USED BELOW
       for (unsigned long i : {5, 2}) // follow order from face pose (reye, leye) EYES_ONLY
       {
           // Ignore top and ears
@@ -200,7 +200,7 @@ int main(int argc, char** argv) try
         return 0;
     }
 
-    // Load XML metadata file
+    // create XML content file
 	ptree &chips = g_xml_tree.add ("dataset.chips", "");
 	//--------------
 
@@ -226,7 +226,6 @@ int main(int argc, char** argv) try
     {
         matrix<rgb_pixel> img;
 		std::vector<dlib::vector<double,2> > face_features; // for all features
-		std::vector<std::string> bear_ids;
 
         boost::filesystem::path orig_path(data.images[i].filename.c_str());
         std::string orig_ext = orig_path.extension().string();
@@ -237,7 +236,9 @@ int main(int argc, char** argv) try
         load_image(img, data.images[i].filename.c_str());
 
         std::vector<matrix<rgb_pixel>> faces;
-        faces = find_chips (data.images[i].boxes, img, bear_ids, face_features);
+		std::string transform_features;    // features used in transformation
+  		std::vector<image_dataset_metadata::box> boxes = data.images[i].boxes;
+        faces = find_chips (boxes, img, transform_features, face_features);
         cout << "Faces found: " << to_string(faces.size()) << endl;
 		/*  check for more than one face.  shouldn't happen yet
 		if (faces.size() > 1)
@@ -259,7 +260,9 @@ int main(int argc, char** argv) try
 		  auto nose = face_features[j+1];
 		  auto reye = face_features[j+2];
 		  // xml_add_chip_part (g_cur_chip, "leye", leye.x(), leye.y());
-		  xml_chip.add ("label", bear_ids[i]);
+		  xml_chip.add ("label", boxes[i].label);
+		  xml_chip.add ("size", boxes[i].rect.width() * boxes[i].rect.height());
+		  xml_chip.add ("transform_features", transform_features);
 		  ptree &xml_part_leye = xml_chip.add ("part", "");
 		  xml_part_leye.add ("<xmlattr>.name", "leye");
 		  xml_part_leye.add ("<xmlattr>.x", (int)leye.x());
