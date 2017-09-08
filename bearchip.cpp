@@ -29,6 +29,7 @@ image_window g_win_chip;
 const unsigned long g_chip_size = 150;
 const unsigned int chip_x = 4;
 matrix<rgb_pixel> g_composite_features(g_chip_size*chip_x, g_chip_size*chip_x);
+const unsigned int g_feature_radius = 3;
 
 ptree g_xml_tree;
 
@@ -98,7 +99,7 @@ void add_overlay_circle (
 //			transform_features: return features used
 //			face_features: return transformed features
 //  return: vector of facechips.
-//  actions:write out 
+//  actions:write out
 //------------------------------------------------------------------------
 std::vector<matrix<rgb_pixel>> find_chips (
   std::vector<image_dataset_metadata::box>& boxes,
@@ -164,17 +165,19 @@ std::vector<matrix<rgb_pixel>> find_chips (
       point_transform_affine pta = get_mapping_to_chip(face_chip_details);
       auto leye_new = pta(part[2])*chip_x;
       auto nose_new = pta(part[3])*chip_x;
+      nose_new.x() = std::min(nose_new.x(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
+      nose_new.y() = std::min(nose_new.y(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
       auto reye_new = pta(part[5])*chip_x;
 	  face_features.push_back (leye_new);
 	  face_features.push_back (nose_new);
 	  face_features.push_back (reye_new);
 
-      chip_circles.push_back(image_window::overlay_circle(reye_new, 3, color_r));
-	  add_overlay_circle(reye_new,3, color_r);
-      chip_circles.push_back(image_window::overlay_circle(leye_new, 3, color_b));
-	  add_overlay_circle(leye_new, 3, color_b);
-      chip_circles.push_back(image_window::overlay_circle(nose_new, 3, color_g));
-	  add_overlay_circle(nose_new, 3, color_g);
+      chip_circles.push_back(image_window::overlay_circle(reye_new, g_feature_radius, color_r));
+	  add_overlay_circle(reye_new, g_feature_radius, color_r);
+      chip_circles.push_back(image_window::overlay_circle(leye_new, g_feature_radius, color_b));
+	  add_overlay_circle(leye_new, g_feature_radius, color_b);
+      chip_circles.push_back(image_window::overlay_circle(nose_new, g_feature_radius, color_g));
+	  add_overlay_circle(nose_new, g_feature_radius, color_g);
 	  g_win_chip.add_overlay (chip_circles);
 
       // extract the face chip
@@ -218,7 +221,7 @@ int main(int argc, char** argv) try
 	    }
     }
     // g_win_chip.set_image(g_composite_features);  // display composite
-	//--------------------------------------------- 
+	//---------------------------------------------
 
 
     // Now process each image and extract a face chip using the metadata
