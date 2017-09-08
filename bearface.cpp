@@ -194,12 +194,14 @@ int main(int argc, char** argv) try
 	int index;
 	int c;
 	std::string bearID;
+  bool bLabelFixed = false;
 
 	while ((c = getopt (argc, argv, "l:")) != -1)
 	  switch (c)
 		{
 		case 'l':
 		  bearID = optarg;
+      bLabelFixed = true;
 		  break;
 		default:
 		  cout << "unrecognized argument: " << c << endl;
@@ -241,7 +243,7 @@ int main(int argc, char** argv) try
         cout << data.images[i].filename.c_str() << "...";
         load_image(img, data.images[i].filename.c_str());
 
-		if (bearID.empty ())
+		if (!bLabelFixed)
 		{
 			std::string fullpathfile = data.images[i].filename;
 			boost::split( fields, fullpathfile, boost::is_any_of( "/" ));
@@ -258,7 +260,14 @@ int main(int argc, char** argv) try
 	boost::filesystem::path orig_path(imgs_file);
 	std::string faces_file = orig_path.stem().string() + "_faces.xml";
     save_image_dataset_metadata(data, faces_file);
-	cout << "\n\tGenerated with label " << bearID <<  ": " << faces_file << "\n" << endl;
+    if (!bLabelFixed)
+    {
+      cout << "\n\tGenerated with no label: " << faces_file << "\n" << endl;      
+    }
+    else
+    {
+      cout << "\n\tGenerated with label " << bearID <<  ": " << faces_file << "\n" << endl;
+    }
 }
 catch(std::exception& e)
 {
