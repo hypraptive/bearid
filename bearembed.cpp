@@ -22,11 +22,24 @@
 #include <dlib/cmd_line_parser.h>
 #include <dlib/matrix.h>
 #include <boost/filesystem.hpp>
+#include <boost/foreach.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
+#include <map>
 
 using namespace dlib;
 using namespace std;
+using boost::property_tree::ptree;
 
+// ----------------------------------------------------------------------------------------
+//  program functionality:
+//		list of training set & test set
+//     	network produced
+//     	results
+//		any parameters used as input (size of vector)
+//
+// log error rate(s) through iterations.
 // ----------------------------------------------------------------------------------------
 
 // We will need to create some functions for loading data.  This program will
@@ -67,6 +80,80 @@ std::vector<std::vector<string>> load_objects_list (
   }
   return objects;
 }
+
+
+//-----------------------------------------------------------------
+// Grab all the chip files from xml and store each under its label.
+// Generate warning for chips with no label.
+//-----------------------------------------------------------------
+std::vector<std::vector<string>> load_chips_map (
+  const std::string& xml_file)
+{
+  std::map<string,std::vector<std::string>> chips_map;
+  ptree tree;
+  boost::property_tree::read_xml (xml_file, tree);
+
+  std::cout << "Filling in chips map...  " << endl;
+  std::vector<std::vector<string>> objects;		// return object
+
+  // add all chip files to map by bearID
+  BOOST_FOREACH(ptree::value_type& child, tree.get_child("dataset.chips"))
+  {
+    std::string child_name = child.first;
+
+	std::cout << "dataset.chips -- child first : " << child_name << endl;
+    if (child_name == "chip")
+    {
+		ptree chip = child.second;
+		std::cout << "child of dataset.chips " << child_name << std::endl;
+		std::string chipfile = child.second.get<std::string>("<xmlattr>.file");
+		std::cout << "dataset.chips.chip.second.<xmlattr>.file .....\n\t" << chipfile << std::endl;
+		std::string bearID = child.second.get<std::string>("label");
+		std::cout << "label : " << bearID << endl;
+		if (bearID.empty())
+		{
+			std::cout << "Error: chipfile " << chipfile << " has no bearID.\n" << endl;
+			continue;
+		}
+		chips_map[bearID].push_back (chipfile);
+    }
+  }
+  // massage map of vector to return vector of vector
+  std::string key;
+  std::vector<std::string> value;
+
+
+  std::map<std::string, std::vector<std::string>>::iterator it;
+  for ( it = chips_map.begin(); it != chips_map.end(); it++ )
+  {
+	objects.push_back (it->second);
+  }
+
+  /*
+  for (auto const& [key, val] : chips_map)
+  {
+	  objects.push_back (val);
+  }
+  */
+
+  return objects;
+}
+
+
+/*
+  for (auto subdir : directory(dir).get_dirs())
+  {
+    std::vector<string> imgs;
+    for (auto img : subdir.get_files())
+    imgs.push_back(img);
+
+    if (imgs.size() != 0)
+    objects.push_back(imgs);
+  }
+  return objects;
+
+*/
+
 
 // This function takes the output of load_objects_list() as input and randomly
 // selects images for training.  It should also be pointed out that it's really
@@ -205,7 +292,7 @@ int main(int argc, char** argv)
 
     if (parser.option("h"))
     {
-        cout << "Usage: bearembed [options] <image_dir>\n";
+        cout << "Usage: bearembed [options] <xml_file>\n";
         parser.print_options();
 
         return EXIT_SUCCESS;
@@ -213,21 +300,31 @@ int main(int argc, char** argv)
 
     if (parser.number_of_arguments() == 0)
     {
-      cout << "Give a folder as input.  It should contain sub-folders of images and we will " << endl;
-      cout << "learn to distinguish between these sub-folders with metric learning.  " << endl;
+      cout << "Give a xml chip file  as input.  It should list chips and labels to be" << endl;
+      cout << "used to learn to distinguish between these labels with metric learning.  " << endl;
       cout << "For example:" << endl;
-      cout << "   ./bearembed <image_dir>" << endl;
+      cout << "   ./bearembed <xml_file>" << endl;
       return 1;
     }
 
-    cout << "Source path: " << parser[0] << endl;
+    cout << "\nXML chip file.... : " << parser[0] << endl;
 
-    auto objs = load_objects_list(parser[0]);
-
+    auto objs = load_chips_map (parser[0]);
     cout << "objs.size(): "<< objs.size() << endl;
+
+    // auto objs = load_objects_list(parser[0]);
+    // cout << "objs.size(): "<< objs.size() << endl;
 
     std::vector<matrix<rgb_pixel>> images;
     std::vector<unsigned long> labels;
+
+    //------------------------------------------------------------
+    //------------------------------------------------------------
+	std::map <std::string,std::vector<std::string>> chips;
+    //------------------------------------------------------------
+
+
+	return 0;
 
     // Training
     if (parser.option("train"))
