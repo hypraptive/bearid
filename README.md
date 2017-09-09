@@ -28,6 +28,9 @@ cmake --build . --config Release
 * Bearid - puts it all together
   * ./bearid <image_file>
 
+## Tools
+There are some python tools and scripts in the `tools` directory for managing datasets and evaluating results.
+
 ## Data Sources
 * [Anna-Marie_AZ on Flickr](https://www.flickr.com/photos/105187918@N03/albums)
 * [Carla Farris on Flickr](https://www.flickr.com/photos/129908461@N03/albums/with/72157672138992512)
@@ -36,5 +39,9 @@ cmake --build . --config Release
 * [Ike Fitz on Flickr](https://www.flickr.com/photos/ikefitz/albums)
   * [Brooks River Wildlife 2015](https://www.flickr.com/photos/ikefitz/albums/72157666514167600)
   * [Brooks River Wildlife 2016](https://www.flickr.com/photos/ikefitz/albums/72157665026099739)
+* [Katmai National Park](https://www.nps.gov/katm) (sent on hard disk via US Mail)
+  * Images from their bear monitoring program
+  * Ranger David's personal photos
+  * Ranger Anela's personal photos
 * Larinor (provided via direct transfer)
 * [Ranger Jeanne](https://www.flickr.com/photos/jeanner/albums)
