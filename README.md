@@ -47,7 +47,7 @@ There are some python tools and scripts in the `tools` directory for managing da
   * Ranger Anela's personal photos
 * Larinor (provided via direct transfer)
 * littleostow (provided via email)
-* [Ranger Jeanne](https://www.flickr.com/photos/jeanner/albums)
+* [Ranger Jeanne on Flickr](https://www.flickr.com/photos/jeanner/albums)
 
 ### Glendale Cove, Knights Inlet, British Columbia, Canada
 * [Brown Bear Research Network](http://bearresearch.org/) (sent on flash drive via mail)
