@@ -32,6 +32,8 @@ cmake --build . --config Release
 There are some python tools and scripts in the `tools` directory for managing datasets and evaluating results.
 
 ## Data Sources
+
+### Brooks Falls, Katmai National Park, Alaska, USA
 * [Anna-Marie_AZ on Flickr](https://www.flickr.com/photos/105187918@N03/albums)
 * [Carla Farris on Flickr](https://www.flickr.com/photos/129908461@N03/albums/with/72157672138992512)
   * [Brooks Falls 2015](https://www.flickr.com/photos/129908461@N03/albums/72157657150224152)
@@ -39,9 +41,13 @@ There are some python tools and scripts in the `tools` directory for managing da
 * [Ike Fitz on Flickr](https://www.flickr.com/photos/ikefitz/albums)
   * [Brooks River Wildlife 2015](https://www.flickr.com/photos/ikefitz/albums/72157666514167600)
   * [Brooks River Wildlife 2016](https://www.flickr.com/photos/ikefitz/albums/72157665026099739)
-* [Katmai National Park](https://www.nps.gov/katm) (sent on hard disk via US Mail)
+* [Katmai National Park](https://www.nps.gov/katm) (sent on hard disk via mail)
   * Images from their bear monitoring program
   * Ranger David's personal photos
   * Ranger Anela's personal photos
 * Larinor (provided via direct transfer)
+* littleostow (provided via email)
 * [Ranger Jeanne](https://www.flickr.com/photos/jeanner/albums)
+
+### Glendale Cove, Knights Inlet, British Columbia, Canada
+* [Brown Bear Research Network](http://bearresearch.org/) (sent on flash drive via mail)
