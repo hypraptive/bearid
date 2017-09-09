@@ -93,7 +93,7 @@ std::vector<std::vector<string>> load_chips_map (
   ptree tree;
   boost::property_tree::read_xml (xml_file, tree);
 
-  std::cout << "Filling in chips map...  " << endl;
+  //std::cout << "Filling in chips map...  " << endl;
   std::vector<std::vector<string>> objects;		// return object
 
   // add all chip files to map by bearID
@@ -101,15 +101,15 @@ std::vector<std::vector<string>> load_chips_map (
   {
     std::string child_name = child.first;
 
-	std::cout << "dataset.chips -- child first : " << child_name << endl;
+	//std::cout << "dataset.chips -- child first : " << child_name << endl;
     if (child_name == "chip")
     {
 		ptree chip = child.second;
-		std::cout << "child of dataset.chips " << child_name << std::endl;
+		//std::cout << "child of dataset.chips " << child_name << std::endl;
 		std::string chipfile = child.second.get<std::string>("<xmlattr>.file");
-		std::cout << "dataset.chips.chip.second.<xmlattr>.file .....\n\t" << chipfile << std::endl;
+		//std::cout << "dataset.chips.chip.second.<xmlattr>.file .....\n\t" << chipfile << std::endl;
 		std::string bearID = child.second.get<std::string>("label");
-		std::cout << "label : " << bearID << endl;
+		//std::cout << "label : " << bearID << endl;
 		if (bearID.empty())
 		{
 			std::cout << "Error: chipfile " << chipfile << " has no bearID.\n" << endl;
@@ -184,7 +184,7 @@ void load_mini_batch (
     while(already_selected[id])
     id = rnd.get_random_32bit_number()%objs.size();
     already_selected[id] = true;
-    cout << "Rnd ID: " << id << endl;
+    //cout << "Rnd ID: " << id << endl;
 
     for (size_t j = 0; j < samples_per_id; ++j)
     {
@@ -324,7 +324,7 @@ int main(int argc, char** argv)
     //------------------------------------------------------------
 
 
-	return 0;
+	//return 0;
 
     // Training
     if (parser.option("train"))
@@ -335,7 +335,7 @@ int main(int argc, char** argv)
       dnn_trainer<net_type> trainer(net, sgd(0.0001, 0.9));
       trainer.set_learning_rate(0.1);
       trainer.be_verbose();
-      trainer.set_synchronization_file("face_metric_sync", std::chrono::minutes(5));
+      trainer.set_synchronization_file("bearembed_metric_sync", std::chrono::minutes(5));
       // I've set this to something really small to make the example terminate
       // sooner.  But when you really want to train a good model you should set
       // this to something like 10000 so training doesn't terminate too early.
@@ -358,7 +358,7 @@ int main(int argc, char** argv)
         {
           try
           {
-            load_mini_batch(5, 5, rnd, objs, images, labels);
+            load_mini_batch(5, 5, rnd, objs, images, labels); // TODO 35x15 instead of 5x5
             qimages.enqueue(images);
             qlabels.enqueue(labels);
           }
@@ -385,6 +385,7 @@ int main(int argc, char** argv)
         qimages.dequeue(images);
         qlabels.dequeue(labels);
         trainer.train_one_step(images, labels);
+        cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
       }
 
       // Wait for training threads to stop
@@ -393,7 +394,7 @@ int main(int argc, char** argv)
 
       // Save the network to disk
       net.clean();
-      serialize("metric_network_renset.dat") << net;
+      serialize("bearembed_metric_resnet.dat") << net;
 
       // stop all the data loading threads and wait for them to terminate.
       qimages.disable();
@@ -414,7 +415,7 @@ int main(int argc, char** argv)
 
       cout << "Start testing..." << endl;
 
-      deserialize("metric_network_renset.dat") >> net;
+      deserialize("bearembed_metric_resnet.dat") >> net;
       // Normally you would use the non-batch-normalized version of the network to do
       // testing, which is what we do here.
       anet_type testing_net = net;
@@ -542,7 +543,7 @@ int main(int argc, char** argv)
       cout << "Destination path: " << dst_path.string() << endl;
 
       net_type net;
-      deserialize("metric_network_renset.dat") >> net;
+      deserialize("bearembed_metric_resnet.dat") >> net;
       // Normally you would use the non-batch-normalized version of the network to do
       // testing, which is what we do here.
       anet_type embedding_net = net;
@@ -559,6 +560,7 @@ int main(int argc, char** argv)
           //cout << "Image: " << img_str << endl;
           load_image(image, img_str);
           // get embedding
+          // TODO add jitter (see dnn_face_recognition_ex.cpp)
           matrix<float,0,1> embedded = embedding_net(image);
           boost::replace_first(emb_str, src_path.string(), dst_path.string());
           boost::filesystem::path emb_path(emb_str);
