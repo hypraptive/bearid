@@ -16,6 +16,8 @@
               face chip.
 */
 
+#include <iostream>
+#include <ctime>
 #include <dlib/dnn.h>
 #include <dlib/image_io.h>
 #include <dlib/misc_api.h>
@@ -26,10 +28,16 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/date_time/posix_time/posix_time_io.hpp>
+#include "boost/date_time/local_time_adjustor.hpp"
+#include "boost/date_time/c_local_time_adjustor.hpp"
 #include <map>
 
 using namespace dlib;
 using namespace std;
+using namespace boost::posix_time;
+using namespace boost::gregorian;
 using boost::property_tree::ptree;
 
 // ----------------------------------------------------------------------------------------
@@ -62,6 +70,19 @@ using boost::property_tree::ptree;
 // images.  What does matter is that there is a top level folder, which contains
 // subfolders, and each subfolder contains images of a single person.
 
+ptree g_xml_tree;
+
+//--------------------------------------------------
+// initialize xml
+//--------------------------------------------------
+int xml_add_headers ()
+{
+    g_xml_tree.add("dataset.name", "bearid dataset");
+    g_xml_tree.add("dataset.comment", "Created by bearembed");
+	return 0;
+}
+
+//--------------------------------------------------
 // This function spiders the top level directory and obtains a list of all the
 // image files.
 std::vector<std::vector<string>> load_objects_list (
@@ -93,7 +114,6 @@ std::vector<std::vector<string>> load_chips_map (
   ptree tree;
   boost::property_tree::read_xml (xml_file, tree);
 
-  //std::cout << "Filling in chips map...  " << endl;
   std::vector<std::vector<string>> objects;		// return object
 
   // add all chip files to map by bearID
@@ -101,15 +121,11 @@ std::vector<std::vector<string>> load_chips_map (
   {
     std::string child_name = child.first;
 
-	//std::cout << "dataset.chips -- child first : " << child_name << endl;
     if (child_name == "chip")
     {
 		ptree chip = child.second;
-		//std::cout << "child of dataset.chips " << child_name << std::endl;
 		std::string chipfile = child.second.get<std::string>("<xmlattr>.file");
-		//std::cout << "dataset.chips.chip.second.<xmlattr>.file .....\n\t" << chipfile << std::endl;
 		std::string bearID = child.second.get<std::string>("label");
-		//std::cout << "label : " << bearID << endl;
 		if (bearID.empty())
 		{
 			std::cout << "Error: chipfile " << chipfile << " has no bearID.\n" << endl;
@@ -122,38 +138,13 @@ std::vector<std::vector<string>> load_chips_map (
   std::string key;
   std::vector<std::string> value;
 
-
   std::map<std::string, std::vector<std::string>>::iterator it;
   for ( it = chips_map.begin(); it != chips_map.end(); it++ )
   {
 	objects.push_back (it->second);
   }
-
-  /*
-  for (auto const& [key, val] : chips_map)
-  {
-	  objects.push_back (val);
-  }
-  */
-
   return objects;
 }
-
-
-/*
-  for (auto subdir : directory(dir).get_dirs())
-  {
-    std::vector<string> imgs;
-    for (auto img : subdir.get_files())
-    imgs.push_back(img);
-
-    if (imgs.size() != 0)
-    objects.push_back(imgs);
-  }
-  return objects;
-
-*/
-
 
 // This function takes the output of load_objects_list() as input and randomly
 // selects images for training.  It should also be pointed out that it's really
@@ -259,6 +250,17 @@ max_pool<3,3,2,2,relu<bn_con<con<32,7,7,2,2,
 input_rgb_image
 >>>>>>>>>>>>;
 
+// training network type of size 150
+using net_type_150 = loss_metric<fc_no_bias<128,avg_pool_everything<
+level0<
+level1<
+level2<
+level3<
+level4<
+max_pool<3,3,2,2,relu<bn_con<con<32,7,7,2,2,
+input_rgb_image_sized<150>
+>>>>>>>>>>>>;
+
 // testing network type (replaced batch normalization with fixed affine transforms)
 using anet_type = loss_metric<fc_no_bias<128,avg_pool_everything<
 alevel0<
@@ -270,6 +272,17 @@ max_pool<3,3,2,2,relu<affine<con<32,7,7,2,2,
 input_rgb_image
 >>>>>>>>>>>>;
 
+// testing network type of size 150
+using anet_type_150 = loss_metric<fc_no_bias<128,avg_pool_everything<
+alevel0<
+alevel1<
+alevel2<
+alevel3<
+alevel4<
+max_pool<3,3,2,2,relu<affine<con<32,7,7,2,2,
+input_rgb_image_sized<150>
+>>>>>>>>>>>>;
+
 // ----------------------------------------------------------------------------------------
 
 int main(int argc, char** argv)
@@ -279,9 +292,19 @@ int main(int argc, char** argv)
     command_line_parser parser;
 
     parser.add_option("h","Display this help message.");
-    parser.add_option("train","Train the face embedding network.");
-    parser.add_option("test","Test the face embedding network.");
-    parser.add_option("embed","Create the face embedding for each image and write csv to <arg>.",1);
+    parser.add_option("train","Train the face embedding network. Writes to network file.");
+	// --test <network>
+    parser.add_option("test","Test the face embedding network. Takes trained network", 1);
+	// --embed <network>
+    parser.add_option("embed","Create the face embedding for each image.", 1);
+	// --pretrain only used with --train
+    parser.add_option("pretrain","Specifies data to initialize the network.",1);
+	// --output: <trained_network> with --train; <embed_directory> with --embed
+    parser.add_option("output","Used with train, specifies trained weights file.  Use with -embed, specifies directory to put embeddings. Defaults to local.",1);
+	// --anet only used with --pretrain
+    parser.add_option("anet","Use affine net");
+	// defaults to 10000
+    parser.add_option("threshold","Iterations without progess before stopping",1);
 
     parser.parse(argc, argv);
 
@@ -318,29 +341,206 @@ int main(int argc, char** argv)
     std::vector<matrix<rgb_pixel>> images;
     std::vector<unsigned long> labels;
 
-    //------------------------------------------------------------
-    //------------------------------------------------------------
-	std::map <std::string,std::vector<std::string>> chips;
-    //------------------------------------------------------------
-
-
-	//return 0;
-
     // Training
     if (parser.option("train"))
     {
+	  anet_type_150 anet_150;
+	  net_type_150 net_150;
+	  net_type net;
       cout << "Start training..." << endl;
-      net_type net;
+	  std::string sync_file;
+	  std::string trained_network;
+	  if (parser.option ("output"))
+	  {
+		trained_network = parser.option("output").argument();
+	  }
+	  else
+	  {
+		trained_network = "bears.dat";
+	  }
 
-      dnn_trainer<net_type> trainer(net, sgd(0.0001, 0.9));
-      trainer.set_learning_rate(0.1);
-      trainer.be_verbose();
-      trainer.set_synchronization_file("bearembed_metric_sync", std::chrono::minutes(5));
+      int threshold = get_option (parser, "threshold", 10000);
+      if (parser.option("pretrain")) // assumes size 150
+	  {
+		cout << ".. using pretrain weights ..." << endl;
+        std::string pretrained_file = parser.option("pretrain").argument();
+        cout << "Load network" << endl;
+		if (parser.option("anet"))
+		{     // ------- ANET ---------------
+		  cout << "...... using anet ......." << endl;
+		  deserialize(pretrained_file) >> anet_150;
+		  dnn_trainer<anet_type_150> trainer(anet_150, sgd(0.0001, 0.9));
+		  trainer.set_learning_rate(0.001);
+		  sync_file= "pretrained_anet_sync"; 
+		  trainer.be_verbose();
+		  trainer.set_synchronization_file(sync_file, std::chrono::minutes(5));
+		  trainer.set_iterations_without_progress_threshold(threshold);
+		  dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
+		  dlib::pipe<std::vector<unsigned long>> qlabels(4);
+		  auto data_loader = [&qimages, &qlabels, &objs](time_t seed)
+		  {
+			dlib::rand rnd(time(0)+seed);
+			std::vector<matrix<rgb_pixel>> images;
+			std::vector<unsigned long> labels;
+			while(qimages.is_enabled())
+			{
+			  try
+			  {
+				load_mini_batch(5, 5, rnd, objs, images, labels); // TODO 35x15 instead of 5x5
+				qimages.enqueue(images);
+				qlabels.enqueue(labels);
+			  }
+			  catch(std::exception& e)
+			  {
+				cout << "EXCEPTION IN LOADING DATA" << endl;
+				cout << e.what() << endl;
+			  }
+			}
+		  };
+		  std::thread data_loader1([data_loader](){ data_loader(1); });
+		  std::thread data_loader2([data_loader](){ data_loader(2); });
+		  std::thread data_loader3([data_loader](){ data_loader(3); });
+		  std::thread data_loader4([data_loader](){ data_loader(4); });
+		  std::thread data_loader5([data_loader](){ data_loader(5); });
+		  while(trainer.get_learning_rate() >= 1e-4)
+		  {
+			qimages.dequeue(images);
+			qlabels.dequeue(labels);
+			trainer.train_one_step(images, labels);
+			cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
+		  }
+		  trainer.get_net();
+		  cout << "done training" << endl;
+		  anet_150.clean();
+		  serialize(trained_network) << anet_150;
+		  qimages.disable();
+		  qlabels.disable();
+		  data_loader1.join();
+		  data_loader2.join();
+		  data_loader3.join();
+		  data_loader4.join();
+		  data_loader5.join();
+		}     // ------- ANET ---------------
+		else
+		{     // ------- NO -ANET ---------------
+		  deserialize(pretrained_file) >> net_150;
+		  dnn_trainer<net_type_150> trainer(net_150, sgd(0.0001, 0.9));
+		  cout << "...... no anet ......." << endl;
+		  trainer.set_learning_rate(0.001);
+		  sync_file= "pretrained_no_anet_sync"; 
+		  trainer.be_verbose();
+		  trainer.set_synchronization_file(sync_file, std::chrono::minutes(5));
+		  trainer.set_iterations_without_progress_threshold(threshold);
+		  dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
+		  dlib::pipe<std::vector<unsigned long>> qlabels(4);
+		  auto data_loader = [&qimages, &qlabels, &objs](time_t seed)
+		  {
+			dlib::rand rnd(time(0)+seed);
+			std::vector<matrix<rgb_pixel>> images;
+			std::vector<unsigned long> labels;
+			while(qimages.is_enabled())
+			{
+			  try
+			  {
+				load_mini_batch(5, 5, rnd, objs, images, labels); // TODO 35x15 instead of 5x5
+				qimages.enqueue(images);
+				qlabels.enqueue(labels);
+			  }
+			  catch(std::exception& e)
+			  {
+				cout << "EXCEPTION IN LOADING DATA" << endl;
+				cout << e.what() << endl;
+			  }
+			}
+		  };
+		  std::thread data_loader1([data_loader](){ data_loader(1); });
+		  std::thread data_loader2([data_loader](){ data_loader(2); });
+		  std::thread data_loader3([data_loader](){ data_loader(3); });
+		  std::thread data_loader4([data_loader](){ data_loader(4); });
+		  std::thread data_loader5([data_loader](){ data_loader(5); });
+		  while(trainer.get_learning_rate() >= 1e-4)
+		  {
+			qimages.dequeue(images);
+			qlabels.dequeue(labels);
+			trainer.train_one_step(images, labels);
+			cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
+		  }
+		  trainer.get_net();
+		  cout << "done training" << endl;
+		  net_150.clean();
+		  anet_150 = net_150;
+		  serialize(trained_network) << anet_150;
+		  qimages.disable();
+		  qlabels.disable();
+		  data_loader1.join();
+		  data_loader2.join();
+		  data_loader3.join();
+		  data_loader4.join();
+		  data_loader5.join();
+		}   // ------- NO -ANET ---------------
+	  }
+	  else   //------------  NO PRETRAINED DATA ------
+	  {  
+		cout << "... using random weights ....." << endl;
+		dnn_trainer<net_type> trainer(net, sgd(0.0001, 0.9));
+		trainer.set_learning_rate(0.1);
+		sync_file= "rand_sync"; 
+		trainer.be_verbose();
+		trainer.set_synchronization_file(sync_file, std::chrono::minutes(5));
+		trainer.set_iterations_without_progress_threshold(threshold);
+		dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
+		dlib::pipe<std::vector<unsigned long>> qlabels(4);
+		auto data_loader = [&qimages, &qlabels, &objs](time_t seed)
+		{
+		  dlib::rand rnd(time(0)+seed);
+		  std::vector<matrix<rgb_pixel>> images;
+		  std::vector<unsigned long> labels;
+		  while(qimages.is_enabled())
+		  {
+			try
+			{
+			  load_mini_batch(5, 5, rnd, objs, images, labels); // TODO 35x15 instead of 5x5
+			  qimages.enqueue(images);
+			  qlabels.enqueue(labels);
+			}
+			catch(std::exception& e)
+			{
+			  cout << "EXCEPTION IN LOADING DATA" << endl;
+			  cout << e.what() << endl;
+			}
+		  }
+		};
+		std::thread data_loader1([data_loader](){ data_loader(1); });
+		std::thread data_loader2([data_loader](){ data_loader(2); });
+		std::thread data_loader3([data_loader](){ data_loader(3); });
+		std::thread data_loader4([data_loader](){ data_loader(4); });
+		std::thread data_loader5([data_loader](){ data_loader(5); });
+		while(trainer.get_learning_rate() >= 1e-4)
+		{
+		  qimages.dequeue(images);
+		  qlabels.dequeue(labels);
+		  trainer.train_one_step(images, labels);
+		  cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
+		}
+		trainer.get_net();
+		cout << "done training" << endl;
+		net.clean();
+		serialize(trained_network) << net;
+		qimages.disable();
+		qlabels.disable();
+		data_loader1.join();
+		data_loader2.join();
+		data_loader3.join();
+		data_loader4.join();
+		data_loader5.join();
+	  }
+	  /*
+	  // ----------- START SECTION REPLICATED 3X ABOVE --------------------
       // I've set this to something really small to make the example terminate
       // sooner.  But when you really want to train a good model you should set
       // this to something like 10000 so training doesn't terminate too early.
       //trainer.set_iterations_without_progress_threshold(300);
-      trainer.set_iterations_without_progress_threshold(10000);
+      // -- trainer.set_iterations_without_progress_threshold(10000);
 
       // If you have a lot of data then it might not be reasonable to load it all
       // into RAM.  So you will need to be sure you are decompressing your images
@@ -359,6 +559,7 @@ int main(int argc, char** argv)
           try
           {
             load_mini_batch(5, 5, rnd, objs, images, labels); // TODO 35x15 instead of 5x5
+                  // Tried 35x10, trained much slower and did worse on test (86%; training was 100%)
             qimages.enqueue(images);
             qlabels.enqueue(labels);
           }
@@ -393,8 +594,24 @@ int main(int argc, char** argv)
       cout << "done training" << endl;
 
       // Save the network to disk
-      net.clean();
-      serialize("bearembed_metric_resnet.dat") << net;
+      if (parser.option("pretrained_file")) 
+	  {
+		if (parser.option("anet"))
+		{
+		  anet_150.clean();
+		  serialize(trained_network) << anet_150;
+		}
+		else
+		{
+		  net_150.clean();
+		  serialize(trained_network) << net_150;
+		}
+	  }
+	  else
+	  {
+		net.clean();
+		serialize(trained_network) << net;
+	  }
 
       // stop all the data loading threads and wait for them to terminate.
       qimages.disable();
@@ -404,21 +621,40 @@ int main(int argc, char** argv)
       data_loader3.join();
       data_loader4.join();
       data_loader5.join();
+	  // ----------- END SECTION REPLICATED 3X ABOVE --------------------
+	  */
     }
-
     // Testing
-    if (parser.option("test"))
+    else if (parser.option("test"))
     {
       int num_folds = 100;
       double accuracy_arr[num_folds];
-      net_type net;
+
+	  anet_type_150 anet_150;
+	  anet_type_150 testing_net;
+
+	  net_type net;
+	  // anet_type testing_net;
+
+      std::string test_network = (parser.option("test").argument());
+
+	  // boost::filesystem::path test_network(parser.option("train").argument());
+	  
+	  if (parser.option("anet"))
+	  {
+		cout << "... using anet ..." << endl;
+		deserialize(test_network) >> testing_net;
+	  }
+	  else
+	  {
+		cout << "... not anet ..." << endl;
+		deserialize(test_network) >> net;
+		testing_net = net;
+	  }
 
       cout << "Start testing..." << endl;
-
-      deserialize("bearembed_metric_resnet.dat") >> net;
       // Normally you would use the non-batch-normalized version of the network to do
       // testing, which is what we do here.
-      anet_type testing_net = net;
 
       for (int folds = 0; folds < num_folds; ++folds)
       {
@@ -519,57 +755,114 @@ int main(int argc, char** argv)
       cout << "Accuracy Mean: " << fixed << accuracy_mean << endl;
       cout << "Standard Error of the Mean: " << fixed << se_of_mean << endl;
     }
-
-    if (parser.option("embed"))
+    else if (parser.option("embed"))
     {
-      // Generate embeddings
+      // Generate embeddings in a directory
+	  //   use optional --output, else create dir in current directory
       boost::filesystem::path src_path(parser[0]);
-      boost::filesystem::path dst_path(parser.option("embed").argument());
-
       cout << "Generating embeddings..." << endl;
+	  std::string dst_path;
+	  if (parser.option ("output"))
+	  {
+	      dst_path = parser.option("output").argument();
+		  if (boost::filesystem::exists(dst_path)) // create new directory
+		  {
+			cout << "Directory " << dst_path << " already exists." << endl;
+		  }
+		  dst_path.clear ();
+	  }
+	  if (dst_path.empty())
+	  {
+		// ptime now = second_clock::local_time();
+		// date today = now.date();
+		// create formatting
+		// boost::gregorian::date_facet *df = new boost::gregorian::date_facet("%Y%m%d%H%M"); 
+		// set formatting
+		// ostringstream is;
+		// is.imbue(std::locale(is.getloc(), df));
+		// is << today << endl;
+		// dst_path = "embed_" + is.str();
+		  time_t rawtime;
+		  struct tm * timeinfo;
+		  char buffer[80];
 
-      if (boost::filesystem::exists(dst_path))
-      {
-        cout << "Destination directory already exists." << endl;
-        return 1;
-      } else
-      {
-        boost::filesystem::create_directories(dst_path);
-      }
+		  time (&rawtime);
+		  timeinfo = localtime(&rawtime);
 
+		  strftime(buffer,sizeof(buffer),"%Y%m%d%I%M",timeinfo);
+		  dst_path = "embed_";
+		  dst_path.append (buffer);
+	  }
+	  boost::filesystem::create_directories(dst_path);
+
+	  // create XML content file
+	  ptree &embeds = g_xml_tree.add ("dataset.embeddings", "");
+
+	  /*
       src_path = boost::filesystem::canonical(src_path);
       dst_path = boost::filesystem::canonical(dst_path);
       cout << "Source path: " << src_path.string() << endl;
       cout << "Destination path: " << dst_path.string() << endl;
+      cout << "Destination path: " << dst_path << endl;
+	  */
 
-      net_type net;
-      deserialize("bearembed_metric_resnet.dat") >> net;
+	  anet_type_150 anet_150;
+	  anet_type_150 embedding_anet_150;
+	  net_type net;
+	  anet_type embedding_anet;
+	  std::string embed_network = (parser.option("embed").argument());
+	  if (parser.option("anet"))
+	  {
+		deserialize(embed_network) >> anet_150;
+		embedding_anet_150 = anet_150;
+	  }
+	  else
+	  {
+		deserialize(embed_network) >> net;
+		embedding_anet = net;
+	  }
+
       // Normally you would use the non-batch-normalized version of the network to do
       // testing, which is what we do here.
-      anet_type embedding_net = net;
       matrix<rgb_pixel> image;
 
+	  int embeddings_count = 0;
+	  boost::filesystem::path emb_dir (dst_path);
       for (size_t i = 0; i < objs.size(); ++i)
       {
         cout << "ID: " << i << " Files: " << objs[i].size() << endl;
 
+		embeddings_count += objs[i].size(); 
         for (size_t j = 0; j < objs[i].size(); ++j)
         {
           string img_str = objs[i][j];
           string emb_str = objs[i][j];
+		  matrix<float,0,1> embedded;
           //cout << "Image: " << img_str << endl;
           load_image(image, img_str);
           // get embedding
           // TODO add jitter (see dnn_face_recognition_ex.cpp)
-          matrix<float,0,1> embedded = embedding_net(image);
-          boost::replace_first(emb_str, src_path.string(), dst_path.string());
-          boost::filesystem::path emb_path(emb_str);
+		  if (parser.option("anet"))
+		  {
+			embedded = embedding_anet_150(image);
+		  }
+		  else
+		  {
+			embedded = embedding_anet(image);
+		  }
+          boost::filesystem::path emb_file(emb_str);
+          // boost::replace_first(emb_file, src_path, dst_path);
+          boost::filesystem::path emb_path = emb_dir / emb_file.filename();
           emb_path.replace_extension("dat");
+		  /*
           if (!boost::filesystem::exists(emb_path.parent_path()))
           {
             //cout << "mkdir " << emb_path.parent_path() << endl;
             boost::filesystem::create_directories(emb_path.parent_path());
           }
+		  */
+		  ptree &xml_embed = embeds.add ("embedding", "");
+		  xml_embed.add ("<xmlattr>.file", emb_path.string());
           serialize(emb_path.string()) << embedded;
           //cout << "Embedded: " << emb_path.string() << endl;
           if (0) //((i==0) && (j==0))
@@ -591,7 +884,19 @@ int main(int argc, char** argv)
           }
         }
       }
+
+	  boost::filesystem::path xml_file (parser[0]);
+	  std::string embed_xml_file = xml_file.filename().stem().string() + "_embeds.xml";
+	  xml_add_headers (); // put at end since writing reverse order added
+	  write_xml(embed_xml_file, g_xml_tree,std::locale(),
+		  boost::property_tree::xml_writer_make_settings<std::string>(' ', 4, "utf-8"));
+	  cout << "\ngenerated: \n\t-- " << embed_xml_file << endl;
+	  cout << "\n\t-- " << embeddings_count << " embedding files under " << dst_path << "\n" << endl;
     }
+	else
+	{
+	  cout << "Need one of <train|test|embed> to run bearembed." << endl;
+	}
   }
 
   catch (exception& e)
