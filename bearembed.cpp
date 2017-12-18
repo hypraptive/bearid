@@ -773,15 +773,6 @@ int main(int argc, char** argv)
 	  }
 	  if (dst_path.empty())
 	  {
-		// ptime now = second_clock::local_time();
-		// date today = now.date();
-		// create formatting
-		// boost::gregorian::date_facet *df = new boost::gregorian::date_facet("%Y%m%d%H%M"); 
-		// set formatting
-		// ostringstream is;
-		// is.imbue(std::locale(is.getloc(), df));
-		// is << today << endl;
-		// dst_path = "embed_" + is.str();
 		  time_t rawtime;
 		  struct tm * timeinfo;
 		  char buffer[80];
@@ -827,7 +818,7 @@ int main(int argc, char** argv)
       matrix<rgb_pixel> image;
 
 	  int embeddings_count = 0;
-	  boost::filesystem::path emb_dir (dst_path);
+	  boost::filesystem::path emb_dir = boost::filesystem::canonical(dst_path);
       for (size_t i = 0; i < objs.size(); ++i)
       {
         cout << "ID: " << i << " Files: " << objs[i].size() << endl;
