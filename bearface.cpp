@@ -46,8 +46,9 @@ using net_type = loss_mmod<con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<input_rgb
 
 // ----------------------------------------------------------------------------------------
 
-const unsigned MAX_LONG_SIDE = 5000;
-const unsigned MAX_SIZE = MAX_LONG_SIDE*3500;
+const unsigned MAX_LONG_SIDE = 4800;
+const unsigned MAX_SHORT_SIDE = 3200;
+const unsigned MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
 
 // Find Faces and face landmarks
 void find_faces (
@@ -68,9 +69,19 @@ void find_faces (
   if (img.size() > (MAX_SIZE))
   {
     if (img.nc() > img.nr())
-      pxRatio = (float)MAX_LONG_SIDE / (float)img.nc();
+    {
+      if (((float)MAX_LONG_SIDE / (float)img.nc()) < (float)MAX_SHORT_SIDE / (float)img.nr())
+        pxRatio = (float)MAX_LONG_SIDE / (float)img.nc();
+      else
+        pxRatio = (float)MAX_SHORT_SIDE / (float)img.nr();
+    }
     else
-      pxRatio = (float)MAX_LONG_SIDE / (float)img.nr();
+    {
+      if (((float)MAX_LONG_SIDE / (float)img.nr()) < (float)MAX_SHORT_SIDE / (float)img.nc())
+        pxRatio = (float)MAX_LONG_SIDE / (float)img.nr();
+      else
+        pxRatio = (float)MAX_SHORT_SIDE / (float)img.nc();
+    }
     cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
     //cout << "New X: " << (int)(img.nc() * pxRatio) << " New Y: " << (int)(img.nr() * pxRatio) << endl;
     matrix<rgb_pixel> smimg((int)(img.nr() * pxRatio), (int)(img.nc() * pxRatio));
@@ -262,7 +273,7 @@ int main(int argc, char** argv) try
     save_image_dataset_metadata(data, faces_file);
     if (!bLabelFixed)
     {
-      cout << "\n\tGenerated with no label: " << faces_file << "\n" << endl;      
+      cout << "\n\tGenerated with no label: " << faces_file << "\n" << endl;
     }
     else
     {
