@@ -46,8 +46,8 @@ using net_type = loss_mmod<con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<input_rgb
 
 // ----------------------------------------------------------------------------------------
 
-const unsigned MAX_LONG_SIDE = 4800;
-const unsigned MAX_SHORT_SIDE = 3200;
+const unsigned MAX_LONG_SIDE = 4500;
+const unsigned MAX_SHORT_SIDE = 3000;
 const unsigned MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
 
 // Find Faces and face landmarks
@@ -101,11 +101,13 @@ void find_faces (
   //pyramid_up(img);
 
   // Find faces
+  cout << "Finding faces..." << endl;
   auto dets = net(img);
 
   // if no faces, try with upscaling
   if ((dets.size() == 0) && !bDownscaled)
   {
+    cout << "Try upscaling..." << endl;
     if (img.size() > (MAX_SIZE/4))
     {
       //cout << "File TOO BIG to UPSCALE" << endl;
@@ -126,6 +128,7 @@ void find_faces (
   }
 
   // For each face, find the face landmarks
+  cout << "Finding landmarks..." << endl;
   for (auto&& d : dets)
   {
       // get the landmarks for this face
