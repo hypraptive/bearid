@@ -95,6 +95,7 @@ def load_chips (root, d_chips, filetype) :
 			# ??? possible for box to have !1 label?
 			label_list = box[0].findall ('label')
 			label = label_list[0].text
+			# print "label: ", label
 			objects.append (facefile)
 			# print "    label,    : ", label
 			# print "    facefile, : ", facefile
@@ -391,6 +392,7 @@ def load_chips_from_files (filenames, chips_d, filetype):
 	print "\nLoading", filetype, "for files: "
 	for file in filenames:
 		print "\t", file
+		# pdb.set_trace()
 		root, tree = xe.load_file (file)
 		chipfiles.extend (load_chips (root, chips_d, filetype))
 	# pdb.set_trace()
@@ -418,11 +420,13 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=2, 
 	# pdb.set_trace ()
 	count = 0
 	print ""
+	# pdb.set_trace ()
 	for key, value in sorted(objs_d.items()):
 		print key, " : ", len (value)
 		count += len (value)
 	print "-----------------------------"
-	print "total   : ", count
+	print filetype, "count : ", count
+	print "label count : ", len (objs_d)
 
 	if filetype == "faces":
 		print "-----------------------------"
@@ -444,6 +448,7 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=2, 
 					stats_fp.write (face + '\n')
 				stats_fp.close ()
 				print "... generated file:", stats_name
+	print ''
 	# pdb.set_trace()
 	if print_files :
 		objfiles.sort () 
