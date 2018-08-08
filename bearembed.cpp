@@ -641,6 +641,7 @@ else if (parser.option("test"))
 {
   int num_folds = 100;
   double accuracy_arr[num_folds];
+  double f1_arr[num_folds];
 
   anet_type_150 anet_150;
   anet_type_150 testing_net;
@@ -751,15 +752,19 @@ else if (parser.option("test"))
     cout << "F1 score: " << fixed << f1 << endl;
 
     accuracy_arr[folds] = accuracy;
+    f1_arr[folds] = f1;
   }
 
-  // Calculate the mean accuracy
+  // Calculate the mean accuracy and f1 score
   double accuracy_sum = 0;
+  double f1_sum = 0;
   for (int folds = 0; folds < num_folds; ++folds)
   {
     accuracy_sum += accuracy_arr[folds];
+    f1_sum += f1_arr[folds];
   }
   double accuracy_mean = accuracy_sum / num_folds;
+  double f1_mean = f1_sum / num_folds;
 
   // Calculate the standard error of the mean
   double deviation_sum = 0;
@@ -771,6 +776,7 @@ else if (parser.option("test"))
   cout << endl;
   cout << "Accuracy Mean: " << fixed << accuracy_mean << endl;
   cout << "Standard Error of the Mean: " << fixed << se_of_mean << endl;
+  cout << "F1 Mean: " << fixed << f1_mean << endl;
 }
 else if (parser.option("embed"))
 {
