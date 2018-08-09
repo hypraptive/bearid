@@ -42,7 +42,7 @@ def main (argv) :
 		else :
 			center[0] = int (pt[0])
 			center[1] = int (pt[1])
-	pdb.set_trace ()
+	# pdb.set_trace ()
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("chip_filtered_%Y%m%d_%H%M.xml")
 
