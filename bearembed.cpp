@@ -289,7 +289,10 @@ std::vector<std::vector<string>> load_chips_map (
   {
     try
     {
+      time_t timeStart = time(NULL);
       command_line_parser parser;
+
+      cout << "Start time: " << timeStart << endl;
 
       parser.add_option("h","Display this help message.");
       parser.add_option("train","Train the face embedding network. Writes to network file.");
@@ -911,6 +914,10 @@ else
 {
   cout << "Need one of <train|test|embed> to run bearembed." << endl;
 }
+time_t timeEnd = time(NULL);
+
+cout << "End time: " << timeStart << endl;
+cout << "Elapsed time (s): " << difftime(timeEnd, timeStart) << endl;
 }
 
 catch (exception& e)
