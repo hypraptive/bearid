@@ -16,7 +16,10 @@ from collections import namedtuple
 from collections import defaultdict
 from os import walk
 import numpy as np 
+import math
 import matplotlib.pyplot as plt 
+from mpl_toolkits.mplot3d import Axes3D
+
 
 g_verbosity = 0
 g_stats_few = []
@@ -421,11 +424,11 @@ def get_verbosity (verbosity) :
 def filter_chips (infiles, pt, distance, outfile):
 	chips_d = defaultdict(list)
 	objfiles = load_chips_from_files (infiles, chips_d)
-	l_eye, r_eye, nose = get_chip_face_stats (chips_d)
+	l_eye, r_eye, nose, noses = get_chip_face_stats (chips_d)
 	# pdb.set_trace ()
 	if (pt[0] == 0) and (pt[1] == 0):
-		nose_x = nose[0]
-		nose_y = nose[1]
+		nose_x = noses[0]
+		nose_y = noses[1]
 	else:
 		nose_x = pt[0]
 		nose_y = pt[1]
@@ -519,9 +522,144 @@ def write_chip_file (chips, outfile):
 def chip_face_stats (filenames):
 	chips_d = defaultdict(list)
 	objfiles = load_chips_from_files (filenames, chips_d)
-	get_chip_face_stats (chips_d)
+	l_eye, r_eye, nose, noses = get_chip_face_stats (chips_d)
+	have_display = "DISPLAY" in os.environ
+	if not have_display:
+		return
+	display_hist_heat (noses)
+	display_hist (noses)
+	band_width, bands = get_dist_hist (noses)
+	default_dist = (l_eye[0] - r_eye[0]) / 2
+	display_dist_hist (bands, band_width, default_dist)
+	plt.show ()
 
-def get_chip_face_stats (chips_d):
+##------------------------------------------------------------
+##  plot nose dist histogram
+##------------------------------------------------------------
+def display_dist_hist (bands, band_width, default_dist):
+	band_label = [(x+1) * band_width for x in range(len(bands))]
+	# pdb.set_trace ()
+	# plt.autoscale(enable=True, axis='both', tight=None)
+	# plt.axis('equal')
+	fig3 = plt.figure()
+	plt.title ('distance histogram. default @' + str (default_dist))
+	plt.axis('on')
+	plt.ylabel('face count')
+	plt.xlabel('distance')
+	plt.bar (band_label, bands, 7, color='green') 
+	plt.bar (default_dist, max(bands), 7, color='red') 
+	# plt.scatter (band_label, bands, c='green', s=16) 
+	# plt.savefig ("nose_fig.png")
+
+##------------------------------------------------------------
+##  plot histogram heatmap
+##------------------------------------------------------------
+def display_hist_heat (noses):
+	x = noses[0]
+	y = noses[1]
+	# Plot data
+	fig1 = plt.figure()
+	plt.title ('nose histogram.')
+	plt.plot(x,y,'.r')
+	plt.xlabel('x')
+	plt.ylabel('y')
+
+	# Estimate the 2D histogram
+	nbins = 10
+	H, xedges, yedges = np.histogram2d(x,y,bins=nbins)
+
+	# H needs to be rotated and flipped
+	H = np.rot90(H)
+	H = np.flipud(H)
+
+	# Mask zeros
+	Hmasked = np.ma.masked_where(H==0,H) # Mask pixels with a value of zero
+
+	# Plot 2D histogram using pcolor
+	fig2 = plt.figure()
+	plt.title ('nose histogram heat map: ' + str (nbins) + ' bins.')
+	plt.pcolormesh(xedges,yedges,Hmasked)
+	plt.xlabel('x')
+	plt.ylabel('y')
+	cbar = plt.colorbar()
+	cbar.ax.set_ylabel('Counts')
+	# plt.show ()
+
+##------------------------------------------------------------
+##  plot histogram of points, of nxn bins
+##------------------------------------------------------------
+def display_hist (noses):
+	fig = plt.figure()
+	ax = fig.add_subplot(111, projection='3d')
+	# x, y = np.random.rand(2, 100) * 4 
+	x = noses[0]
+	y = noses[1]
+	nbins = 10
+	hist, xedges, yedges = np.histogram2d(x, y, bins=nbins)
+
+	# Note: np.meshgrid gives arrays in (ny, nx) so we use 'F' to flatten xpos,
+	# ypos in column-major order. For numpy >= 1.7, we could instead call meshgrid
+	# with indexing='ij'.
+	# xpos, ypos = np.meshgrid(xedges[:-1] + 0.25, yedges[:-1] + 0.25)
+	plt.title ('nose histogram : ' + str (nbins) + ' bins.')
+	xpos, ypos = np.meshgrid(xedges[:-1] + 1.0, yedges[:-1] + 1.0)
+	xpos = xpos.flatten('F')
+	ypos = ypos.flatten('F')
+	zpos = np.zeros_like(xpos)
+
+	# Construct arrays with the dimensions for the 16 bars.
+	#dx = 0.5 * np.ones_like(zpos)
+	dx = 1.0 * np.ones_like(zpos)
+	dy = dx.copy()
+	dz = hist.flatten()
+
+	ax.bar3d(xpos, ypos, zpos, dx, dy, dz, color='y', zsort='average')
+	# plt.show()
+
+##------------------------------------------------------------
+##  plot distance histogram from mean.
+##------------------------------------------------------------
+def get_dist_hist (noses, band_width=0):
+	x_list = noses[0]
+	y_list = noses[1]
+	sorted_x = sorted (x_list)
+	sorted_y = sorted (y_list)
+	nose_x = sum (x_list) / len (x_list)
+	nose_y = sum (y_list) / len (y_list)
+	band_count = 30
+	if band_width == 0 :
+		x_dist = sorted_x[-1] - sorted_x[0]
+		y_dist = sorted_y[-1] - sorted_y[0]
+		dist = math.sqrt (x_dist**2 + y_dist**2)
+		band_width = int (dist/band_count)
+	bands = [0] * (band_count + 1)
+	# pdb.set_trace ()
+	for i in range (len (y_list)) :
+		pt_x = x_list[i]
+		pt_y = y_list[i]
+		d = math.sqrt ((pt_x-nose_x)**2 + (pt_y-nose_y)**2)
+		band = int (d/band_width)
+		bands[band] += 1
+	print 'nose count: ', len (x_list)
+	end = len (bands) - 1
+	# pdb.set_trace ()
+	for i in range (end, 0, -1) :
+		if bands[i] :
+			end = i+1
+			break
+	cnt = 0
+	for i in range (len(bands)) :
+		print '---   ', i, ':', bands[i]
+		cnt += bands[i]
+	print '# bands : ', end
+	print 'band width     : ', band_width
+	print 'total in bands : ', cnt
+	return band_width, bands[:end]
+	
+##------------------------------------------------------------
+##  given dict of chips, return eyes and list of noses 
+##------------------------------------------------------------
+def get_chip_face_stats (chips_d, verbose=1):
 	x_list = []
 	y_list = []
 	# pdb.set_trace ()
@@ -550,10 +688,12 @@ def get_chip_face_stats (chips_d):
 					y_list.append (y)
 	nose_x = sum (x_list) / len (x_list)
 	nose_y = sum (y_list) / len (y_list)
-	print 'nose : ', nose_x, nose_y
-	print 'reye : ', reye_x, reye_y
-	print 'leye : ', leye_x, leye_y
-	return [leye_x, leye_y], [reye_x, reye_y], [nose_x, nose_y] 
+	if verbose > 0 :
+		print 'average nose : ', nose_x, nose_y
+		print 'median  nose : ', np.median (x_list), np.median (y_list)
+		print 'reye : ', reye_x, reye_y
+		print 'leye : ', leye_x, leye_y
+	return [leye_x, leye_y], [reye_x, reye_y], [nose_x, nose_y], [x_list, y_list] 
 
 ##------------------------------------------------------------
 ##  return label stats in file
