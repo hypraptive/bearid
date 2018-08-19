@@ -25,7 +25,7 @@ using boost::property_tree::ptree;
 using boost::property_tree::write_xml;
 using boost::property_tree::xml_writer_settings;
 
-image_window g_win_chip;
+// image_window g_win_chip;
 const unsigned long g_chip_size = 150;
 const unsigned int chip_x = 4;
 matrix<rgb_pixel> g_composite_features(g_chip_size*chip_x, g_chip_size*chip_x);
@@ -178,7 +178,7 @@ std::vector<matrix<rgb_pixel>> find_chips (
 	  add_overlay_circle(leye_new, g_feature_radius, color_b);
       chip_circles.push_back(image_window::overlay_circle(nose_new, g_feature_radius, color_g));
 	  add_overlay_circle(nose_new, g_feature_radius, color_g);
-	  g_win_chip.add_overlay (chip_circles);
+	  // g_win_chip.add_overlay (chip_circles);
 
       // extract the face chip
       matrix<rgb_pixel> face_chip;
@@ -259,6 +259,11 @@ int main(int argc, char** argv) try
 
 		  ptree &xml_chip = chips.add ("chip", "");
 		  // write image out to chips.xml
+		  // xml_chip_write (
+		  //	face_features
+		  //	boxes[i].label
+		  //	transform_features
+		  //	pathed_chip_file(_name)
 		  int j = i*3; // # of features we care about {leye, nose, reye}
 		  auto leye = face_features[j];
 		  auto nose = face_features[j+1];
