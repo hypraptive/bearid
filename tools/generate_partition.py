@@ -25,6 +25,8 @@ def main (argv) :
 	parser.add_argument ('-shuffle', '--shuffle', default="",
 		action="store_true",
 		help='Shuffles labels before partition. Defaults to False')
+	parser.add_argument ('-test_minimum', '--test_minimum', default=0,
+		help='Minimum test images per label, overrides partition percentage. Defaults to 0.')
 	parser.add_argument ('-minimum', '--minimum', default=0,
 		help='Minimum images per label. Defaults to 0.')
 	parser.add_argument ('-filetype', '--filetype', default="chips",
@@ -56,7 +58,7 @@ def main (argv) :
 		filetype = "chips"
 
 	xml_files = u.generate_xml_file_list (args.input)
-	u.generate_partitions (xml_files, args.x, args.y, args.output, args.shuffle, int(args.minimum), filetype)
+	u.generate_partitions (xml_files, args.x, args.y, args.output, args.shuffle, int(args.minimum), int(args.test_minimum), filetype)
 
 
 if __name__ == "__main__":
