@@ -167,30 +167,37 @@ def print_dict (chips_d) :
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, shuffle=True, minimum=0, test_mininum=0, filetype="chips") :
+def generate_partitions (files, x, y, output, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, filetype="chips") :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 	# detect if chips file or faces file
 
 	chips_d = defaultdict(list)
 	load_objs_from_files (files, chips_d, filetype)
-	chunks = partition_chips (chips_d, x, y, shuffle, minimum, test_mininum, filetype)
+	chunks = partition_chips (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype)
 	# pdb.set_trace ()
 	file_x = output + "_" + str(x) + ".xml"
 	file_y = output + "_" + str(y) + ".xml"
+	## chunks[2] = unused labels
+	## chunks[3] = chips below min size
 	file_unused = None
-	if len (chunks) > 2 :
+	if len (chunks[2]) > 0 :
 		file_unused = output + "_unused" + ".xml"
-	generate_partition_files (chunks, file_x, file_y, file_unused, filetype)
+	file_small_img = None
+	if len (chunks[3]) > 0 :
+		file_small_img = output + "_small_img" + ".xml"
+	filenames = [file_x, file_y, file_unused, file_small_img]
+	generate_partition_files (chunks, filenames, filetype)
 
 ##------------------------------------------------------------
 ##  partition chips into x and y percent
 ##------------------------------------------------------------
-def partition_chips (chips_d, x, y, shuffle=True, minimum=0, test_minimum=0, filetype="chips") :
+def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, filetype="chips") :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 	chunks = []
 	if (shuffle == True) :  ## concat all labels, then split
+		## TODO check for image_size_min 
 		all_chips=[]
 		for label, chips in chips_d.items():
 			all_chips.extend (chips)
@@ -207,13 +214,19 @@ def partition_chips (chips_d, x, y, shuffle=True, minimum=0, test_minimum=0, fil
 		# pdb.set_trace ()
 		chunks_x = []
 		chunks_y = []
-		chunks_tiny = []
-		labels_tiny = []
+		chunks_few = []
+		labels_few = []
+		small_images_chips = []
 		chip_cnt = 0
 		for label, chips in chips_d.items():
-			if len (chips) < minimum :
-				chunks_tiny.extend (chips)
-				labels_tiny.append (label)
+			# remove chips below size minimum
+			for i in range (len (chips)-1, 0, -1) :
+				res = chips[i].find ('resolution')
+				if int (res.text) < image_size_min :
+					small_images_chips.append (chips.pop (i))
+			if len (chips) < img_cnt_min :
+				chunks_few.extend (chips)
+				labels_few.append (label)
 				continue
 			random.shuffle (chips)
 			chip_cnt += len (chips)
@@ -222,15 +235,25 @@ def partition_chips (chips_d, x, y, shuffle=True, minimum=0, test_minimum=0, fil
 			chunks_y.extend (chips[partition:])
 		chunks.append (chunks_x)
 		chunks.append (chunks_y)
-		print "individual partition of ", x, "len : ", len (chunks_x)
-		print "individual partition of ", y, "len : ", len (chunks_y)
-		print filetype, "count: ", chip_cnt
-		if len (labels_tiny) > 0 :
-			chunks.append (chunks_tiny)
-			print "unused labels (less than", minimum, "):"
-			print labels_tiny
+		print
+		print len (chunks_x), ' chips in individual partition of', x
+		print len (chunks_y), ' chips in individual partition of', y
+		print chip_cnt, 'total', filetype
+		if len (labels_few) > 0 :
+			chunks.append (chunks_few)
+			print len (labels_few), 'unused labels, each with less than ', img_cnt_min, 'images'
+			# print labels_few
 		else :
-			print "\nAll labels used.\n"
+			print '\nAll labels used.\n'
+			chunks.append ([])
+		if len (small_images_chips) :
+			chunks.append (small_images_chips)
+			files_small = [chip.attrib.get ('file') for chip in small_images_chips]
+			# img_list = '\n   '.join (files_small)
+			print len (small_images_chips), 'images ignored due to size below', image_size_min
+			# print img_list
+		else :
+			chunks.append ([])
 			
 	# pdb.set_trace ()
 	return chunks
@@ -301,9 +324,13 @@ def generate_folds_files (train_list, validate_list, filename) :
 ##  create each xml tree for x and y partition
 ##  then write xml files
 ##------------------------------------------------------------
-def generate_partition_files (chunks, file_x, file_y, file_unused=None, filetype="chips") :
+def generate_partition_files (chunks, filenames, filetype="chips") :
 	list_x = chunks[0]
 	list_y = chunks[1]
+	file_x = filenames[0]
+	file_y = filenames[1]
+	file_unused = filenames[2]
+	file_small_img = filenames[3]
 
 	root_x, chips_x = create_new_tree_w_chips (filetype)
 	for i in range(len(list_x)):
@@ -324,12 +351,24 @@ def generate_partition_files (chunks, file_x, file_y, file_unused=None, filetype
 	if (file_unused) :
 		list_unused = chunks[2]
 		root_unused, chips_unused = create_new_tree_w_chips (filetype)
-		for i in range(len(list_unused)):
-			chips_unused.append (list_unused[i])
+		# for i in range(len(list_unused)):
+		#	chips_unused.append (list_unused[i])
+		for chip in list_unused :
+			chips_unused.append (chip)
 		indent (root_unused)
 		tree_unused = ET.ElementTree (root_unused)
 		tree_unused.write (file_unused)
-		print "    below minimum list   : \n\t", file_unused
+		print '    ', len (list_unused), 'labels unused due to less than minimum # of images, written to file : \n\t', file_unused
+		print
+	if (file_small_img) :
+		list_small_img = chunks[3]
+		root_small, chips_small = create_new_tree_w_chips (filetype)
+		for i in range(len(list_small_img)):
+			chips_small.append (list_small_img[i])
+		indent (root_small)
+		tree_small = ET.ElementTree (root_small)
+		tree_small.write (file_small_img)
+		print '    ', len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img
 		print
 
 ##------------------------------------------------------------
@@ -548,6 +587,7 @@ def write_chip_file (chips, outfile):
 	root, chips_elem = create_new_tree_w_chips ()
 	for chip in chips:
 		chips_elem.append (chip)
+	indent (root)
 	tree = ET.ElementTree (root)
 	tree.write (outfile)
 
@@ -712,6 +752,7 @@ def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, sets, output):
 	## write out file
 	print '\nWriting', matched_cnt, 'matched pairs and', unmatched_cnt, 'unmatched pairs to file:' 
 	print '\t', output, '\n'
+	indent (root)
 	tree = ET.ElementTree (root)
 	tree.write (output)
 	# pdb.set_trace ()

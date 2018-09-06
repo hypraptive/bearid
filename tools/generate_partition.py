@@ -15,7 +15,7 @@ from collections import defaultdict
 ##    generate_folds 5 -out yyy *.xml dirs
 ##------------------------------------------------------------
 def main (argv) :
-	parser = argparse.ArgumentParser(description='Partitions chips into x and y, defaults to 80,20.  If shuffle is set to 0, the partition will be per label.  ',
+	parser = argparse.ArgumentParser(description='Partitions chips into x and y.  If shuffle is set to 0, the partition will be per label.  x and y can be set to 100 and 0, respectively, for no partitioning.',
 		formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=50))
     # parser.formatter.max_help_position = 50
 	parser.add_argument ('x', default=80,
@@ -26,10 +26,12 @@ def main (argv) :
 	parser.add_argument ('-shuffle', '--shuffle', default="",
 		action="store_true",
 		help='Shuffles labels before partition. Defaults to False')
-	parser.add_argument ('-test_minimum', '--test_minimum', default=0,
+	parser.add_argument ('-test_count_minimum', '--test_count_minimum', default=0,
 		help='Minimum test images per label, overrides partition percentage. Defaults to 0.')
-	parser.add_argument ('-minimum', '--minimum', default=0,
-		help='Minimum images per label. Defaults to 0.')
+	parser.add_argument ('-image_count_minimum', '--image_count_minimum', default=0,
+		help='Minimum number of images per label. Defaults to 0.')
+	parser.add_argument ('-image_size_minimum', '--image_size_minimum', default=0,
+		help='Minimum size of image. Defaults to 0.')
 	parser.add_argument ('-filetype', '--filetype', default="chips",
 		help='Type of file to partition. <faces|chips>.Defaults to "chips".')
 	parser.add_argument ('-o', '--output', default="",
@@ -39,7 +41,12 @@ def main (argv) :
 	u.set_argv (argv)
 	args = parser.parse_args()
 	verbose = args.verbosity
-	if verbose > 0 :
+	### --------------
+	#  TODO check & WARN that if shuffle is set, will ignore 
+	#    image_count_minimum, test_count_minimum
+	### --------------
+	if verbose > 2 :
+		print
 		print "x: ", args.x
 		print "y: ", args.y
 		print "sum: ", int (args.y) + int (args.x)
@@ -60,7 +67,7 @@ def main (argv) :
 		filetype = "chips"
 
 	xml_files = u.generate_xml_file_list (args.input)
-	u.generate_partitions (xml_files, args.x, args.y, args.output, args.shuffle, int(args.minimum), int(args.test_minimum), filetype)
+	u.generate_partitions (xml_files, args.x, args.y, args.output, args.shuffle, int(args.image_count_minimum), int(args.test_count_minimum), int (args.image_size_minimum), filetype)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ def main (argv) :
 		help='Output file basename. Defaults to "part_<date><time>_"')
 	parser.add_argument ('--verbosity', type=int, default=1,
 		choices=[0, 1, 2], help=argparse.SUPPRESS)
+	u.set_argv (argv)
 	args = parser.parse_args()
 	verbose = args.verbosity
 	if not args.output :
