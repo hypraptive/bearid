@@ -107,6 +107,74 @@ std::vector<std::vector<string>> load_objects_list (
 // Grab all the chip files from xml and store each under its label.
 // Generate warning for chips with no label.
 //-----------------------------------------------------------------
+std::vector<std::vector<string>> load_pairs_map (
+  const std::string& xml_file)
+  {
+    //std::map<string,std::vector<std::string>> chips_map;
+    ptree tree;
+    boost::property_tree::read_xml (xml_file, tree);
+
+    cout << "load_pairs_map" << endl;
+
+    std::vector<std::vector<string>> objects;		// return object
+    std::vector<string> matched;
+    std::vector<string> unmatched;
+    int count = 0;
+
+    BOOST_FOREACH(ptree::value_type& child, tree.get_child("dataset.chips"))
+    {
+      std::string child_name = child.first;
+      std::vector<string> pairFiles;
+
+      //cout << child_name << " " << count << endl;
+
+      if ((child_name == "pair_matched") || (child_name == "pair_unmatched"))
+      {
+        ptree pairtree = (ptree) child.second;
+        int ccount = 0;
+
+        BOOST_FOREACH(ptree::value_type& pchild, pairtree)
+        {
+          //cout << pchild.first << endl;
+          ccount += 1;
+          std::string chipfile = pchild.second.get<std::string>("<xmlattr>.file");
+          pairFiles.push_back (chipfile);
+          std::string bearID = pchild.second.get<std::string>("label");
+          //cout << "ID: " << bearID << " File: " << chipfile << endl;
+        }
+        if (ccount == 2)
+        {
+          // Add pair to map
+          if (child_name == "pair_matched")
+          {
+            matched.push_back (pairFiles[0]);
+            matched.push_back (pairFiles[1]);
+          }
+          else{
+            unmatched.push_back (pairFiles[0]);
+            unmatched.push_back (pairFiles[1]);
+          }
+        }
+        else
+        {
+          cout << "BAD PAIR: " << child_name << " " << count << " has " << ccount << " chip(s)" << endl;
+        }
+      }
+
+      count += 1;
+      //if (count >= 3) break;  //TODO Remove ME
+    }
+
+    objects.push_back (matched);
+    objects.push_back (unmatched);
+
+    return objects;
+}
+
+//-----------------------------------------------------------------
+// Grab all the chip files from xml and store each under its label.
+// Generate warning for chips with no label.
+//-----------------------------------------------------------------
 std::vector<std::vector<string>> load_chips_map (
   const std::string& xml_file)
   {
@@ -142,6 +210,24 @@ std::vector<std::vector<string>> load_chips_map (
     for ( it = chips_map.begin(); it != chips_map.end(); it++ )
     {
       objects.push_back (it->second);
+    }
+    return objects;
+  }
+
+std::vector<std::vector<string>> load_chips_xml (
+  const std::string& xml_file, bool pair)
+  {
+    std::vector<std::vector<string>> objects;		// return object
+
+    if (pair)
+    {
+      cout << "Pair file" << endl;
+      objects = load_pairs_map(xml_file);
+    }
+    else
+    {
+      cout << "Normal file" << endl;
+      objects = load_chips_map(xml_file);
     }
     return objects;
   }
@@ -298,6 +384,7 @@ std::vector<std::vector<string>> load_chips_map (
       parser.add_option("train","Train the face embedding network. Writes to network file.");
       // --test <network>
       parser.add_option("test","Test the face embedding network. Takes trained network", 1);
+      parser.add_option("pair","Interpret xml_file as a pair file, used for testing");
       // --embed <network>
       parser.add_option("embed","Create the face embedding for each image.", 1);
       // --pretrain only used with --train
@@ -338,7 +425,7 @@ std::vector<std::vector<string>> load_chips_map (
 
       cout << "\nXML chip file.... : " << parser[0] << endl;
 
-      auto objs = load_chips_map (parser[0]);
+      auto objs = load_chips_xml (parser[0], parser.option("pair"));
       cout << "objs.size(): "<< objs.size() << endl;
 
       // auto objs = load_objects_list(parser[0]);
@@ -639,8 +726,122 @@ data_loader5.join();
 // ----------- END SECTION REPLICATED 3X ABOVE --------------------
 */
 }
-// Testing
-else if (parser.option("test"))
+
+// Testing pairs
+else if (parser.option("test") && parser.option("pair"))
+{
+  anet_type_150 anet_150;
+  anet_type_150 testing_net;
+
+  net_type net;
+  // anet_type testing_net;
+
+  std::string test_network = (parser.option("test").argument());
+
+  // boost::filesystem::path test_network(parser.option("train").argument());
+
+  if (parser.option("anet"))
+  {
+    cout << "... using anet ..." << endl;
+    deserialize(test_network) >> testing_net;
+  }
+  else
+  {
+    cout << "... not anet ..." << endl;
+    deserialize(test_network) >> net;
+    testing_net = net;
+  }
+
+  cout << "Start testing pairs..." << endl;
+  std::vector<string> matchedPairs = objs[0];
+  std::vector<string> unmatchedPairs = objs[1];
+
+  int num_right = 0;
+  int num_wrong = 0;
+  int num_true_pos = 0;
+  int num_true_neg = 0;
+  int num_false_pos = 0;
+  int num_false_neg = 0;
+
+  matrix<rgb_pixel> image;
+  std::vector<matrix<rgb_pixel>> images;
+  // Matching Pairs
+  for (size_t i = 0; i < matchedPairs.size(); i+=2)
+  {
+    images.clear();
+    //cout << "Matched Pair " << i/2 << endl;
+    //cout << matchedPairs[i] << endl;
+    load_image(image, matchedPairs[i]);
+    images.push_back(std::move(image));
+    //cout << matchedPairs[i+1] << endl;
+    load_image(image, matchedPairs[i+1]);
+    images.push_back(std::move(image));
+
+    std::vector<matrix<float,0,1>> matchedEmbedded = testing_net(images);
+    if (length(matchedEmbedded[0]-matchedEmbedded[1]) < testing_net.loss_details().get_distance_threshold())
+    {
+      ++num_right;
+      ++num_true_pos;
+      //cout << "RIGHT (same) " << matchedPairs[i] << " to " << matchedPairs[i+1] << " distance is " << to_string(length(matchedEmbedded[0]-matchedEmbedded[1])) << endl;
+    }
+    else
+    {
+      ++num_wrong;
+      ++num_false_neg;
+      //cout << "WRONG (same) " << matchedPairs[i] << " to " << matchedPairs[i+1] << " distance is " << to_string(length(matchedEmbedded[0]-matchedEmbedded[1])) << endl;
+    }
+  }
+
+  // Unmatching Pairs
+  for (size_t i = 0; i < unmatchedPairs.size(); i+=2)
+  {
+    images.clear();
+    //cout << "Unmatched Pair " << i/2 << endl;
+    //cout << unmatchedPairs[i] << endl;
+    load_image(image, unmatchedPairs[i]);
+    images.push_back(std::move(image));
+    //cout << unmatchedPairs[i+1] << endl;
+    load_image(image, unmatchedPairs[i+1]);
+    images.push_back(std::move(image));
+
+    std::vector<matrix<float,0,1>> unmatchedEmbedded = testing_net(images);
+    if (length(unmatchedEmbedded[0]-unmatchedEmbedded[1]) >= testing_net.loss_details().get_distance_threshold())
+    {
+      ++num_right;
+      ++num_true_neg;
+      //cout << "RIGHT (same) " << unmatchedPairs[i] << " to " << unmatchedPairs[i+1] << " distance is " << to_string(length(unmatchedEmbedded[0]-unmatchedEmbedded[1])) << endl;
+    }
+    else
+    {
+      ++num_wrong;
+      ++num_false_pos;
+      //cout << "WRONG (same) " << unmatchedPairs[i] << " to " << unmatchedPairs[i+1] << " distance is " << to_string(length(unmatchedEmbedded[0]-unmatchedEmbedded[1])) << endl;
+    }
+  }
+
+  cout << "num_right: "<< num_right << endl;
+  cout << "num_wrong: "<< num_wrong << endl;
+  cout << "num_true_pos: "<< num_true_pos << endl;
+  cout << "num_true_neg: "<< num_true_neg << endl;
+  cout << "num_false_pos: "<< num_false_pos << endl;
+  cout << "num_false_neg: "<< num_false_neg << endl;
+
+  double accuracy = ((double)num_right / ((double)num_right + (double)num_wrong));
+  double tpr = ((double)num_true_pos / ((double)num_true_pos + (double)num_false_neg));
+  double fpr = ((double)num_false_pos / ((double)num_false_pos + (double)num_true_neg));
+  double tnr = ((double)num_true_neg / ((double)num_true_neg + (double)num_false_pos));
+  double fnr = ((double)num_false_neg / ((double)num_true_pos + (double)num_false_neg));
+  double f1 = (((double)2 * (double)num_true_pos) / (((double)2 * (double)num_true_pos) + (double)num_false_pos + (double)num_false_neg));
+  cout << "Accuracy: " << fixed << accuracy << endl;
+  cout << "True positive rate: " << fixed << tpr << endl;
+  cout << "False negative rate: " << fixed << fnr << endl;
+  cout << "True negative rate: " << fixed << tnr << endl;
+  cout << "False positive rate: " << fixed << fpr << endl;
+  cout << "F1 score: " << fixed << f1 << endl;
+}
+
+// Testing OLD
+else if (parser.option("test") && !parser.option("pair"))
 {
   int num_folds = 100;
   double accuracy_arr[num_folds];
