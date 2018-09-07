@@ -24,13 +24,14 @@ def main (argv) :
 	parser.add_argument ('-l', '--ls', default="",
 		action="store_true",
 		help='print ordered list of filenames.')
-	parser.add_argument ('--verbosity', type=int, default=1,
-		choices=[0, 1, 2], help=argparse.SUPPRESS)
+	parser.add_argument ('-v', '--verbosity', type=int, default=1,
+		choices=[0, 1, 2, 3], help=argparse.SUPPRESS)
 		# help="increase output verbosity"
 	args = parser.parse_args()
 	# print "ls : ", args.ls
 	# print "files: ", args.files
 
+	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.files)
 	u.get_obj_stats (xml_files, args.ls, args.filetype, args.verbosity, args.write)
 

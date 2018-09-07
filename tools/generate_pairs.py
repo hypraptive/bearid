@@ -17,19 +17,21 @@ def main (argv) :
 	parser = argparse.ArgumentParser(description='Create file with matched and unmatched face pairs.', 
 		formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=50))
     # parser.formatter.max_help_position = 50
-	parser.add_argument ('-m', '--matched', default=60,
-		help='Number of matched pairs.')
-	parser.add_argument ('-u', '--unmatched', default=60,
-		help='Number of unmatched pairs.')
+	parser.add_argument ('-m', '--matched', default=0,
+		help='Number of matched pairs. 0 for all.')
+	parser.add_argument ('-u', '--unmatched', default=0,
+		help='Number of unmatched pairs. 0 for all.')
 	parser.add_argument ('-s', '--sets', default=5,
 		help='Number of sets of un/matched pairs.')
 	parser.add_argument ('input', nargs='+')
 	parser.add_argument ('-o', '--output', default="",
 		help='Output file basename. Defaults to "part_<date><time>_"')
-	parser.add_argument ('--verbosity', type=int, default=1,
-		choices=[0, 1, 2], help=argparse.SUPPRESS)
+	parser.add_argument ('-v', '--verbosity', type=int, default=1,
+		choices=[0, 1, 2, 3], help=argparse.SUPPRESS)
 	u.set_argv (argv)
 	args = parser.parse_args()
+	u.set_verbosity (args.verbosity)
+	u.set_filetype ('pairs')
 	verbose = args.verbosity
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("pairs_%Y%m%d_%H%M.xml")
