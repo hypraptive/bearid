@@ -283,36 +283,75 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 
 ##------------------------------------------------------------
 ##  split defaultdict<string><list> into n equal random parts
-##  returns chunks (list of n lists)
+##  returns array  (list of n lists)
 ##  By default, all labels are combined, shuffled, then split.  
 ##	If shuffle is False, shuffle each label, split, then added to chunks
 ##    
 ##------------------------------------------------------------
-def split_chips_into_n (chips_d, n, shuffle=True) :
-	if (shuffle == True) :  ## concat all labels, then split
+def split_chips_into_n (chips_d, n, shuffle_mode) :
+	chips_d_items = chips_d.items ()
+	all_chips_cnt = sum ([len (chips) for label, chips in chips_d_items])
+	mode_text = ''
+	if shuffle_mode == 0 :  ## concat all labels, then split
 		chunks=[]
 		all_chips=[]
-		for label, chips in chips_d.items():
+		for label, chips in chips_d_items :
 			all_chips.extend (chips)
 		random.shuffle (all_chips)
 		chunk_size = len(all_chips) / float (n)
-		print "\nchunk size : ", chunk_size
-		print "chips count: ", len (all_chips)
+		print "\nshuffled fold size : ", int (chunk_size)
+		print "chips count: ", all_chips_cnt
+		mode_text = 'All chips are mixed together then divided info each fold.'
 		for i in range (n):
 			start = int(round(chunk_size * i))
 			end = int(round(chunk_size * (i+1)))
 			# print "start : ", start
 			# print "end : ", end
 			chunks.append (all_chips[start:end])
-	else :				## split per label, then combine into chunks
-		chunks = [[] for i in range(n)]
-		for label, chips in chips_d.items():
+	elif shuffle_mode == 1 :  ## split per label, then combine into chunks
+		# pdb.set_trace ()
+		chunks = [[] for i in range(n)]		# create n empty lists
+		mode_text = '      chips of each label are split evenly into each fold.'
+		for label, chips in chips_d_items :
 			random.shuffle (chips)
 			chunk_size = len(chips) / float (n)
+			j = range (n)
+			# randomize order of fold assignment since many labels
+			# have few chips.  prevents single chips from all being
+			# in same fold.
+			random.shuffle (j)		
 			for i in range (n):
 				start = int(round(chunk_size * i))
 				end = int(round(chunk_size * (i+1)))
-				chunks[i].extend (chips[start:end])
+				chunks[j[i]].extend (chips[start:end])
+	else :				## split across labels
+		##  TODO : split labels here
+		chunks = [[] for i in range(n)]		# create n empty lists
+		random.shuffle (chips_d_items)
+		# randomize order of fold assignment 
+		j = range (n)
+		random.shuffle (j)		
+		chunk_size = len (chips_d_items) / float (n)
+		pdb.set_trace ()
+		for i in range (n):
+			start = int(round(chunk_size * i))
+			end = int(round(chunk_size * (i+1)))
+			labels_list = chips_d_items[start:end]
+			for label, chips in labels_list :
+				chunks[j[i]].extend (chips)
+		print len (chips_d), 'total labels, split into', n, 'folds = ~', int (len (chips_d) / float (n))
+
+	print all_chips_cnt, 'total chips, split into', n, 'folds = ~', int (all_chips_cnt / float (n))
+	print '     ', mode_text
+	folds_cnt = [len (fold) for fold in chunks]
+	labels_cnt = [[] for i in range (n)]
+	for i in range (n) :
+		labels = [(chip.find ('label')).text for chip in chunks[i]]
+		labels_cnt[i] = len (set (labels))
+	print 'count per fold:'
+	print '     ', folds_cnt, 'sum: ', sum (folds_cnt)
+	print 'labels per fold:'
+	print '     ', labels_cnt
 	# pdb.set_trace ()
 	return chunks
 
@@ -338,6 +377,8 @@ def generate_folds_files (train_list, validate_list, filename) :
 		tree_validate = ET.ElementTree (v_root)
 		t_name = filename + "_train_" + str(i) + ".xml"
 		v_name = filename + "_validate_" + str(i) + ".xml"
+		indent (t_root)
+		indent (v_root)
 		tree_train.write (t_name)
 		tree_validate.write (v_name)
 		print "\t", t_name, "\n\t", v_name
@@ -401,11 +442,11 @@ def generate_partition_files (chunks, filenames, filetype="chips") :
 ##  returns list of train content and list of validate content
 ##     to be consumed by generate_folds_files
 ##------------------------------------------------------------
-def generate_folds_content (chips_d, n_folds) :
+def generate_folds_content (chips_d, n_folds, shuffle=True) :
 	n = int (n_folds)
 	validate_list = []
 	train_list = [[] for i in range(n)]
-	chunks = split_chips_into_n (chips_d, n)
+	chunks = split_chips_into_n (chips_d, n, shuffle)
 	for i in range (n):
 		validate_list.append (chunks[i])
 		# pdb.set_trace()
@@ -447,6 +488,7 @@ def write_file_with_label (xml_file_in, xml_file_out, key):
 		label = label_list[0].text
 		if label != key :
 			root.remove (chip)
+	indent (root_i)
 	tree_i.write (xml_file_out)
 
 ##------------------------------------------------------------
@@ -471,6 +513,7 @@ def unpath_chips (xml_files, append):
 			xml_file_unpathed = basename + "_unpathed" + ext
 		# pdb.set_trace ()
 		print "\n\twriting unpath chips to file: ", xml_file_unpathed, "\n"
+		indent (root)
 		tree.write (xml_file_unpathed)
 
 ##------------------------------------------------------------
@@ -1043,37 +1086,38 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 	print 'possible unmatched sets :', u_combos
 	# display_dist_hist (img_cnt_per_label, 2, 0, 'bear index', '# images')
 	have_display = "DISPLAY" in os.environ
-	if have_display:
-		#plt.hist(img_cnt_per_label, len(objs_d)/5, facecolor='blue', alpha=0.5)
-		hist_info = plt.hist(img_cnt_per_label, 20, facecolor='blue', alpha=0.5)
-		plt.title('histogram of ' + filetype + ' count per bear')
-		plt.xlabel('# chips per bear (total=' + str (obj_count) + ')')
-		plt.ylabel('# bears (total=' + str (len (objs_d)) + ')')
-		hist_obj_cnt_file = 'hist_obj_cnt.png'
-		plt.savefig (hist_obj_cnt_file)
-		print '\n--- histogram of image count written to: ', hist_obj_cnt_file, '\n'
-		plt.show ()
-		if filetype == 'chips' :
-			chip_sizes = [math.sqrt (int (res.text)) for key, chips in all_objs \
-			    for chip in chips for res in chip.findall ('resolution')]
-			print '\naverage face size (NxN): ', int (sum (chip_sizes)/len (chip_sizes))
-			print 'median face size  (NxN): ', int (np.median (chip_sizes))
-			plt.title ('histogram of of face sizes')
-			plt.xlabel ('N (image size=NxN)')
-			plt.ylabel ('# chips (total=' + str (obj_count) + ')' )
-			hist_info = plt.hist (chip_sizes, 20, facecolor='green', alpha=0.5)
-			hist_chip_sizes_file = 'hist_chip_sizes.png'
-			plt.savefig (hist_chip_sizes_file)
-			print '\n--- histogram of chip sizes written to: ', hist_chip_sizes_file, '\n'
+	if (get_verbosity () > 2) :
+		if have_display:
+			#plt.hist(img_cnt_per_label, len(objs_d)/5, facecolor='blue', alpha=0.5)
+			hist_info = plt.hist(img_cnt_per_label, 20, facecolor='blue', alpha=0.5)
+			plt.title('histogram of ' + filetype + ' count per bear')
+			plt.xlabel('# chips per bear (total=' + str (obj_count) + ')')
+			plt.ylabel('# bears (total=' + str (len (objs_d)) + ')')
+			hist_obj_cnt_file = 'hist_obj_cnt.png'
+			plt.savefig (hist_obj_cnt_file)
+			print '\n--- histogram of image count written to: ', hist_obj_cnt_file, '\n'
 			plt.show ()
-			tiny_chips = [chip for key, chips in all_objs \
-			    for chip in chips for res in chip.findall ('resolution') if int (res.text) < 22500]
-			chip.attrib.get ('file')
-			tiny_chips_names = [chip.attrib.get ('file') for chip in tiny_chips]
-			# pdb.set_trace ()
-			
-	else :
-		print '\n  ***  unable to show histogram: no access to display.  *** \n'
+			if filetype == 'chips' :
+				chip_sizes = [math.sqrt (int (res.text)) for key, chips in all_objs \
+					for chip in chips for res in chip.findall ('resolution')]
+				print '\naverage face size (NxN): ', int (sum (chip_sizes)/len (chip_sizes))
+				print 'median face size  (NxN): ', int (np.median (chip_sizes))
+				plt.title ('histogram of of face sizes')
+				plt.xlabel ('N (image size=NxN)')
+				plt.ylabel ('# chips (total=' + str (obj_count) + ')' )
+				hist_info = plt.hist (chip_sizes, 20, facecolor='green', alpha=0.5)
+				hist_chip_sizes_file = 'hist_chip_sizes.png'
+				plt.savefig (hist_chip_sizes_file)
+				print '\n--- histogram of chip sizes written to: ', hist_chip_sizes_file, '\n'
+				plt.show ()
+				tiny_chips = [chip for key, chips in all_objs \
+					for chip in chips for res in chip.findall ('resolution') if int (res.text) < 22500]
+				chip.attrib.get ('file')
+				tiny_chips_names = [chip.attrib.get ('file') for chip in tiny_chips]
+				# pdb.set_trace ()
+				
+		else :
+			print '\n  ***  unable to show histogram: no access to display.  *** \n'
 
 	if filetype == 'faces':
 		print_faces_stats (write_stats)
@@ -1129,12 +1173,12 @@ def get_xml_files (dir) :
 ##------------------------------------------------------------
 ##   main code
 ##------------------------------------------------------------
-def do_generate_folds (input_files, n_folds, output_file) :
+def do_generate_folds (input_files, n_folds, output_file, shuffle=True) :
 	chips_d = defaultdict(list)
 	load_objs_from_files (input_files, chips_d)
 	## print "printing chips dictionary ... "
 	## print_dict (chips_d)
-	train_list, validate_list = generate_folds_content (chips_d, n_folds)
+	train_list, validate_list = generate_folds_content (chips_d, n_folds, shuffle)
 	generate_folds_files (train_list, validate_list, output_file)
 
 ##------------------------------------------------------------
