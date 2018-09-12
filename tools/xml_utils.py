@@ -15,9 +15,9 @@ from copy import deepcopy
 from collections import namedtuple
 from collections import defaultdict
 from os import walk
-import numpy as np 
+import numpy as np
 import math
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -35,7 +35,7 @@ def prettify(elem) :
     rough_string = ET.tostring(elem, 'utf-8')
     reparsed = xml.dom.minidom.parseString(rough_string)
     pretty_print = '\n'.join(
-        [line for line in reparsed.toprettyxml(indent=' '*2).split('\n') 
+        [line for line in reparsed.toprettyxml(indent=' '*2).split('\n')
         if line.strip()])
     return pretty_print
 
@@ -57,7 +57,7 @@ def indent(elem, level=0):
     else:
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = j
-    return elem     
+    return elem
 
 ##------------------------------------------------------------
 ##  set global verbosity
@@ -103,12 +103,12 @@ def get_argv () :
 ##------------------------------------------------------------
 def load_objs (root, d_objs, filetype) :
 	## print "loading chips"
- 
+
 	objects = []
 	global g_stats_few
 	global g_stats_many
 	if filetype == 'chips' :
-		for chip in root.findall ('./chips/chip'):    
+		for chip in root.findall ('./chips/chip'):
 			label_list = chip.findall ('label')
 			chipfile = chip.attrib.get ('file')
 			if len (label_list) < 1 :
@@ -124,7 +124,7 @@ def load_objs (root, d_objs, filetype) :
 			d_objs[label].append(chip)
 	elif filetype == 'faces' :
 		# pdb.set_trace ()
-		for image in root.findall ('./images/image'):    
+		for image in root.findall ('./images/image'):
 			box = image.findall ('box')
 			facefile = image.attrib.get ('file')
 			if len (box) == 0 :
@@ -144,22 +144,22 @@ def load_objs (root, d_objs, filetype) :
 		matched_cnt = 0
 		unmatched_cnt = 0
 		# pdb.set_trace ()
-		for pair in root.findall ('./chips/pair_matched'):    
+		for pair in root.findall ('./chips/pair_matched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
 				print 'error: expecting only 2 chips in pair, got: ', labels
 				continue
-			if labels[0].text != labels[1].text : 
+			if labels[0].text != labels[1].text :
 				print 'error: labels should match: ', labels
 			matched_cnt += 1
 			d_objs[matched].append(labels[0])
 		objects.append (d_objs[matched])
-		for pair in root.findall ('./chips/pair_unmatched'):    
+		for pair in root.findall ('./chips/pair_unmatched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
 				print 'error: expecting only 2 chips in pair, got: ', labels
 				continue
-			if labels[0].text == labels[1].text : 
+			if labels[0].text == labels[1].text :
 				print 'error: labels should not match: ', labels
 			unmatched_cnt += 1
 			d_objs[unmatched].append(labels)
@@ -170,13 +170,13 @@ def load_objs (root, d_objs, filetype) :
 
 
 ##------------------------------------------------------------
-##  
+##
 ##------------------------------------------------------------
 
 
 
 ##------------------------------------------------------------
-##  print dictionary 
+##  print dictionary
 ##------------------------------------------------------------
 def print_dict (chips_d) :
 	for key, value in chips_d.items():
@@ -220,7 +220,7 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 	# pdb.set_trace ()
 	chunks = []
 	if (shuffle == True) :  ## concat all labels, then split
-		## TODO check for image_size_min 
+		## TODO check for image_size_min
 		all_chips=[]
 		for label, chips in chips_d.items():
 			all_chips.extend (chips)
@@ -277,16 +277,16 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 			# print img_list
 		else :
 			chunks.append ([])
-			
+
 	# pdb.set_trace ()
 	return chunks
 
 ##------------------------------------------------------------
 ##  split defaultdict<string><list> into n equal random parts
 ##  returns array  (list of n lists)
-##  By default, all labels are combined, shuffled, then split.  
+##  By default, all labels are combined, shuffled, then split.
 ##	If shuffle is False, shuffle each label, split, then added to chunks
-##    
+##
 ##------------------------------------------------------------
 def split_chips_into_n (chips_d, n, shuffle_mode) :
 	chips_d_items = chips_d.items ()
@@ -319,7 +319,7 @@ def split_chips_into_n (chips_d, n, shuffle_mode) :
 			# randomize order of fold assignment since many labels
 			# have few chips.  prevents single chips from all being
 			# in same fold.
-			random.shuffle (j)		
+			random.shuffle (j)
 			for i in range (n):
 				start = int(round(chunk_size * i))
 				end = int(round(chunk_size * (i+1)))
@@ -328,11 +328,11 @@ def split_chips_into_n (chips_d, n, shuffle_mode) :
 		##  TODO : split labels here
 		chunks = [[] for i in range(n)]		# create n empty lists
 		random.shuffle (chips_d_items)
-		# randomize order of fold assignment 
+		# randomize order of fold assignment
 		j = range (n)
-		random.shuffle (j)		
+		random.shuffle (j)
 		chunk_size = len (chips_d_items) / float (n)
-		pdb.set_trace ()
+		# pdb.set_trace ()
 		for i in range (n):
 			start = int(round(chunk_size * i))
 			end = int(round(chunk_size * (i+1)))
@@ -478,9 +478,9 @@ def create_new_tree_w_chips (filetype="chips") :
 ##------------------------------------------------------------
 def write_file_with_label (xml_file_in, xml_file_out, key):
 	tree_i = ET.parse (xml_file)
-	root_i = tree.getroot()  
+	root_i = tree.getroot()
 
-	for chip in root_i.findall ('./chips/chip'):    
+	for chip in root_i.findall ('./chips/chip'):
 		label_list = chip.findall ('label')
 		if len (label_list) > 1 :
 			print "too many labels: ", label_list
@@ -492,13 +492,13 @@ def write_file_with_label (xml_file_in, xml_file_out, key):
 	tree_i.write (xml_file_out)
 
 ##------------------------------------------------------------
-##   
+##
 ##------------------------------------------------------------
 def unpath_chips (xml_files, append):
 	# pdb.set_trace ()
 	for xml_file in xml_files:
 		root, tree = xe.load_file (xml_file)
-		for chip in root.findall ('./chips/chip'):    
+		for chip in root.findall ('./chips/chip'):
 			label_list = chip.findall ('label')
 			pathed_chipfile = chip.attrib.get ('file')
 			unpathed_chipfile = os.path.basename (pathed_chipfile)
@@ -531,7 +531,7 @@ def generate_xml_file_list (inputfiles):
 	return f
 
 ##------------------------------------------------------------
-##  load objs from list of files into objs_d 
+##  load objs from list of files into objs_d
 ##    if filename is directory, load all its xml files
 ##------------------------------------------------------------
 def load_objs_from_files (filenames, objs_d, filetype="chips"):
@@ -551,7 +551,7 @@ def load_objs_from_files (filenames, objs_d, filetype="chips"):
 ##------------------------------------------------------------
 ##  filter chips :
 ##	  given list of chip files, and circle defined by
-##    pt and distance, return chips with nose in circle 
+##    pt and distance, return chips with nose in circle
 ##------------------------------------------------------------
 def filter_chips (infiles, pt, distance, outfile):
 	chips_d = defaultdict(list)
@@ -578,7 +578,7 @@ def filter_chips (infiles, pt, distance, outfile):
 		plt.axis('off')
 		plt.scatter (l_eye[0], 0-l_eye[1], c='blue', s=64)
 		plt.scatter (r_eye[0], 0-r_eye[1], c='blue', s=64)
-		plt.scatter (x_list, y_list_flip, c='green', s=16) 
+		plt.scatter (x_list, y_list_flip, c='green', s=16)
 		plt.scatter (nose_x, 0-nose_y, c='red', s=128)
 		#plt.imsave ("noses.jpg", format="png")
 		plt.savefig ("nose_fig.png")
@@ -605,7 +605,7 @@ def chips_count (chips_d):
 	return count
 
 ##------------------------------------------------------------
-##  return chips with noses within 
+##  return chips with noses within
 ## 	 circle of radius d, centered at x,y
 ##------------------------------------------------------------
 def get_chips_noses_in_circle (chips_d, pt_x, pt_y, distance):
@@ -682,10 +682,10 @@ def display_dist_hist (bands, band_width, default_dist=0, label_x='', label_y=''
 		plt.ylabel('face count')
 	if not label_x :
 		plt.xlabel('distance')
-	plt.bar (band_label, bands, 7, color='green') 
+	plt.bar (band_label, bands, 7, color='green')
 	if default_dist :
-		plt.bar (default_dist, max(bands), 7, color='red') 
-	# plt.scatter (band_label, bands, c='green', s=16) 
+		plt.bar (default_dist, max(bands), 7, color='red')
+	# plt.scatter (band_label, bands, c='green', s=16)
 	# plt.savefig ("nose_fig.png")
 
 ##------------------------------------------------------------
@@ -753,7 +753,7 @@ def gen_all_matched_obj_pairs  (chips_d):
 ##------------------------------------------------------------
 ## generate all possible index pairs of images of different labels
 ## return array of lists.  List indices >= to first index will be null.
-## i.e. len (lists[4][2]) = 0 . len (lists [2][4] = unmatched pairs 
+## i.e. len (lists[4][2]) = 0 . len (lists [2][4] = unmatched pairs
 ##      for bear 2 and bear 4
 ##   e.g. unmatched images for labels 5, 3 ##   will be in lists[3][5]
 ##------------------------------------------------------------
@@ -781,7 +781,7 @@ def gen_all_unmatched_obj_pairs  (chips_d):
 	return unmatched_lists
 
 ##------------------------------------------------------------
-## write out N pairs of matched pairs and M pairs of unmatched pairs 
+## write out N pairs of matched pairs and M pairs of unmatched pairs
 ##------------------------------------------------------------
 def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, sets, output):
 	chips_d = defaultdict(list)
@@ -811,7 +811,7 @@ def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, sets, output):
 	if unmatched_cnt == 0 :
 		unmatched_cnt = len (selected_unmatched_indices)
 	## write out file
-	print '\nWriting', matched_cnt, 'matched pairs and', unmatched_cnt, 'unmatched pairs to file:' 
+	print '\nWriting', matched_cnt, 'matched pairs and', unmatched_cnt, 'unmatched pairs to file:'
 	print '\t', output, '\n'
 	indent (root)
 	tree = ET.ElementTree (root)
@@ -829,13 +829,13 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt) :
 	max_matched_cnt = sum ([len (pairs_list) for pairs_list in all_matched_pairs_arr])
 	max_unmatched_cnt = sum ([len (pairs_list) for pairs_arr in all_unmatched_pairs_3arr for pairs_list in pairs_arr])
 
-	## do sanity count for max_matched_cnt:  
+	## do sanity count for max_matched_cnt:
 	'''
 	u_cnt = 0
 	chips_list = sorted (chips_d.items())
 	for i in range (len (chips_list)) :
 		u_cnt += len (chips_list[i][1]) ## 0 is label, 1 is chip_list
-		
+
 	'''
 	# pdb.set_trace ()
 	if matched_cnt == 0 :
@@ -873,7 +873,7 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt) :
 	if unmatched_cnt == max_unmatched_cnt :  # getting ALL unmatched pairs
 		selected_unmatched_list = [pair for pairs_arr in all_unmatched_pairs_3arr for pair_list in pairs_arr for pair in pair_list]
 		i = unmatched_cnt
-	while i < unmatched_cnt : 
+	while i < unmatched_cnt :
 		y = x = random.randint(0,label_cnt-1)
 		while y == x :
 			y = random.randint(0,label_cnt-1)
@@ -921,7 +921,7 @@ def create_chip_list (chips_d, indices) :
 def display_hist (noses):
 	fig = plt.figure()
 	ax = fig.add_subplot(111, projection='3d')
-	# x, y = np.random.rand(2, 100) * 4 
+	# x, y = np.random.rand(2, 100) * 4
 	x = noses[0]
 	y = noses[1]
 	nbins = 10
@@ -985,9 +985,9 @@ def get_dist_hist (noses, band_width=0):
 	print 'band width     : ', band_width
 	print 'total in bands : ', cnt
 	return band_width, bands[:end]
-	
+
 ##------------------------------------------------------------
-##  given dict of chips, return eyes and list of noses 
+##  given dict of chips, return eyes and list of noses
 ##------------------------------------------------------------
 def get_chip_face_stats (chips_d, verbose=1):
 	x_list = []
@@ -1024,7 +1024,7 @@ def get_chip_face_stats (chips_d, verbose=1):
 		print 'median  nose : ', np.median (x_list), np.median (y_list)
 		print 'reye : ', reye_x, reye_y
 		print 'leye : ', leye_x, leye_y
-	return [leye_x, leye_y], [reye_x, reye_y], [nose_x, nose_y], [x_list, y_list] 
+	return [leye_x, leye_y], [reye_x, reye_y], [nose_x, nose_y], [x_list, y_list]
 
 ##------------------------------------------------------------
 ##  print pairs stats
@@ -1035,7 +1035,7 @@ def print_pairs_stats (objs_d) :
 	matched_list = objs_d[matched]
 	unmatched_list = objs_d[unmatched]
 
-	# get unique list of entries, then show count 
+	# get unique list of entries, then show count
 	matched_labels = [label.text for label in matched_list]
 	unmatched_labels = [(label[0].text, label[1].text) for label in unmatched_list]
 
@@ -1073,10 +1073,10 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 	chips_count_list = img_cnt_per_label
 	diff_chip_count  = obj_count
 	for i in range (len (chips_count_list)-1) : 	# all labels
-		i_count = len (all_objs[i][1])			# count of ith label 
+		i_count = len (all_objs[i][1])			# count of ith label
 		diff_chip_count -= i_count				# count of different labels
 		u_combos += (i_count * diff_chip_count)
-		
+
 	print '-----------------------------'
 	print '            total', filetype, ':', obj_count
 	print '                # bears :', len (objs_d)
@@ -1116,24 +1116,24 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 				chip.attrib.get ('file')
 				tiny_chips_names = [chip.attrib.get ('file') for chip in tiny_chips]
 				# pdb.set_trace ()
-				
+
 		else :
 			print '\n  ***  unable to show histogram: no access to display.  *** \n'
 
 	if filetype == 'faces':
 		print_faces_stats (write_stats)
 	if print_files :
-		objfiles.sort () 
+		objfiles.sort ()
 		for objfile in objfiles:
 			print '\t', objfile
 
 ##------------------------------------------------------------
-##  
+##
 ##------------------------------------------------------------
 
 
 ##------------------------------------------------------------
-##  
+##
 ##------------------------------------------------------------
 def print_faces_stats (write_unused_images) :
 	print "-----------------------------"
@@ -1212,6 +1212,3 @@ if __name__ == "__main__":
 ## split n
 ## generate_partition_files 80 20 [xml_file_or_dir]+
 ## generate_folds_files 5 [xml_file_or_dir]+
-
-
-
