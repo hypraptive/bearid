@@ -13,6 +13,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <iostream>
+#include <ctime>
 #include <dlib/dnn.h>
 #include <dlib/data_io.h>
 #include <dlib/image_processing.h>
@@ -36,10 +37,30 @@ ptree g_xml_tree;
 //--------------------------------------------------
 // initialize xml
 //--------------------------------------------------
-int xml_add_headers ()
+int xml_add_headers (int argc, char** argv)
 {
+	time_t rawtime;
+	struct tm * timeinfo;
+	char buffer[80];
+	std::string info_str;
+	std::string prog_command;
+
+	time (&rawtime);
+	timeinfo = localtime(&rawtime);
+
+	strftime(buffer,sizeof(buffer),"%Y%m%d%H%M",timeinfo);
+	info_str = "Created on: ";
+	info_str += buffer;
+	for (int i=0; i<argc; i++)
+	{
+		prog_command += ' ';
+		prog_command += argv[i];
+	}
+
     g_xml_tree.add("dataset.name", "bearid dataset");
     g_xml_tree.add("dataset.comment", "Created by bearchip");
+    g_xml_tree.add("dataset.info", info_str);
+    g_xml_tree.add("dataset.command", prog_command);
 	return 0;
 }
 
@@ -290,6 +311,7 @@ int main(int argc, char** argv) try
     }
 
     // create XML content file
+	xml_add_headers (argc, argv);
 	ptree &chips = g_xml_tree.add ("dataset.chips", "");
 
     dlib::image_dataset_metadata::dataset data;
@@ -358,7 +380,6 @@ int main(int argc, char** argv) try
     save_jpeg(g_composite_features, chips_jpg_file, 95);
     cout << "Total faces found: " << total_faces << endl;
 
-	xml_add_headers (); // put at end since writing reverse order added
 	xml_write_file (g_xml_tree, chips_xml_file);
 	cout << "\ngenerated: \n\t" << chips_xml_file << "\n\t" << chips_jpg_file << "\n" << endl;
 	// cin.get();
