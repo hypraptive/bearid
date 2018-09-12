@@ -26,7 +26,7 @@ using boost::property_tree::ptree;
 using boost::property_tree::write_xml;
 using boost::property_tree::xml_writer_settings;
 
-image_window g_win_chip;
+// WIN: image_window g_win_chip;
 const unsigned long g_chip_size = 150;
 const unsigned int chip_x = 4;
 matrix<rgb_pixel> g_composite_features(g_chip_size*chip_x, g_chip_size*chip_x);
@@ -199,7 +199,7 @@ std::vector<matrix<rgb_pixel>> find_chips (
 	  add_overlay_circle(leye_new, g_feature_radius, color_b);
       chip_circles.push_back(image_window::overlay_circle(nose_new, g_feature_radius, color_g));
 	  add_overlay_circle(nose_new, g_feature_radius, color_g);
-	  g_win_chip.add_overlay (chip_circles);
+	  // WIN: g_win_chip.add_overlay (chip_circles);
 
       // extract the face chip
       matrix<rgb_pixel> face_chip;
