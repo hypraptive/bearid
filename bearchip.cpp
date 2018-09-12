@@ -192,26 +192,88 @@ std::vector<matrix<rgb_pixel>> find_chips (
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-int populate_chip (ptree &xml_chip, image_dataset_metadata::box box, dlib::vector<double,2> leye,  dlib::vector<double,2> nose, dlib::vector<double,2> reye, std::string chip_dim, const std::string transform_features, std::string pathed_chip_file)
+int xml_add_part (ptree &part, std::string name, point pt)
 {
-	  xml_chip.add ("label", box.label);
-	  xml_chip.add ("resolution", box.rect.width() * box.rect.height());
-	  xml_chip.add ("chip_dimensions", chip_dim);
-	  xml_chip.add ("transform_features", transform_features);
-	  ptree &xml_part_leye = xml_chip.add ("part", "");
-	  xml_part_leye.add ("<xmlattr>.name", "leye");
-	  xml_part_leye.add ("<xmlattr>.x", (int)leye.x());
-	  xml_part_leye.add ("<xmlattr>.y", (int)leye.y());
-	  ptree &xml_part_nose = xml_chip.add ("part", "");
-	  xml_part_nose.add ("<xmlattr>.name", "nose");
-	  xml_part_nose.add ("<xmlattr>.x", (int)nose.x());
-	  xml_part_nose.add ("<xmlattr>.y", (int)nose.y());
-	  ptree &xml_part_reye = xml_chip.add ("part", "");
-	  xml_part_reye.add ("<xmlattr>.name", "reye");
-	  xml_part_reye.add ("<xmlattr>.x", (int)reye.x());
-	  xml_part_reye.add ("<xmlattr>.y", (int)reye.y());
-	  xml_chip.add ("<xmlattr>.file", pathed_chip_file);
-	return 1;
+	part.add ("<xmlattr>.name", name);
+	part.add ("<xmlattr>.x", (int)pt.x());
+	part.add ("<xmlattr>.y", (int)pt.y());
+	return 0;
+}
+
+// -----------------------------------------------------------------------------
+	/*
+	<source file='/home//bearsbritishColumbia//bc_coco/IMG_4654.JPG'>
+	  <box top='1267' left='1714' width='341' height='341'>
+		<label>bc_coco</label>
+		<part name='lear' x='1959' y='1311'/>
+		<part name='leye' x='1946' y='1391'/>
+		<part name='nose' x='1933' y='1536'/>
+		<part name='rear' x='1776' y='1311'/>
+		<part name='reye' x='1814' y='1403'/>
+		<part name='top' x='1873' y='1276'/>
+	  </box>
+	</source>
+	*/
+// -----------------------------------------------------------------------------
+int xml_populate_chip_source (ptree &xml_chip, image_dataset_metadata::box box, std::string src_file)
+{
+	point top = box.parts["top"];
+	point lear = box.parts["lear"];
+	point leye = box.parts["leye"];
+	point nose = box.parts["nose"];
+	point rear = box.parts["rear"];
+	point reye = box.parts["reye"];
+
+	// source
+	ptree &xml_chip_source = xml_chip.add ("source", "");
+	xml_chip_source.add ("<xmlattr>.file", src_file);
+	// box element
+	ptree &xml_chip_source_box = xml_chip_source.add ("box", "");
+	xml_chip_source_box.add ("<xmlattr>.top", box.rect.top());
+	xml_chip_source_box.add ("<xmlattr>.left", box.rect.left());
+	xml_chip_source_box.add ("<xmlattr>.width", box.rect.width());
+	xml_chip_source_box.add ("<xmlattr>.height", box.rect.height());
+	// label
+	xml_chip_source_box.add ("label", box.label);
+	// all 6 parts
+	ptree &sr_lear = xml_chip_source_box.add ("part", "");
+	xml_add_part (sr_lear, "lear", lear); 
+	ptree &src_leye = xml_chip_source_box.add ("part", "");
+	xml_add_part (src_leye, "leye", leye); 
+	ptree &src_nose = xml_chip_source_box.add ("part", "");
+	xml_add_part (src_nose, "nose", nose); 
+	ptree &src_rear = xml_chip_source_box.add ("part", "");
+	xml_add_part (src_rear, "rear", rear); 
+	ptree &src_reye = xml_chip_source_box.add ("part", "");
+	xml_add_part (src_reye, "reye", reye); 
+	ptree &src_top = xml_chip_source_box.add ("part", "");
+	xml_add_part (src_top, "top", top); 
+	return 0;
+}
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+int populate_chip (ptree &xml_chip, image_dataset_metadata::box box, dlib::vector<double,2> leye,  dlib::vector<double,2> nose, dlib::vector<double,2> reye, std::string chip_dim, const std::string transform_features, std::string pathed_chip_file, std::string src_file)
+{
+	xml_chip.add ("label", box.label);
+	xml_chip.add ("resolution", box.rect.width() * box.rect.height());
+	xml_chip.add ("chip_dimensions", chip_dim);
+	xml_chip.add ("transform_features", transform_features);
+	ptree &xml_part_leye = xml_chip.add ("part", "");
+	xml_part_leye.add ("<xmlattr>.name", "leye");
+	xml_part_leye.add ("<xmlattr>.x", (int)leye.x());
+	xml_part_leye.add ("<xmlattr>.y", (int)leye.y());
+	ptree &xml_part_nose = xml_chip.add ("part", "");
+	xml_part_nose.add ("<xmlattr>.name", "nose");
+	xml_part_nose.add ("<xmlattr>.x", (int)nose.x());
+	xml_part_nose.add ("<xmlattr>.y", (int)nose.y());
+	ptree &xml_part_reye = xml_chip.add ("part", "");
+	xml_part_reye.add ("<xmlattr>.name", "reye");
+	xml_part_reye.add ("<xmlattr>.x", (int)reye.x());
+	xml_part_reye.add ("<xmlattr>.y", (int)reye.y());
+	xml_chip.add ("<xmlattr>.file", pathed_chip_file);
+	xml_populate_chip_source (xml_chip, box, src_file);
+	return 0;
 }
 
 // -----------------------------------------------------------------------------
@@ -285,7 +347,7 @@ int main(int argc, char** argv) try
 		  auto reye = face_features[j+2];
 		  boost::filesystem::path cur_dir = boost::filesystem::current_path();
 		  std::string pathed_chip_file = cur_dir.string() + "/" + chip_file;
-		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, pathed_chip_file);
+		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, pathed_chip_file, orig_path.string ());
           cout << argv[i] << ": extracted chip " << to_string(i) << " to " << chip_file << endl;
           save_jpeg(faces[i], chip_file, 95);
         }
