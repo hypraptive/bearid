@@ -504,15 +504,16 @@ def unpath_chips (xml_files, append):
 			unpathed_chipfile = os.path.basename (pathed_chipfile)
 			# pdb.set_trace ()
 			chip.set ('file', unpathed_chipfile)
-			print "   ", pathed_chipfile
-			print "  --->  ", unpathed_chipfile
+			# print "   ", pathed_chipfile
+			# print "  --->  ", unpathed_chipfile
 		basename, ext = os.path.splitext(xml_file)
 		if append:
 			xml_file_unpathed = xml_file + "_unpathed"
 		else:
 			xml_file_unpathed = basename + "_unpathed" + ext
 		# pdb.set_trace ()
-		print "\n\twriting unpath chips to file: ", xml_file_unpathed, "\n"
+		if get_verbosity () > 1 :
+			print "\n\twriting unpath chips to file: ", xml_file_unpathed, "\n"
 		indent (root)
 		tree.write (xml_file_unpathed)
 

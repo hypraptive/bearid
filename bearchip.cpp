@@ -190,8 +190,32 @@ std::vector<matrix<rgb_pixel>> find_chips (
   return(faces);
 }
 
-// ----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+int populate_chip (ptree &xml_chip, image_dataset_metadata::box box, dlib::vector<double,2> leye,  dlib::vector<double,2> nose, dlib::vector<double,2> reye, std::string chip_dim, const std::string transform_features, std::string pathed_chip_file)
+{
+	  xml_chip.add ("label", box.label);
+	  xml_chip.add ("resolution", box.rect.width() * box.rect.height());
+	  xml_chip.add ("chip_dimensions", chip_dim);
+	  xml_chip.add ("transform_features", transform_features);
+	  ptree &xml_part_leye = xml_chip.add ("part", "");
+	  xml_part_leye.add ("<xmlattr>.name", "leye");
+	  xml_part_leye.add ("<xmlattr>.x", (int)leye.x());
+	  xml_part_leye.add ("<xmlattr>.y", (int)leye.y());
+	  ptree &xml_part_nose = xml_chip.add ("part", "");
+	  xml_part_nose.add ("<xmlattr>.name", "nose");
+	  xml_part_nose.add ("<xmlattr>.x", (int)nose.x());
+	  xml_part_nose.add ("<xmlattr>.y", (int)nose.y());
+	  ptree &xml_part_reye = xml_chip.add ("part", "");
+	  xml_part_reye.add ("<xmlattr>.name", "reye");
+	  xml_part_reye.add ("<xmlattr>.x", (int)reye.x());
+	  xml_part_reye.add ("<xmlattr>.y", (int)reye.y());
+	  xml_chip.add ("<xmlattr>.file", pathed_chip_file);
+	return 1;
+}
 
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 int main(int argc, char** argv) try
 {
     int total_faces = 0;
@@ -205,9 +229,7 @@ int main(int argc, char** argv) try
 
     // create XML content file
 	ptree &chips = g_xml_tree.add ("dataset.chips", "");
-	//--------------
 
-	//--------------
     dlib::image_dataset_metadata::dataset data;
     load_image_dataset_metadata(data, argv[1]);
 
@@ -223,7 +245,6 @@ int main(int argc, char** argv) try
     // g_win_chip.set_image(g_composite_features);  // display composite
 	//---------------------------------------------
 
-
     // Now process each image and extract a face chip using the metadata
     for (int i = 0; i < data.images.size(); ++i)
     {
@@ -232,9 +253,8 @@ int main(int argc, char** argv) try
 
         boost::filesystem::path orig_path(data.images[i].filename.c_str());
         std::string orig_ext = orig_path.extension().string();
-
-        cout << "File: " << orig_path.string() << endl;
-        cout << "Image type " << orig_ext << endl;
+        // cout << "File: " << orig_path.string() << endl;
+        // cout << "Image type " << orig_ext << endl;
 
         load_image(img, data.images[i].filename.c_str());
 
@@ -242,7 +262,7 @@ int main(int argc, char** argv) try
 		std::string transform_features;    // features used in transformation
   		std::vector<image_dataset_metadata::box> boxes = data.images[i].boxes;
         faces = find_chips (boxes, img, transform_features, face_features);
-        cout << "Faces found: " << to_string(faces.size()) << endl;
+        // cout << "Faces found: " << to_string(faces.size()) << endl;
 		/*  check for more than one face.  shouldn't happen yet
 		if (faces.size() > 1)
 		{
@@ -252,50 +272,29 @@ int main(int argc, char** argv) try
 		*/
         total_faces += faces.size();
 		std::string chip_dim = std::to_string(g_chip_size) + " " + std::to_string(g_chip_size);
-        for (size_t i = 0; i < faces.size(); ++i)
+		// iterate through each face in image
+        for (size_t i = 0; i < faces.size(); ++i) 
         {
-          // save the face chip_dims
           std::string chip_file = orig_path.stem().string() + "_chip_" + to_string(i) + ".jpg";
 
 		  ptree &xml_chip = chips.add ("chip", "");
-		  // write image out to chips.xml
+		  // create chip info for chip.xml
 		  int j = i*3; // # of features we care about {leye, nose, reye}
 		  auto leye = face_features[j];
 		  auto nose = face_features[j+1];
 		  auto reye = face_features[j+2];
-		  // xml_add_chip_part (g_cur_chip, "leye", leye.x(), leye.y());
-		  xml_chip.add ("label", boxes[i].label);
-		  xml_chip.add ("resolution", boxes[i].rect.width() * boxes[i].rect.height());
-		  xml_chip.add ("chip_dimensions", chip_dim);
-		  xml_chip.add ("transform_features", transform_features);
-		  ptree &xml_part_leye = xml_chip.add ("part", "");
-		  xml_part_leye.add ("<xmlattr>.name", "leye");
-		  xml_part_leye.add ("<xmlattr>.x", (int)leye.x());
-		  xml_part_leye.add ("<xmlattr>.y", (int)leye.y());
-		  ptree &xml_part_nose = xml_chip.add ("part", "");
-		  xml_part_nose.add ("<xmlattr>.name", "nose");
-		  xml_part_nose.add ("<xmlattr>.x", (int)nose.x());
-		  xml_part_nose.add ("<xmlattr>.y", (int)nose.y());
-		  ptree &xml_part_reye = xml_chip.add ("part", "");
-		  xml_part_reye.add ("<xmlattr>.name", "reye");
-		  xml_part_reye.add ("<xmlattr>.x", (int)reye.x());
-		  xml_part_reye.add ("<xmlattr>.y", (int)reye.y());
-		  // xml_add_chip_part (g_cur_chip, "reye", reye.x(), reye.y());
-		  // xml_add_chip_part (g_cur_chip, "nose", nose.x(), nose.y());
-          cout << argv[i] << ": extracted chip " << to_string(i) << " to " << chip_file << endl;
-          save_jpeg(faces[i], chip_file, 95);
 		  boost::filesystem::path cur_dir = boost::filesystem::current_path();
 		  std::string pathed_chip_file = cur_dir.string() + "/" + chip_file;
-		  xml_chip.add ("<xmlattr>.file", pathed_chip_file);
+		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, pathed_chip_file);
+          cout << argv[i] << ": extracted chip " << to_string(i) << " to " << chip_file << endl;
+          save_jpeg(faces[i], chip_file, 95);
         }
-
     }
 	boost::filesystem::path xml_file (argv[1]);
 	std::string chips_jpg_file = xml_file.stem().string() + "_chip_composite.jpg";
 	std::string chips_xml_file = xml_file.filename().stem().string() + "_chips.xml";
     save_jpeg(g_composite_features, chips_jpg_file, 95);
     cout << "Total faces found: " << total_faces << endl;
-	// cout << "Hit return to finish." << endl;
 
 	xml_add_headers (); // put at end since writing reverse order added
 	xml_write_file (g_xml_tree, chips_xml_file);
