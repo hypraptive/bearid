@@ -21,6 +21,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
+g_x = 0
+g_y = 1
+g_unused = 2
+g_small_img = 3
 g_verbosity = 0
 g_filetype = ''
 g_stats_few = []
@@ -201,16 +205,34 @@ def generate_partitions (files, x, y, output, shuffle=True, img_cnt_min=0, test_
 	# pdb.set_trace ()
 	file_x = output + "_" + str(x) + ".xml"
 	file_y = output + "_" + str(y) + ".xml"
-	## chunks[2] = unused labels
-	## chunks[3] = chips below min size
-	file_unused = None
-	if len (chunks[2]) > 0 :
+	file_small_img = file_unused = None
+	if len (chunks[g_unused]) > 0 :
 		file_unused = output + "_unused" + ".xml"
-	file_small_img = None
-	if len (chunks[3]) > 0 :
-		file_small_img = output + "_small_img" + ".xml"
+	if len (chunks[g_small_img]) > 0 :
+		file_small_img = output + "_small_faceMeta" + ".xml"
 	filenames = [file_x, file_y, file_unused, file_small_img]
 	generate_partition_files (chunks, filenames, filetype)
+
+##------------------------------------------------------------
+##  remove chips with resolution below min
+##  returns list of tiny chips
+##------------------------------------------------------------
+def remove_tiny_chips (chips, image_size_min) :
+	small_chips = []
+	for i in range (len (chips)-1, 0, -1) :
+		res = chips[i].find ('resolution')
+		if int (res.text) < image_size_min :
+			small_chips.append (chips.pop (i))
+	return small_chips
+
+##------------------------------------------------------------
+##  given list of chips, return list of face images
+##------------------------------------------------------------
+def make_images_from_chips (chips) :
+	faces = [chip.find ('source') for chip in chips] 
+	for face in faces :
+		face.tag = 'image'
+	return faces
 
 ##------------------------------------------------------------
 ##  partition chips into x and y percent
@@ -224,6 +246,8 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		all_chips=[]
 		for label, chips in chips_d.items():
 			all_chips.extend (chips)
+		if image_size_min != 0 :
+			small_chips = remove_tiny_chips (all_chips, image_size_min)
 		random.shuffle (all_chips)
 		partition = int(round(len(all_chips) * float (x) / float (100)))
 		# print "partition value : ", partition
@@ -243,10 +267,8 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		chip_cnt = 0
 		for label, chips in chips_d.items():
 			# remove chips below size minimum
-			for i in range (len (chips)-1, 0, -1) :
-				res = chips[i].find ('resolution')
-				if int (res.text) < image_size_min :
-					small_images_chips.append (chips.pop (i))
+			if image_size_min != 0 :
+				small_images_chips.extend (remove_tiny_chips (chips, image_size_min))
 			if len (chips) < img_cnt_min :
 				chunks_few.extend (chips)
 				labels_few.append (label)
@@ -262,20 +284,23 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		print len (chunks_x), ' chips in individual partition of', x
 		print len (chunks_y), ' chips in individual partition of', y
 		print chip_cnt, 'total', filetype
+		print
 		if len (labels_few) > 0 :
 			chunks.append (chunks_few)
 			print len (labels_few), 'unused labels, each with less than ', img_cnt_min, 'images'
 			# print labels_few
 		else :
-			print '\nAll labels used.\n'
+			print 'All labels used.'
 			chunks.append ([])
 		if len (small_images_chips) :
-			chunks.append (small_images_chips)
-			files_small = [chip.attrib.get ('file') for chip in small_images_chips]
+			# files_small = [chip.attrib.get ('file') for chip in small_images_chips]
 			# img_list = '\n   '.join (files_small)
-			print len (small_images_chips), 'images ignored due to size below', image_size_min
 			# print img_list
+			print len (small_images_chips), 'images unused due to size below', image_size_min
+			small_images_faces = make_images_from_chips (small_images_chips) 
+			chunks.append (small_images_faces)
 		else :
+			print 'All chips used.\n'
 			chunks.append ([])
 
 	# pdb.set_trace ()
@@ -365,11 +390,11 @@ def generate_folds_files (train_list, validate_list, filename) :
 
 	print "\nGenerated", n, "sets of folds files: "
 	for i in range(n) :
-		t_root, t_chips = create_new_tree_w_chips ()
+		t_root, t_chips = create_new_tree_w_element ()
 		for j in range (len (train_list[i])) :
 			chip = train_list[i][j]
 			t_chips.append (chip)
-		v_root, v_chips = create_new_tree_w_chips ()
+		v_root, v_chips = create_new_tree_w_element ()
 		for j in range (len (validate_list[i])) :
 			chip = validate_list[i][j]
 			v_chips.append (chip)
@@ -389,17 +414,17 @@ def generate_folds_files (train_list, validate_list, filename) :
 ##  then write xml files
 ##------------------------------------------------------------
 def generate_partition_files (chunks, filenames, filetype="chips") :
-	list_x = chunks[0]
-	list_y = chunks[1]
-	file_x = filenames[0]
-	file_y = filenames[1]
-	file_unused = filenames[2]
-	file_small_img = filenames[3]
+	list_x = chunks[g_x]
+	list_y = chunks[g_y]
+	file_x = filenames[g_x]
+	file_y = filenames[g_y]
+	file_unused = filenames[g_unused]
+	file_small_img = filenames[g_small_img]
 
-	root_x, chips_x = create_new_tree_w_chips (filetype)
+	root_x, chips_x = create_new_tree_w_element (filetype)
 	for i in range(len(list_x)):
 		chips_x.append (list_x[i])
-	root_y, chips_y = create_new_tree_w_chips (filetype)
+	root_y, chips_y = create_new_tree_w_element (filetype)
 	for i in range(len(list_y)):
 		chips_y.append (list_y[i])
 
@@ -412,28 +437,26 @@ def generate_partition_files (chunks, filenames, filetype="chips") :
 	print "\nGenerated partition files: \n\t", file_x, "\n\t", file_y
 	print ""
 
-	if (file_unused) :
-		list_unused = chunks[2]
-		root_unused, chips_unused = create_new_tree_w_chips (filetype)
-		# for i in range(len(list_unused)):
-		#	chips_unused.append (list_unused[i])
+	if file_unused :
+		list_unused = chunks[g_unused]
+		root_unused, chips_unused = create_new_tree_w_element (filetype)
 		for chip in list_unused :
 			chips_unused.append (chip)
 		indent (root_unused)
 		tree_unused = ET.ElementTree (root_unused)
 		tree_unused.write (file_unused)
-		print '    ', len (list_unused), 'labels unused due to less than minimum # of images, written to file : \n\t', file_unused
+		print '\t', len (list_unused), 'labels unused due to less than minimum # of images, written to file : \n\t', file_unused, '\n'
 		print
-	if (file_small_img) :
-		list_small_img = chunks[3]
-		root_small, chips_small = create_new_tree_w_chips (filetype)
+	if file_small_img :
+		list_small_img = chunks[g_small_img]
+		root_small, chips_small = create_new_tree_w_element ('faces')
 		for i in range(len(list_small_img)):
 			chips_small.append (list_small_img[i])
 		indent (root_small)
 		tree_small = ET.ElementTree (root_small)
 		tree_small.write (file_small_img)
-		print '    ', len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img
-		print
+		print len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n'
+	print
 
 ##------------------------------------------------------------
 ##  create n sets of train & validate files
@@ -457,9 +480,10 @@ def generate_folds_content (chips_d, n_folds, shuffle=True) :
 	return train_list, validate_list
 
 ##------------------------------------------------------------
-##  generate file heading, returns root element and chips element
+##  creates new tree, add standard file heading, 
+##    then add specified element.  returns root and new element
 ##------------------------------------------------------------
-def create_new_tree_w_chips (filetype="chips") :
+def create_new_tree_w_element (filetype="chips") :
 	r = ET.Element ('dataset')
 	r_c = ET.SubElement (r, 'comment').text = "generated by bearID v1.0"
 	curtime = datetime.datetime.now().strftime("%Y%m%d:%H%M")
@@ -470,8 +494,8 @@ def create_new_tree_w_chips (filetype="chips") :
 		elem_name = "images"
 	else :
 		elem_name = "chips"
-	r_chips = ET.SubElement (r, elem_name)
-	return r, r_chips
+	r_elem = ET.SubElement (r, elem_name)
+	return r, r_elem
 
 ##------------------------------------------------------------
 ##   create copy of xml file of particular label
@@ -639,7 +663,7 @@ def get_chips_noses_in_circle (chips_d, pt_x, pt_y, distance):
 ##  given chip list, write to xml file
 ##------------------------------------------------------------
 def write_chip_file (chips, outfile):
-	root, chips_elem = create_new_tree_w_chips ()
+	root, chips_elem = create_new_tree_w_element ()
 	for chip in chips:
 		chips_elem.append (chip)
 	indent (root)
@@ -791,7 +815,7 @@ def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, sets, output):
 	unmatched_chips = create_chip_list (chips_d, selected_unmatched_indices)
 
 	## create xml content
-	root, chips = create_new_tree_w_chips ('pairs')
+	root, chips = create_new_tree_w_element ('pairs')
 	elem_name = "pair_matched"
 	for i in range (0, len (matched_chips), 2) :
 		# create new matched pair element, then put 2 chips under it
