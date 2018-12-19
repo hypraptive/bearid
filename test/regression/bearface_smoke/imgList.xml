@@ -1,0 +1,82 @@
+<?xml version='1.0' encoding='ISO-8859-1'?>
+<?xml-stylesheet type='text/xsl' href='image_metadata_stylesheet.xsl'?>
+<dataset>
+<name>imglab dataset</name>
+<comment>Created by imglab tool.</comment>
+<images>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_051/35635688412_395e2f55b1_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_051/35949890525_8485ebe4be_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_051/36418167631_0b241d887e_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_128/35202140773_6caec47942_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_128/35747256633_01a97a182f_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35672803241_befeca28b2_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35764202866_e4c6290829_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35764208386_5515612ccf_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35764212276_cf379f79e9_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_273/35908868086_b72d35bbfd_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_273/36705753025_457043fba4_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_274/35153678844_c09c76f4cc_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_274/35416425180_5b1229529e_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_274/35951914226_89c4ddb6d8_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_409/34964658994_b2a2c3af0a_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_409/34964660284_4ee509854c_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_409/35721908314_4b8853b4ed_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/34964650404_4f81f3d34a_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/34964655274_117b55ddfc_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/35639830294_a77085ffde_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/36429134666_0558b52eb5_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/36705737405_efe86945c1_b.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_1.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_2.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_3.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_4.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_5.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_6.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_7.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_8.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_505/bf_505_elaineinde_20170720.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_1.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_2.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_3.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_4.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_5.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_6.jpg'>
+  </image>
+</images>
+</dataset>

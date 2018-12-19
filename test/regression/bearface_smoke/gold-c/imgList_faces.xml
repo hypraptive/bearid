@@ -1,0 +1,415 @@
+<?xml version='1.0' encoding='ISO-8859-1'?>
+<?xml-stylesheet type='text/xsl' href='image_metadata_stylesheet.xsl'?>
+<dataset>
+<name>imglab dataset</name>
+<comment>Created by imglab tool.</comment>
+<images>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_051/35635688412_395e2f55b1_b.jpg'>
+    <box top='199' left='554' width='237' height='236'>
+      <label>bf_051</label>
+      <part name='lear' x='744' y='204'/>
+      <part name='leye' x='717' y='300'/>
+      <part name='nose' x='659' y='434'/>
+      <part name='rear' x='619' y='200'/>
+      <part name='reye' x='632' y='299'/>
+      <part name='top' x='682' y='178'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_051/35949890525_8485ebe4be_b.jpg'>
+    <box top='124' left='317' width='284' height='284'>
+      <label>bf_051</label>
+      <part name='lear' x='557' y='158'/>
+      <part name='leye' x='533' y='237'/>
+      <part name='nose' x='478' y='349'/>
+      <part name='rear' x='412' y='141'/>
+      <part name='reye' x='428' y='225'/>
+      <part name='top' x='489' y='127'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_051/36418167631_0b241d887e_b.jpg'>
+    <box top='150' left='195' width='198' height='198'>
+      <label>bf_051</label>
+      <part name='lear' x='363' y='145'/>
+      <part name='leye' x='337' y='224'/>
+      <part name='nose' x='271' y='333'/>
+      <part name='rear' x='261' y='132'/>
+      <part name='reye' x='252' y='213'/>
+      <part name='top' x='312' y='124'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_128/35202140773_6caec47942_b.jpg'>
+    <box top='259' left='532' width='96' height='96'>
+      <label>bf_128</label>
+      <part name='lear' x='617' y='265'/>
+      <part name='leye' x='599' y='299'/>
+      <part name='nose' x='570' y='346'/>
+      <part name='rear' x='563' y='261'/>
+      <part name='reye' x='563' y='295'/>
+      <part name='top' x='590' y='256'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_128/35747256633_01a97a182f_b.jpg'>
+    <box top='366' left='626' width='236' height='237'>
+      <label>bf_128</label>
+      <part name='lear' x='825' y='373'/>
+      <part name='leye' x='811' y='453'/>
+      <part name='nose' x='793' y='584'/>
+      <part name='rear' x='684' y='368'/>
+      <part name='reye' x='722' y='448'/>
+      <part name='top' x='757' y='345'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35672803241_befeca28b2_b.jpg'>
+    <box top='83' left='367' width='137' height='138'>
+      <label>bf_151</label>
+      <part name='lear' x='491' y='99'/>
+      <part name='leye' x='462' y='143'/>
+      <part name='nose' x='405' y='187'/>
+      <part name='rear' x='428' y='86'/>
+      <part name='reye' x='408' y='134'/>
+      <part name='top' x='457' y='90'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35764202866_e4c6290829_b.jpg'>
+    <box top='208' left='602' width='137' height='137'>
+      <label>bf_151</label>
+      <part name='lear' x='722' y='231'/>
+      <part name='leye' x='712' y='268'/>
+      <part name='nose' x='693' y='320'/>
+      <part name='rear' x='647' y='226'/>
+      <part name='reye' x='661' y='264'/>
+      <part name='top' x='686' y='215'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35764208386_5515612ccf_b.jpg'>
+    <box top='221' left='436' width='137' height='138'>
+      <label>bf_151</label>
+      <part name='lear' x='555' y='243'/>
+      <part name='leye' x='533' y='286'/>
+      <part name='nose' x='484' y='341'/>
+      <part name='rear' x='491' y='233'/>
+      <part name='reye' x='484' y='278'/>
+      <part name='top' x='524' y='231'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_151/35764212276_cf379f79e9_b.jpg'>
+    <box top='208' left='450' width='137' height='137'>
+      <label>bf_151</label>
+      <part name='lear' x='562' y='208'/>
+      <part name='leye' x='557' y='265'/>
+      <part name='nose' x='534' y='330'/>
+      <part name='rear' x='494' y='203'/>
+      <part name='reye' x='503' y='261'/>
+      <part name='top' x='531' y='198'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_273/35908868086_b72d35bbfd_b.jpg'>
+    <box top='111' left='519' width='137' height='137'>
+      <label>bf_273</label>
+      <part name='lear' x='621' y='115'/>
+      <part name='leye' x='623' y='159'/>
+      <part name='nose' x='612' y='216'/>
+      <part name='rear' x='547' y='113'/>
+      <part name='reye' x='567' y='158'/>
+      <part name='top' x='587' y='105'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_273/36705753025_457043fba4_b.jpg'>
+    <box top='123' left='258' width='165' height='165'>
+      <label>bf_273</label>
+      <part name='lear' x='409' y='157'/>
+      <part name='leye' x='380' y='189'/>
+      <part name='nose' x='322' y='227'/>
+      <part name='rear' x='332' y='151'/>
+      <part name='reye' x='320' y='184'/>
+      <part name='top' x='367' y='139'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_274/35153678844_c09c76f4cc_b.jpg'>
+    <box top='262' left='363' width='115' height='115'>
+      <label>bf_274</label>
+      <part name='lear' x='447' y='257'/>
+      <part name='leye' x='451' y='299'/>
+      <part name='nose' x='449' y='350'/>
+      <part name='rear' x='387' y='262'/>
+      <part name='reye' x='408' y='302'/>
+      <part name='top' x='419' y='253'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_274/35416425180_5b1229529e_b.jpg'>
+    <box top='97' left='353' width='137' height='138'>
+      <label>bf_274</label>
+      <part name='lear' x='458' y='124'/>
+      <part name='leye' x='451' y='147'/>
+      <part name='nose' x='435' y='184'/>
+      <part name='rear' x='381' y='123'/>
+      <part name='reye' x='400' y='146'/>
+      <part name='top' x='421' y='117'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_274/35951914226_89c4ddb6d8_b.jpg'>
+    <box top='536' left='208' width='165' height='164'>
+      <label>bf_274</label>
+      <part name='lear' x='341' y='555'/>
+      <part name='leye' x='318' y='610'/>
+      <part name='nose' x='268' y='673'/>
+      <part name='rear' x='268' y='550'/>
+      <part name='reye' x='264' y='606'/>
+      <part name='top' x='303' y='547'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_409/34964658994_b2a2c3af0a_b.jpg'>
+    <box top='340' left='476' width='80' height='80'>
+      <label>bf_409</label>
+      <part name='lear' x='550' y='347'/>
+      <part name='leye' x='539' y='366'/>
+      <part name='nose' x='520' y='411'/>
+      <part name='rear' x='492' y='344'/>
+      <part name='reye' x='503' y='364'/>
+      <part name='top' x='522' y='333'/>
+    </box>
+    <box top='228' left='564' width='80' height='80'>
+      <label>bf_409</label>
+      <part name='lear' x='637' y='240'/>
+      <part name='leye' x='626' y='260'/>
+      <part name='nose' x='599' y='267'/>
+      <part name='rear' x='593' y='240'/>
+      <part name='reye' x='594' y='259'/>
+      <part name='top' x='614' y='237'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_409/34964660284_4ee509854c_b.jpg'>
+    <box top='181' left='475' width='96' height='96'>
+      <label>bf_409</label>
+      <part name='lear' x='546' y='182'/>
+      <part name='leye' x='546' y='218'/>
+      <part name='nose' x='536' y='274'/>
+      <part name='rear' x='498' y='184'/>
+      <part name='reye' x='510' y='220'/>
+      <part name='top' x='522' y='177'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_409/35721908314_4b8853b4ed_b.jpg'>
+    <box top='449' left='540' width='48' height='48'>
+      <label>bf_409</label>
+      <part name='lear' x='579' y='451'/>
+      <part name='leye' x='575' y='468'/>
+      <part name='nose' x='565' y='497'/>
+      <part name='rear' x='549' y='450'/>
+      <part name='reye' x='555' y='467'/>
+      <part name='top' x='564' y='446'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/34964650404_4f81f3d34a_b.jpg'>
+    <box top='206' left='540' width='165' height='165'>
+      <label>bf_503</label>
+      <part name='lear' x='715' y='221'/>
+      <part name='leye' x='678' y='274'/>
+      <part name='nose' x='602' y='353'/>
+      <part name='rear' x='608' y='214'/>
+      <part name='reye' x='603' y='268'/>
+      <part name='top' x='661' y='200'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/34964655274_117b55ddfc_b.jpg'>
+    <box top='218' left='450' width='341' height='340'>
+      <label>bf_503</label>
+      <part name='lear' x='761' y='260'/>
+      <part name='leye' x='700' y='370'/>
+      <part name='nose' x='580' y='503'/>
+      <part name='rear' x='591' y='240'/>
+      <part name='reye' x='567' y='354'/>
+      <part name='top' x='673' y='235'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/35639830294_a77085ffde_b.jpg'>
+    <box top='252' left='524' width='80' height='80'>
+      <label>bf_503</label>
+      <part name='lear' x='588' y='269'/>
+      <part name='leye' x='582' y='290'/>
+      <part name='nose' x='555' y='315'/>
+      <part name='rear' x='562' y='267'/>
+      <part name='reye' x='553' y='288'/>
+      <part name='top' x='575' y='266'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/36429134666_0558b52eb5_b.jpg'>
+    <box top='252' left='372' width='80' height='80'>
+      <label>bf_503</label>
+      <part name='lear' x='420' y='261'/>
+      <part name='leye' x='427' y='283'/>
+      <part name='nose' x='418' y='313'/>
+      <part name='rear' x='397' y='263'/>
+      <part name='reye' x='399' y='286'/>
+      <part name='top' x='409' y='260'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/freels_201708/bf_503/36705737405_efe86945c1_b.jpg'>
+    <box top='212' left='340' width='80' height='80'>
+      <label>bf_503</label>
+      <part name='lear' x='410' y='220'/>
+      <part name='leye' x='396' y='247'/>
+      <part name='nose' x='359' y='281'/>
+      <part name='rear' x='374' y='217'/>
+      <part name='reye' x='365' y='245'/>
+      <part name='top' x='391' y='214'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_1.jpg'>
+    <box top='493' left='906' width='340' height='341'>
+      <label>bf_500</label>
+      <part name='lear' x='1195' y='507'/>
+      <part name='leye' x='1164' y='625'/>
+      <part name='nose' x='1090' y='791'/>
+      <part name='rear' x='1009' y='505'/>
+      <part name='reye' x='1029' y='623'/>
+      <part name='top' x='1101' y='470'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_2.jpg'>
+    <box top='332' left='977' width='284' height='284'>
+      <label>bf_500</label>
+      <part name='lear' x='1251' y='352'/>
+      <part name='leye' x='1196' y='443'/>
+      <part name='nose' x='1067' y='536'/>
+      <part name='rear' x='1090' y='339'/>
+      <part name='reye' x='1076' y='434'/>
+      <part name='top' x='1168' y='313'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_3.jpg'>
+    <box top='600' left='1378' width='284' height='285'>
+      <label>bf_500</label>
+      <part name='lear' x='1611' y='591'/>
+      <part name='leye' x='1597' y='700'/>
+      <part name='nose' x='1542' y='843'/>
+      <part name='rear' x='1467' y='596'/>
+      <part name='reye' x='1482' y='705'/>
+      <part name='top' x='1537' y='568'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_4.jpg'>
+    <box top='665' left='760' width='340' height='341'>
+      <label>bf_500</label>
+      <part name='lear' x='1053' y='671'/>
+      <part name='leye' x='1014' y='793'/>
+      <part name='nose' x='918' y='1006'/>
+      <part name='rear' x='867' y='669'/>
+      <part name='reye' x='880' y='789'/>
+      <part name='top' x='959' y='635'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_5.jpg'>
+    <box top='703' left='1378' width='237' height='237'>
+      <label>bf_500</label>
+      <part name='lear' x='1590' y='713'/>
+      <part name='leye' x='1567' y='778'/>
+      <part name='nose' x='1522' y='867'/>
+      <part name='rear' x='1436' y='709'/>
+      <part name='reye' x='1464' y='774'/>
+      <part name='top' x='1515' y='675'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_6.jpg'>
+    <box top='699' left='1413' width='341' height='341'>
+      <label>bf_500</label>
+      <part name='lear' x='1679' y='711'/>
+      <part name='leye' x='1654' y='832'/>
+      <part name='nose' x='1587' y='956'/>
+      <part name='rear' x='1493' y='708'/>
+      <part name='reye' x='1516' y='829'/>
+      <part name='top' x='1588' y='671'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_7.jpg'>
+    <box top='743' left='1237' width='138' height='138'>
+      <label>bf_500</label>
+      <part name='lear' x='1358' y='755'/>
+      <part name='leye' x='1341' y='793'/>
+      <part name='nose' x='1303' y='825'/>
+      <part name='rear' x='1277' y='752'/>
+      <part name='reye' x='1283' y='789'/>
+      <part name='top' x='1317' y='740'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_500/500_brooks-camp_katmai_sept2014_8.jpg'>
+    <box top='993' left='2065' width='237' height='237'>
+      <label>bf_500</label>
+      <part name='lear' x='2224' y='979'/>
+      <part name='leye' x='2223' y='1077'/>
+      <part name='nose' x='2178' y='1169'/>
+      <part name='rear' x='2111' y='993'/>
+      <part name='reye' x='2126' y='1089'/>
+      <part name='top' x='2165' y='975'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_505/bf_505_elaineinde_20170720.jpg'>
+    <box top='1710' left='459' width='846' height='847'>
+      <label>bf_505</label>
+      <part name='lear' x='1132' y='1659'/>
+      <part name='leye' x='1044' y='1993'/>
+      <part name='nose' x='843' y='2395'/>
+      <part name='rear' x='713' y='1658'/>
+      <part name='reye' x='725' y='1999'/>
+      <part name='top' x='910' y='1589'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_1.jpg'>
+    <box top='1379' left='1887' width='138' height='138'>
+      <label>bf_879</label>
+      <part name='lear' x='2016' y='1395'/>
+      <part name='leye' x='1986' y='1441'/>
+      <part name='nose' x='1933' y='1507'/>
+      <part name='rear' x='1943' y='1388'/>
+      <part name='reye' x='1931' y='1435'/>
+      <part name='top' x='1977' y='1383'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_2.jpg'>
+    <box top='1255' left='1694' width='137' height='137'>
+      <label>bf_879</label>
+      <part name='lear' x='1819' y='1271'/>
+      <part name='leye' x='1791' y='1305'/>
+      <part name='nose' x='1748' y='1358'/>
+      <part name='rear' x='1725' y='1272'/>
+      <part name='reye' x='1736' y='1307'/>
+      <part name='top' x='1770' y='1255'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_3.jpg'>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_4.jpg'>
+    <box top='1087' left='1425' width='96' height='96'>
+      <label>bf_879</label>
+      <part name='lear' x='1498' y='1094'/>
+      <part name='leye' x='1493' y='1127'/>
+      <part name='nose' x='1479' y='1170'/>
+      <part name='rear' x='1445' y='1093'/>
+      <part name='reye' x='1455' y='1126'/>
+      <part name='top' x='1472' y='1086'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_5.jpg'>
+    <box top='619' left='855' width='165' height='164'>
+      <label>bf_879</label>
+      <part name='lear' x='1003' y='614'/>
+      <part name='leye' x='979' y='681'/>
+      <part name='nose' x='930' y='760'/>
+      <part name='rear' x='916' y='609'/>
+      <part name='reye' x='913' y='678'/>
+      <part name='top' x='958' y='597'/>
+    </box>
+  </image>
+  <image file='/home/data/bears/imageSource/brooksFalls/misc_20170907/bf_879/879_littleostow_sep2014_6.jpg'>
+    <box top='712' left='2889' width='588' height='588'>
+      <label>bf_879</label>
+      <part name='lear' x='3169' y='702'/>
+      <part name='leye' x='3270' y='923'/>
+      <part name='nose' x='3360' y='1312'/>
+      <part name='rear' x='2898' y='757'/>
+      <part name='reye' x='3045' y='969'/>
+      <part name='top' x='3041' y='694'/>
+    </box>
+  </image>
+</images>
+</dataset>
