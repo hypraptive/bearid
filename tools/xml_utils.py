@@ -794,6 +794,11 @@ def gen_all_matched_obj_pairs  (chips_d):
 ## i.e. len (lists[4][2]) = 0 . len (lists [2][4] = unmatched pairs
 ##      for bear 2 and bear 4
 ##   e.g. unmatched images for labels 5, 3 ##   will be in lists[3][5]
+## Need to have this table to counter labels with lots of images.
+##   If we were to only generate list of unmatched images for a
+##   label, it would be weighted towards the labels with greater
+##   images.  To use this table, select a random label1, then a 
+##   random label2, then select random entry of list in this table.
 ##------------------------------------------------------------
 def gen_all_unmatched_obj_pairs  (chips_d):
 	unmatched_lists = []
@@ -821,10 +826,12 @@ def gen_all_unmatched_obj_pairs  (chips_d):
 ##------------------------------------------------------------
 ## write out N pairs of matched pairs and M pairs of unmatched pairs
 ##------------------------------------------------------------
-def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, sets, output):
+def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, triplets, output):
 	chips_d = defaultdict(list)
 	load_objs_from_files (input_files, chips_d)
-	selected_matched_indices, selected_unmatched_indices = get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt)
+	if triplets > 0 :
+		unmatched_cnt = matched_cnt = triplets
+	selected_matched_indices, selected_unmatched_indices = get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt, triplets)
 	matched_chips = create_chip_list (chips_d, selected_matched_indices)
 	unmatched_chips = create_chip_list (chips_d, selected_unmatched_indices)
 
@@ -857,8 +864,11 @@ def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, sets, output):
 
 ##------------------------------------------------------------
 ##  return two lists of pairs for matched and unmatched
+##    generate a list of all possible indices for matching and 
+##    unmatching pairs for each label.  store in table of labels
+##    select random label, then select random un/matching pair of label
 ##------------------------------------------------------------
-def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt) :
+def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt, triplet=0) :
 	all_matched_pairs_arr = gen_all_matched_obj_pairs (chips_d)
 	all_unmatched_pairs_3arr = gen_all_unmatched_obj_pairs (chips_d)
 	selected_matched_list = []
@@ -867,14 +877,6 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt) :
 	max_matched_cnt = sum ([len (pairs_list) for pairs_list in all_matched_pairs_arr])
 	max_unmatched_cnt = sum ([len (pairs_list) for pairs_arr in all_unmatched_pairs_3arr for pairs_list in pairs_arr])
 
-	## do sanity count for max_matched_cnt:
-	'''
-	u_cnt = 0
-	chips_list = sorted (chips_d.items())
-	for i in range (len (chips_list)) :
-		u_cnt += len (chips_list[i][1]) ## 0 is label, 1 is chip_list
-
-	'''
 	# pdb.set_trace ()
 	if matched_cnt == 0 :
 		matched_cnt = max_matched_cnt
@@ -889,24 +891,45 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt) :
 		print '  *** creating max number of unmatched pairs.'
 		unmatched_cnt = max_unmatched_cnt
 	# pdb.set_trace ()
+	# need to start with matched set to ensure there is a set
 	i = 0
-	## TODO :  check for getting all pairs
 	if matched_cnt == max_matched_cnt :  # getting ALL matched pairs
 		selected_matched_list = [pair for pair_list in all_matched_pairs_arr for pair in pair_list]
 		i = matched_cnt
 	while i < matched_cnt :
 		x = random.randint(0,label_cnt-1)
-		# print 'x : ', x
-		if len (all_matched_pairs_arr[x]) == 0 :
-			# print 'empty list; trying again'
+		img_cnt = len (all_matched_pairs_arr[x])
+		if img_cnt == 0 :
 			continue
 		label_list = all_matched_pairs_arr[x]
-		img_cnt = len (label_list)
 		z = random.randint(0,img_cnt-1)
-		# print 'matched ', i, ': ', z
-		# move entry to selected
+		# if looking for triplet, find unmatched set now
+		if triplet > 0 :
+			w = random.randint(0, 1)  # pick one of 2 sets
+			set1 = label_list[z][w]	  # anchor
+			label_y = label_x = set1[0]
+			while label_y == label_x :
+				label_y = random.randint(0,label_cnt-1)
+			if label_x > label_y :
+				label_list_u = all_unmatched_pairs_3arr[label_y][label_x]
+			else :
+				label_list_u = all_unmatched_pairs_3arr[label_x][label_y]
+			img_cnt_u = len (label_list_u)
+			#   need to find anchor set1 then move entry to selected
+			found_match = False
+			for u in range (img_cnt_u-1) :
+				# pdb.set_trace ()
+				if set1 in label_list_u[u]:  # take first match rather than find all and random select
+					selected_unmatched_list.append (label_list_u.pop(u))
+					found_match = True
+					break
+			if not found_match :
+				print 'Unable to find unmatch set for anchor', set1, ', trying again.'
+				continue
 		selected_matched_list.append (label_list.pop(z))
 		i += 1
+	if triplet > 0 :
+		return selected_matched_list, selected_unmatched_list
 	i = 0
 	if unmatched_cnt == max_unmatched_cnt :  # getting ALL unmatched pairs
 		selected_unmatched_list = [pair for pairs_arr in all_unmatched_pairs_3arr for pair_list in pairs_arr for pair in pair_list]
@@ -919,17 +942,14 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt) :
 			label_list = all_unmatched_pairs_3arr[y][x]
 		else :
 			label_list = all_unmatched_pairs_3arr[x][y]
+		# pdb.set_trace ()
 		img_cnt = len (label_list)
 		if img_cnt == 0 :
 			continue
-		# print 'unmatched i, x, y, z: ', i, x, y, z
 		z = random.randint(0,img_cnt-1)
-		# print 'unmatched ', i, ': ', z
 		# move entry to selected
 		selected_unmatched_list.append (label_list.pop(z))
 		i += 1
-	# print 'matched   : ', selected_matched_list
-	# print 'unmatched : ', selected_unmatched_list
 	return selected_matched_list, selected_unmatched_list
 
 ##------------------------------------------------------------
