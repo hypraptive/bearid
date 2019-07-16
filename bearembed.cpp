@@ -157,8 +157,7 @@ image_type jitter_image(
 
 
 //-----------------------------------------------------------------
-// Grab all the chip files from xml and store each under its label.
-// Generate warning for chips with no label.
+// Grab matched and unmatched pairs of chip files and labels
 //-----------------------------------------------------------------
 std::vector<std::vector<string>> load_pairs_map (
   const std::string& xml_file)
@@ -170,14 +169,17 @@ std::vector<std::vector<string>> load_pairs_map (
     cout << "load_pairs_map" << endl;
 
     std::vector<std::vector<string>> objects;		// return object
-    std::vector<string> matched;
-    std::vector<string> unmatched;
+    std::vector<string> matched_chips;
+    std::vector<string> unmatched_chips;
+    std::vector<string> matched_labels;
+    std::vector<string> unmatched_labels;
     int count = 0;
 
     BOOST_FOREACH(ptree::value_type& child, tree.get_child("dataset.chips"))
     {
       std::string child_name = child.first;
       std::vector<string> pairFiles;
+      std::vector<string> pairLabels;
 
       //cout << child_name << " " << count << endl;
 
@@ -193,6 +195,7 @@ std::vector<std::vector<string>> load_pairs_map (
           std::string chipfile = pchild.second.get<std::string>("<xmlattr>.file");
           pairFiles.push_back (chipfile);
           std::string bearID = pchild.second.get<std::string>("label");
+          pairLabels.push_back (bearID);
           //cout << "ID: " << bearID << " File: " << chipfile << endl;
         }
         if (ccount == 2)
@@ -200,12 +203,16 @@ std::vector<std::vector<string>> load_pairs_map (
           // Add pair to map
           if (child_name == "pair_matched")
           {
-            matched.push_back (pairFiles[0]);
-            matched.push_back (pairFiles[1]);
+            matched_chips.push_back (pairFiles[0]);
+            matched_chips.push_back (pairFiles[1]);
+            matched_labels.push_back (pairLabels[0]);
+            matched_labels.push_back (pairLabels[1]);
           }
           else{
-            unmatched.push_back (pairFiles[0]);
-            unmatched.push_back (pairFiles[1]);
+            unmatched_chips.push_back (pairFiles[0]);
+            unmatched_chips.push_back (pairFiles[1]);
+            unmatched_labels.push_back (pairLabels[0]);
+            unmatched_labels.push_back (pairLabels[1]);
           }
         }
         else
@@ -218,8 +225,10 @@ std::vector<std::vector<string>> load_pairs_map (
       //if (count >= 3) break;  //TODO Remove ME
     }
 
-    objects.push_back (matched);
-    objects.push_back (unmatched);
+    objects.push_back (matched_chips);
+    objects.push_back (unmatched_chips);
+    objects.push_back (matched_labels);
+    objects.push_back (unmatched_labels);
 
     return objects;
 }
@@ -813,6 +822,8 @@ else if (parser.option("test") && parser.option("pair"))
   cout << "Start testing pairs..." << endl;
   std::vector<string> matchedPairs = objs[0];
   std::vector<string> unmatchedPairs = objs[1];
+  std::vector<string> matchedLabels = objs[2];
+  std::vector<string> unmatchedLabels = objs[3];
 
   int num_right = 0;
   int num_wrong = 0;
@@ -823,9 +834,24 @@ else if (parser.option("test") && parser.option("pair"))
 
   matrix<rgb_pixel> image;
   std::vector<matrix<rgb_pixel>> images;
+  // set up file name for result file
+  time_t rawtime;
+  struct tm * timeinfo;
+  char time_buffer[80];
+  time (&rawtime);
+  timeinfo = localtime(&rawtime);
+  strftime(time_buffer,sizeof(time_buffer),"%Y%m%d%I%M",timeinfo);
+  std::string result_filename = "test_result_";
+  result_filename.append (time_buffer);
+  ofstream result_file;
+  result_file.open (result_filename);
+
   // Matching Pairs
+
+  double dist_max = testing_net.loss_details().get_distance_threshold();
   for (size_t i = 0; i < matchedPairs.size(); i+=2)
   {
+	result_file << matchedLabels[i] << "," << matchedLabels[i+1];
     images.clear();
     //cout << "Matched Pair " << i/2 << endl;
     //cout << matchedPairs[i] << endl;
@@ -836,23 +862,30 @@ else if (parser.option("test") && parser.option("pair"))
     images.push_back(std::move(image));
 
     std::vector<matrix<float,0,1>> matchedEmbedded = testing_net(images);
-    if (length(matchedEmbedded[0]-matchedEmbedded[1]) < testing_net.loss_details().get_distance_threshold())
+    double images_dist = length(matchedEmbedded[0]-matchedEmbedded[1]);
+
+    if (images_dist < dist_max)
     {
       ++num_right;
       ++num_true_pos;
+	  result_file << ",1,1,";
       //cout << "RIGHT (same) " << matchedPairs[i] << " to " << matchedPairs[i+1] << " distance is " << to_string(length(matchedEmbedded[0]-matchedEmbedded[1])) << endl;
     }
     else
     {
       ++num_wrong;
       ++num_false_neg;
+	  result_file << ",0,1,";
       //cout << "WRONG (same) " << matchedPairs[i] << " to " << matchedPairs[i+1] << " distance is " << to_string(length(matchedEmbedded[0]-matchedEmbedded[1])) << endl;
     }
+	result_file << matchedPairs[i] << "," << matchedPairs[i+1];
+	result_file << "," << images_dist << "," << dist_max << endl;
   }
 
   // Unmatching Pairs
   for (size_t i = 0; i < unmatchedPairs.size(); i+=2)
   {
+	result_file << unmatchedLabels[i] << "," << unmatchedLabels[i+1];
     images.clear();
     //cout << "Unmatched Pair " << i/2 << endl;
     //cout << unmatchedPairs[i] << endl;
@@ -863,19 +896,26 @@ else if (parser.option("test") && parser.option("pair"))
     images.push_back(std::move(image));
 
     std::vector<matrix<float,0,1>> unmatchedEmbedded = testing_net(images);
-    if (length(unmatchedEmbedded[0]-unmatchedEmbedded[1]) >= testing_net.loss_details().get_distance_threshold())
+    double images_dist = length(unmatchedEmbedded[0]-unmatchedEmbedded[1]);
+
+    if (images_dist >= dist_max)
     {
       ++num_right;
       ++num_true_neg;
+	  result_file << ",0,0,";
       //cout << "RIGHT (same) " << unmatchedPairs[i] << " to " << unmatchedPairs[i+1] << " distance is " << to_string(length(unmatchedEmbedded[0]-unmatchedEmbedded[1])) << endl;
     }
     else
     {
       ++num_wrong;
       ++num_false_pos;
+	  result_file << ",1,0,";
       //cout << "WRONG (same) " << unmatchedPairs[i] << " to " << unmatchedPairs[i+1] << " distance is " << to_string(length(unmatchedEmbedded[0]-unmatchedEmbedded[1])) << endl;
     }
+	result_file << unmatchedPairs[i] << "," << unmatchedPairs[i+1];
+	result_file << "," << images_dist << "," << dist_max << endl;
   }
+  result_file.close ();
 
   cout << "num_right: "<< num_right << endl;
   cout << "num_wrong: "<< num_wrong << endl;
@@ -931,9 +971,23 @@ else if (parser.option("test") && !parser.option("pair"))
   // Normally you would use the non-batch-normalized version of the network to do
   // testing, which is what we do here.
 
+	time_t rawtime;
+	struct tm * timeinfo;
+	char time_buffer[80];
+  std::string result_filename;
+  std::string result_filename_fold;
+
+	time (&rawtime);
+	timeinfo = localtime(&rawtime);
+	strftime(time_buffer,sizeof(time_buffer),"%Y%m%d%I%M",timeinfo);
+	result_filename = "test_result_";
+	result_filename.append (time_buffer);
+
   for (int folds = 0; folds < num_folds; ++folds)
   {
-
+		ofstream result_file;
+		result_filename_fold = result_filename + "_" + to_string (folds);
+		result_file.open (result_filename_fold);
     cout << endl;
     cout << "fold: "<< folds << endl;
 
@@ -962,16 +1016,19 @@ else if (parser.option("test") && !parser.option("pair"))
           // The loss_metric layer will cause images with the same label to be less
           // than net.loss_details().get_distance_threshold() distance from each
           // other.  So we can use that distance value as our testing threshold.
+		  result_file << labels[i] << "," << labels[j];
           if (length(embedded[i]-embedded[j]) < testing_net.loss_details().get_distance_threshold())
           {
             ++num_right;
             ++num_true_pos;
             //cout << "RIGHT (same) " << labels[i] << " to " << labels[j] << " distance is " << to_string(length(embedded[i]-embedded[j])) << endl;
+			result_file << ",1,1" << endl;
           }
           else
           {
             ++num_wrong;
             ++num_false_neg;
+			result_file << ",0,1" << endl;
             //cout << "WRONG (same) " << labels[i] << " to " << labels[j] << " distance is " << to_string(length(embedded[i]-embedded[j])) << endl;
           }
         }
@@ -981,17 +1038,20 @@ else if (parser.option("test") && !parser.option("pair"))
           {
             ++num_right;
             ++num_true_neg;
+			result_file << ",0,0" << endl;
             //cout << "RIGHT (diff) " << labels[i] << " to " << labels[j] << " distance is " << to_string(length(embedded[i]-embedded[j])) << endl;
           }
           else
           {
             ++num_wrong;
             ++num_false_pos;
+			result_file << ",1,0" << endl;
             //cout << "WRONG (diff) " << labels[i] << " to " << labels[j] << " distance is " << to_string(length(embedded[i]-embedded[j])) << endl;
           }
         }
       }
     }
+		result_file.close ();
 
     cout << "num_right: "<< num_right << endl;
     cout << "num_wrong: "<< num_wrong << endl;
