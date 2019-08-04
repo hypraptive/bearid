@@ -238,7 +238,7 @@ std::vector<std::vector<string>> load_pairs_map (
 // Generate warning for chips with no label.
 //-----------------------------------------------------------------
 std::vector<std::vector<string>> load_chips_map (
-  const std::string& xml_file)
+  const std::string& xml_file, std::vector<std::string>& obj_labels)
   {
     std::map<string,std::vector<std::string>> chips_map;
     ptree tree;
@@ -268,16 +268,18 @@ std::vector<std::vector<string>> load_chips_map (
     std::string key;
     std::vector<std::string> value;
 
+	obj_labels.clear ();
     std::map<std::string, std::vector<std::string>>::iterator it;
     for ( it = chips_map.begin(); it != chips_map.end(); it++ )
     {
       objects.push_back (it->second);
+      obj_labels.push_back (it->first);
     }
     return objects;
   }
 
 std::vector<std::vector<string>> load_chips_xml (
-  const std::string& xml_file, bool pair)
+  const std::string& xml_file, bool pair, std::vector<std::string>& obj_labels)
   {
     std::vector<std::vector<string>> objects;		// return object
 
@@ -289,7 +291,7 @@ std::vector<std::vector<string>> load_chips_xml (
     else
     {
       cout << "Normal file" << endl;
-      objects = load_chips_map(xml_file);
+      objects = load_chips_map(xml_file, obj_labels);
     }
     return objects;
   }
@@ -492,7 +494,9 @@ std::vector<std::vector<string>> load_chips_xml (
 
       cout << "\nXML chip file.... : " << parser[0] << endl;
 
-      auto objs = load_chips_xml (parser[0], parser.option("pair"));
+
+	  std::vector<string> obj_labels;
+      auto objs = load_chips_xml (parser[0], parser.option("pair"), obj_labels);
       cout << "objs.size(): "<< objs.size() << endl;
 
       // auto objs = load_objects_list(parser[0]);
@@ -1132,6 +1136,15 @@ else if (parser.option("embed"))
   boost::filesystem::create_directories(dst_path);
 
   // create XML content file
+  std::string cmd;
+  for (int m = 0; m < argc; m++) {
+  	cmd.append (argv[m]);
+	cmd.append (" ");
+  }
+  boost::filesystem::path current_dir (boost::filesystem::current_path());
+  g_xml_tree.add ("command", cmd);
+  g_xml_tree.add ("cwd", current_dir);
+  g_xml_tree.add ("filetype", "embeddings");
   ptree &embeds = g_xml_tree.add ("dataset.embeddings", "");
 
   /*
@@ -1166,7 +1179,7 @@ else if (parser.option("embed"))
   boost::filesystem::path emb_dir = boost::filesystem::canonical(dst_path);
   for (size_t i = 0; i < objs.size(); ++i)
   {
-    cout << "ID: " << i << " Files: " << objs[i].size() << endl;
+    // cout << "ID: " << i << " - label: " << obj_labels[i] << " - Files: " << objs[i].size() << endl;
 
     embeddings_count += objs[i].size();
     for (size_t j = 0; j < objs[i].size(); ++j)
@@ -1198,7 +1211,28 @@ else if (parser.option("embed"))
     }
     */
     ptree &xml_embed = embeds.add ("embedding", "");
+	char embed_str[2048]={0};
+	float embed_val;
+	std::string s, embed_stdstr;
+
+
+    for (long r = 0; r < embedded.nr(); ++r)
+    {
+        // loop over all the columns
+        for (long c = 0; c < embedded.nc(); ++c)
+        {
+			embed_val = embedded (r,c);
+			s = boost::lexical_cast<std::string>(embed_val);
+			embed_stdstr.append (" ");
+			embed_stdstr.append (s);
+			// sprintf (embed_str + strlen (embed_str), " %a", embed_val);
+        }
+    }
+	xml_embed.add ("embed_val", embed_stdstr);
     xml_embed.add ("<xmlattr>.file", emb_path.string());
+	xml_embed.add ("label", obj_labels[i]);
+	xml_embed.add ("chip_source", img_str);
+
     serialize(emb_path.string()) << embedded;
     //cout << "Embedded: " << emb_path.string() << endl;
     if (0) //((i==0) && (j==0))
