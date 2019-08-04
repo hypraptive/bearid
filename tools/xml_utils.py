@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import sys
 import xml.etree.cElementTree as ET
@@ -19,6 +19,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from sklearn.manifold import TSNE
 
 
 g_x = 0
@@ -131,11 +132,11 @@ def load_objs (root, d_objs, filetype) :
 			chipfile = chip.attrib.get ('file')
 			if len (label_list) < 1 :
 				g_stats_few.append (chipfile)
-				print "no labels: ", label_list
+				print("no labels: ", label_list)
 				continue
 			if len (label_list) > 1 :
 				g_stats_many.append (chipfile)
-				print "too many labels: ", label_list
+				print("too many labels: ", label_list)
 				continue
 			label = label_list[0].text
 			objects.append (chipfile)
@@ -150,7 +151,7 @@ def load_objs (root, d_objs, filetype) :
 				continue
 			if len (box) > 1 :
 				g_stats_many.append (facefile)
-				print "too many boxes (faces) : ", len (box)
+				print("too many boxes (faces) : ", len (box))
 				continue
 			label_list = box[0].findall ('label')
 			label = label_list[0].text
@@ -165,25 +166,32 @@ def load_objs (root, d_objs, filetype) :
 		for pair in root.findall ('./chips/pair_matched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
-				print 'error: expecting only 2 chips in pair, got: ', labels
+				print('error: expecting only 2 chips in pair, got: ', labels)
 				continue
 			if labels[0].text != labels[1].text :
-				print 'error: labels should match: ', labels
+				print('error: labels should match: ', labels)
 			matched_cnt += 1
 			d_objs[matched].append(labels[0])
 		objects.append (d_objs[matched])
 		for pair in root.findall ('./chips/pair_unmatched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
-				print 'error: expecting only 2 chips in pair, got: ', labels
+				print('error: expecting only 2 chips in pair, got: ', labels)
 				continue
 			if labels[0].text == labels[1].text :
-				print 'error: labels should not match: ', labels
+				print('error: labels should not match: ', labels)
 			unmatched_cnt += 1
 			d_objs[unmatched].append(labels)
 		objects.append (d_objs[unmatched])
+	elif filetype == 'embeddings' :
+		for embedding in root.findall ('./embeddings/embedding'):    
+			embed_val = embedding.find ('./embed_val')
+			label = embedding.find ('./label')
+			# pdb.set_trace ()
+			embed_float = str_to_float (embed_val.text)
+			d_objs[label.text].append(embed_float)
 	else :
-		print 'Error: unknown filetype.  Expected one of "faces" or "chips" or "pairs.'
+		print('Error: unknown filetype.  Expected one of "faces" or "chips" or "pairs.')
 	return objects
 
 
@@ -197,7 +205,7 @@ def load_objs (root, d_objs, filetype) :
 ##  print dictionary
 ##------------------------------------------------------------
 def print_dict (chips_d) :
-	for key, value in chips_d.items():
+	for key, value in list(chips_d.items()):
 		print(key)
 		print(value)
 
@@ -258,7 +266,7 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 	if (shuffle == True) :  ## concat all labels, then split
 		## TODO check for image_size_min
 		all_chips=[]
-		for label, chips in chips_d.items():
+		for label, chips in list(chips_d.items()):
 			all_chips.extend (chips)
 		if image_size_min != 0 :
 			small_chips = remove_tiny_chips (all_chips, image_size_min)
@@ -267,9 +275,9 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		# print "partition value : ", partition
 		chunks.append (all_chips[:partition])
 		chunks.append (all_chips[partition:])
-		print "\nmixed partition of ", x, ", len : ", len (chunks[0])
-		print "shuffled partition of ", y, ", len : ", len (chunks[1])
-		print "shuffled total of ", len (chunks[0]) + len (chunks[1])
+		print("\nmixed partition of ", x, ", len : ", len (chunks[0]))
+		print("shuffled partition of ", y, ", len : ", len (chunks[1]))
+		print("shuffled total of ", len (chunks[0]) + len (chunks[1]))
 		# print "chips count: ", len (all_chips)
 	else :				## split per label, then combine into chunks
 		# pdb.set_trace ()
@@ -279,7 +287,7 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		labels_few = []
 		small_images_chips = []
 		chip_cnt = 0
-		for label, chips in chips_d.items():
+		for label, chips in list(chips_d.items()):
 			# remove chips below size minimum
 			if image_size_min != 0 :
 				small_images_chips.extend (remove_tiny_chips (chips, image_size_min))
@@ -294,27 +302,27 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 			chunks_y.extend (chips[partition:])
 		chunks.append (chunks_x)
 		chunks.append (chunks_y)
-		print
-		print len (chunks_x), ' chips in individual partition of', x
-		print len (chunks_y), ' chips in individual partition of', y
-		print chip_cnt, 'total', filetype
-		print
+		print()
+		print(len (chunks_x), ' chips in individual partition of', x)
+		print(len (chunks_y), ' chips in individual partition of', y)
+		print(chip_cnt, 'total', filetype)
+		print()
 		if len (labels_few) > 0 :
 			chunks.append (chunks_few)
-			print len (labels_few), 'unused labels, each with less than ', img_cnt_min, 'images'
+			print(len (labels_few), 'unused labels, each with less than ', img_cnt_min, 'images')
 			# print labels_few
 		else :
-			print 'All labels used.'
+			print('All labels used.')
 			chunks.append ([])
 		if len (small_images_chips) :
 			# files_small = [chip.attrib.get ('file') for chip in small_images_chips]
 			# img_list = '\n   '.join (files_small)
 			# print img_list
-			print len (small_images_chips), 'images unused due to size below', image_size_min
+			print(len (small_images_chips), 'images unused due to size below', image_size_min)
 			small_images_faces = make_images_from_chips (small_images_chips) 
 			chunks.append (small_images_faces)
 		else :
-			print 'All chips used.\n'
+			print('All chips used.\n')
 			chunks.append ([])
 
 	# pdb.set_trace ()
@@ -328,7 +336,7 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 ##
 ##------------------------------------------------------------
 def split_chips_into_n (chips_d, n, shuffle_mode) :
-	chips_d_items = chips_d.items ()
+	chips_d_items = list(chips_d.items ())
 	all_chips_cnt = sum ([len (chips) for label, chips in chips_d_items])
 	mode_text = ''
 	if shuffle_mode == 0 :  ## concat all labels, then split
@@ -338,8 +346,8 @@ def split_chips_into_n (chips_d, n, shuffle_mode) :
 			all_chips.extend (chips)
 		random.shuffle (all_chips)
 		chunk_size = len(all_chips) / float (n)
-		print "\nshuffled fold size : ", int (chunk_size)
-		print "chips count: ", all_chips_cnt
+		print("\nshuffled fold size : ", int (chunk_size))
+		print("chips count: ", all_chips_cnt)
 		mode_text = 'All chips are mixed together then divided info each fold.'
 		for i in range (n):
 			start = int(round(chunk_size * i))
@@ -354,7 +362,7 @@ def split_chips_into_n (chips_d, n, shuffle_mode) :
 		for label, chips in chips_d_items :
 			random.shuffle (chips)
 			chunk_size = len(chips) / float (n)
-			j = range (n)
+			j = list(range(n))
 			# randomize order of fold assignment since many labels
 			# have few chips.  prevents single chips from all being
 			# in same fold.
@@ -368,7 +376,7 @@ def split_chips_into_n (chips_d, n, shuffle_mode) :
 		chunks = [[] for i in range(n)]		# create n empty lists
 		random.shuffle (chips_d_items)
 		# randomize order of fold assignment
-		j = range (n)
+		j = list(range(n))
 		random.shuffle (j)
 		chunk_size = len (chips_d_items) / float (n)
 		# pdb.set_trace ()
@@ -378,19 +386,19 @@ def split_chips_into_n (chips_d, n, shuffle_mode) :
 			labels_list = chips_d_items[start:end]
 			for label, chips in labels_list :
 				chunks[j[i]].extend (chips)
-		print len (chips_d), 'total labels, split into', n, 'folds = ~', int (len (chips_d) / float (n))
+		print(len (chips_d), 'total labels, split into', n, 'folds = ~', int (len (chips_d) / float (n)))
 
-	print all_chips_cnt, 'total chips, split into', n, 'folds = ~', int (all_chips_cnt / float (n))
-	print '     ', mode_text
+	print(all_chips_cnt, 'total chips, split into', n, 'folds = ~', int (all_chips_cnt / float (n)))
+	print('     ', mode_text)
 	folds_cnt = [len (fold) for fold in chunks]
 	labels_cnt = [[] for i in range (n)]
 	for i in range (n) :
 		labels = [(chip.find ('label')).text for chip in chunks[i]]
 		labels_cnt[i] = len (set (labels))
-	print 'count per fold:'
-	print '     ', folds_cnt, 'sum: ', sum (folds_cnt)
-	print 'labels per fold:'
-	print '     ', labels_cnt
+	print('count per fold:')
+	print('     ', folds_cnt, 'sum: ', sum (folds_cnt))
+	print('labels per fold:')
+	print('     ', labels_cnt)
 	# pdb.set_trace ()
 	return chunks
 
@@ -402,7 +410,7 @@ def generate_folds_files (train_list, validate_list, filename) :
 	n = len (train_list)
 	# write 2 files for each fold
 
-	print "\nGenerated", n, "sets of folds files: "
+	print("\nGenerated", n, "sets of folds files: ")
 	for i in range(n) :
 		t_root, t_chips = create_new_tree_w_element ()
 		for j in range (len (train_list[i])) :
@@ -420,8 +428,8 @@ def generate_folds_files (train_list, validate_list, filename) :
 		indent (v_root)
 		tree_train.write (t_name)
 		tree_validate.write (v_name)
-		print "\t", t_name, "\n\t", v_name
-	print ""
+		print("\t", t_name, "\n\t", v_name)
+	print("")
 
 ##------------------------------------------------------------
 ##  create each xml tree for x and y partition
@@ -448,8 +456,8 @@ def generate_partition_files (chunks, filenames, filetype="chips") :
 	tree_y = ET.ElementTree (root_y)
 	tree_x.write (file_x)
 	tree_y.write (file_y)
-	print "\nGenerated partition files: \n\t", file_x, "\n\t", file_y
-	print ""
+	print("\nGenerated partition files: \n\t", file_x, "\n\t", file_y)
+	print("")
 
 	if file_unused :
 		list_unused = chunks[g_unused]
@@ -459,8 +467,8 @@ def generate_partition_files (chunks, filenames, filetype="chips") :
 		indent (root_unused)
 		tree_unused = ET.ElementTree (root_unused)
 		tree_unused.write (file_unused)
-		print '\t', len (list_unused), 'labels unused due to less than minimum # of images, written to file : \n\t', file_unused, '\n'
-		print
+		print('\t', len (list_unused), 'labels unused due to less than minimum # of images, written to file : \n\t', file_unused, '\n')
+		print()
 	if file_small_img :
 		list_small_img = chunks[g_small_img]
 		root_small, chips_small = create_new_tree_w_element ('faces')
@@ -469,8 +477,8 @@ def generate_partition_files (chunks, filenames, filetype="chips") :
 		indent (root_small)
 		tree_small = ET.ElementTree (root_small)
 		tree_small.write (file_small_img)
-		print len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n'
-	print
+		print(len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n')
+	print()
 
 ##------------------------------------------------------------
 ##  create n sets of train & validate files
@@ -521,7 +529,7 @@ def write_file_with_label (xml_file_in, xml_file_out, key):
 	for chip in root_i.findall ('./chips/chip'):
 		label_list = chip.findall ('label')
 		if len (label_list) > 1 :
-			print "too many labels: ", label_list
+			print("too many labels: ", label_list)
 			continue
 		label = label_list[0].text
 		if label != key :
@@ -551,7 +559,7 @@ def unpath_chips (xml_files, append):
 			xml_file_unpathed = basename + "_unpathed" + ext
 		# pdb.set_trace ()
 		if get_verbosity () > 1 :
-			print "\n\twriting unpath chips to file: ", xml_file_unpathed, "\n"
+			print("\n\twriting unpath chips to file: ", xml_file_unpathed, "\n")
 		indent (root)
 		tree.write (xml_file_unpathed)
 
@@ -577,9 +585,9 @@ def load_objs_from_files (filenames, objs_d, filetype="chips"):
 	# print "in load_objs_from_files"
 	# pdb.set_trace ()
 	## load all chips into objs_d
-	print "\nLoading", filetype, "for files: "
+	print("\nLoading", filetype, "for files: ")
 	for file in filenames:
-		print "\t", file
+		print("\t", file)
 		# pdb.set_trace()
 		root, tree = xe.load_file (file)
 		chipfiles.extend (load_objs (root, objs_d, filetype))
@@ -622,15 +630,15 @@ def filter_chips (infiles, pt, distance, outfile):
 		plt.savefig ("nose_fig.png")
 		plt.show ()
 	write_chip_file (chips_list, outfile)
-	print '----------------------------------'
-	print 'eyes:', r_eye, l_eye
-	print 'center:', nose_x, nose_y
-	print 'radius:', distance
-	print '----------------------------------'
-	print len (x_list), 'chips matched from', chips_count (chips_d)
-	print 'with', label_count, 'labels from original', len (chips_d)
-	print '  chips written to file:', outfile
-	print ''
+	print('----------------------------------')
+	print('eyes:', r_eye, l_eye)
+	print('center:', nose_x, nose_y)
+	print('radius:', distance)
+	print('----------------------------------')
+	print(len (x_list), 'chips matched from', chips_count (chips_d))
+	print('with', label_count, 'labels from original', len (chips_d))
+	print('  chips written to file:', outfile)
+	print('')
 	# pdb.set_trace ()
 
 ##------------------------------------------------------------
@@ -856,8 +864,8 @@ def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, triplets, outp
 	if unmatched_cnt == 0 :
 		unmatched_cnt = len (selected_unmatched_indices)
 	## write out file
-	print '\nWriting', matched_cnt, 'matched pairs and', unmatched_cnt, 'unmatched pairs to file:'
-	print '\t', output, '\n'
+	print('\nWriting', matched_cnt, 'matched pairs and', unmatched_cnt, 'unmatched pairs to file:')
+	print('\t', output, '\n')
 	indent (root)
 	tree = ET.ElementTree (root)
 	tree.write (output)
@@ -881,14 +889,14 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt, triplet=0) :
 	if matched_cnt == 0 :
 		matched_cnt = max_matched_cnt
 	if matched_cnt > max_matched_cnt :
-		print '  *** requesting more matched pairs than exists.'
-		print '  *** creating max number of matched pairs.'
+		print('  *** requesting more matched pairs than exists.')
+		print('  *** creating max number of matched pairs.')
 		matched_cnt = max_matched_cnt
 	if unmatched_cnt == 0 :
 		unmatched_cnt = max_unmatched_cnt
 	if unmatched_cnt > max_unmatched_cnt :
-		print '  *** requesting more unmatched pairs than exists.'
-		print '  *** creating max number of unmatched pairs.'
+		print('  *** requesting more unmatched pairs than exists.')
+		print('  *** creating max number of unmatched pairs.')
 		unmatched_cnt = max_unmatched_cnt
 	# pdb.set_trace ()
 	# need to start with matched set to ensure there is a set
@@ -924,7 +932,7 @@ def get_selected_pair_indices (chips_d, matched_cnt, unmatched_cnt, triplet=0) :
 					found_match = True
 					break
 			if not found_match :
-				print 'Unable to find unmatch set for anchor', set1, ', trying again.'
+				print('Unable to find unmatch set for anchor', set1, ', trying again.')
 				continue
 		selected_matched_list.append (label_list.pop(z))
 		i += 1
@@ -1028,7 +1036,7 @@ def get_dist_hist (noses, band_width=0):
 		d = math.sqrt ((pt_x-nose_x)**2 + (pt_y-nose_y)**2)
 		band = int (d/band_width)
 		bands[band] += 1
-	print 'nose count: ', len (x_list)
+	print('nose count: ', len (x_list))
 	end = len (bands) - 1
 	# pdb.set_trace ()
 	for i in range (end, 0, -1) :
@@ -1037,11 +1045,11 @@ def get_dist_hist (noses, band_width=0):
 			break
 	cnt = 0
 	for i in range (len(bands)) :
-		print '---   ', i, ':', bands[i]
+		print('---   ', i, ':', bands[i])
 		cnt += bands[i]
-	print '# bands : ', end
-	print 'band width     : ', band_width
-	print 'total in bands : ', cnt
+	print('# bands : ', end)
+	print('band width     : ', band_width)
+	print('total in bands : ', cnt)
 	return band_width, bands[:end]
 
 ##------------------------------------------------------------
@@ -1078,10 +1086,10 @@ def get_chip_face_stats (chips_d, verbose=1):
 	nose_x = sum (x_list) / len (x_list)
 	nose_y = sum (y_list) / len (y_list)
 	if verbose > 0 :
-		print 'average nose : ', nose_x, nose_y
-		print 'median  nose : ', np.median (x_list), np.median (y_list)
-		print 'reye : ', reye_x, reye_y
-		print 'leye : ', leye_x, leye_y
+		print('average nose : ', nose_x, nose_y)
+		print('median  nose : ', np.median (x_list), np.median (y_list))
+		print('reye : ', reye_x, reye_y)
+		print('leye : ', leye_x, leye_y)
 	return [leye_x, leye_y], [reye_x, reye_y], [nose_x, nose_y], [x_list, y_list]
 
 ##------------------------------------------------------------
@@ -1099,16 +1107,16 @@ def print_pairs_stats (objs_d) :
 
 	flatten_unmatched = [label for tupl in unmatched_labels for label in tupl]
 	# pdb.set_trace ()
-	for i in set (matched_labels):
-		print i, ':', matched_labels.count (i)
-	print '------------------------'
-	print 'total : ', len (matched_labels)
+	for i in sorted (set (matched_labels)):
+		print(i, ':', matched_labels.count (i))
+	print('------------------------')
+	print('total : ', len (matched_labels))
 
-	print '------------------------'
-	print 'unmatched stats:'
-	for i in set (flatten_unmatched):
-		print i, ':', flatten_unmatched.count (i)
-	print 'unmatched pairs: ', len (unmatched_labels)
+	print('------------------------')
+	print('unmatched stats:')
+	for i in sorted (set (flatten_unmatched)):
+		print(i, ':', flatten_unmatched.count (i))
+	print('unmatched pairs: ', len (unmatched_labels))
 
 ##------------------------------------------------------------
 ##  return label stats in file
@@ -1119,14 +1127,14 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 	if filetype == "pairs" :
 		print_pairs_stats (objs_d)
 		return
-	print ''
+	print('')
 	# pdb.set_trace ()
 	all_objs = sorted(objs_d.items())
 	img_cnt_per_label = [len (objs) for key, objs in all_objs]
 	obj_count = sum (img_cnt_per_label)
 	if get_verbosity () > 1 :
 		for label, chips in all_objs :
-			print label, '	:', len (chips)
+			print(label, '	:', len (chips))
 	u_combos = 0
 	chips_count_list = img_cnt_per_label
 	diff_chip_count  = obj_count
@@ -1135,14 +1143,14 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 		diff_chip_count -= i_count				# count of different labels
 		u_combos += (i_count * diff_chip_count)
 
-	print '-----------------------------'
-	print '            total', filetype, ':', obj_count
-	print '                # bears :', len (objs_d)
-	print ' average', filetype, 'per bear :', obj_count / len (objs_d)
+	print('-----------------------------')
+	print('            total', filetype, ':', obj_count)
+	print('                # bears :', len (objs_d))
+	print(' average', filetype, 'per bear :', obj_count / len (objs_d))
 	combos = sum ([(n*(n-1)/2) for n in img_cnt_per_label if n > 1])
-	print '  median', filetype, 'per bear :', np.median (img_cnt_per_label)
-	print '  possible matched sets :', combos
-	print 'possible unmatched sets :', u_combos
+	print('  median', filetype, 'per bear :', np.median (img_cnt_per_label))
+	print('  possible matched sets :', combos)
+	print('possible unmatched sets :', u_combos)
 	# display_dist_hist (img_cnt_per_label, 2, 0, 'bear index', '# images')
 	have_display = "DISPLAY" in os.environ
 	if (get_verbosity () > 2) :
@@ -1154,20 +1162,20 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 			plt.ylabel('# bears (total=' + str (len (objs_d)) + ')')
 			hist_obj_cnt_file = 'hist_obj_cnt.png'
 			plt.savefig (hist_obj_cnt_file)
-			print '\n--- histogram of image count written to: ', hist_obj_cnt_file, '\n'
+			print('\n--- histogram of image count written to: ', hist_obj_cnt_file, '\n')
 			plt.show ()
 			if filetype == 'chips' :
 				chip_sizes = [math.sqrt (int (res.text)) for key, chips in all_objs \
 					for chip in chips for res in chip.findall ('resolution')]
-				print '\naverage face size (NxN): ', int (sum (chip_sizes)/len (chip_sizes))
-				print 'median face size  (NxN): ', int (np.median (chip_sizes))
+				print('\naverage face size (NxN): ', int (sum (chip_sizes)/len (chip_sizes)))
+				print('median face size  (NxN): ', int (np.median (chip_sizes)))
 				plt.title ('histogram of of face sizes')
 				plt.xlabel ('N (image size=NxN)')
 				plt.ylabel ('# chips (total=' + str (obj_count) + ')' )
 				hist_info = plt.hist (chip_sizes, 20, facecolor='green', alpha=0.5)
 				hist_chip_sizes_file = 'hist_chip_sizes.png'
 				plt.savefig (hist_chip_sizes_file)
-				print '\n--- histogram of chip sizes written to: ', hist_chip_sizes_file, '\n'
+				print('\n--- histogram of chip sizes written to: ', hist_chip_sizes_file, '\n')
 				plt.show ()
 				tiny_chips = [chip for key, chips in all_objs \
 					for chip in chips for res in chip.findall ('resolution') if int (res.text) < 22500]
@@ -1176,14 +1184,14 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 				# pdb.set_trace ()
 
 		else :
-			print '\n  ***  unable to show histogram: no access to display.  *** \n'
+			print('\n  ***  unable to show histogram: no access to display.  *** \n')
 
 	if filetype == 'faces':
 		print_faces_stats (write_stats)
 	if print_files :
 		objfiles.sort ()
 		for objfile in objfiles:
-			print '\t', objfile
+			print('\t', objfile)
 
 ##------------------------------------------------------------
 ##
@@ -1194,9 +1202,9 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 ##
 ##------------------------------------------------------------
 def print_faces_stats (write_unused_images) :
-	print "-----------------------------"
-	print "....files with no faces : ", len (g_stats_few)
-	print "....files with multiple faces: ", len (g_stats_many)
+	print("-----------------------------")
+	print("....files with no faces : ", len (g_stats_few))
+	print("....files with multiple faces: ", len (g_stats_many))
 	# pdb.set_trace ()
 	if write_unused_images:
 		if len (g_stats_few) :
@@ -1205,15 +1213,15 @@ def print_faces_stats (write_unused_images) :
 			for face in g_stats_few:
 				stats_fp.write (face + '\n')
 			stats_fp.close ()
-			print "... generated file:", stats_name
+			print("... generated file:", stats_name)
 		if len (g_stats_many) :
 			stats_name = datetime.datetime.now().strftime("stats_many_%Y%m%d_%H%M")
 			stats_fp = open (stats_name, "w")
 			for face in g_stats_many:
 				stats_fp.write (face + '\n')
 			stats_fp.close ()
-			print "... generated file:", stats_name
-	print ''
+			print("... generated file:", stats_name)
+	print('')
 
 ##------------------------------------------------------------
 ##  return xml files in directory
@@ -1245,7 +1253,7 @@ def get_new_face (face, faces_new_d) :
 	imagefile_old = face.attrib.get ('file')
 	label_old = get_image_label_text (face)
 	pdb.set_trace ()
-	for label_new, faces in faces_new_d.items () :
+	for label_new, faces in list(faces_new_d.items ()) :
 		if label_old != label_new :
 			continue;
 		# look for file name
@@ -1264,17 +1272,17 @@ def validate_file (xml_file, output_file) :
 	filetype = 'chips'
 	objfiles = load_objs_from_files ([xml_file], chips_d, filetype)
 	valid_chips = []
-	print ''
-	for key, chips in chips_d.items () :  ## iterate through all chips
+	print('')
+	for key, chips in list(chips_d.items ()) :  ## iterate through all chips
 		for chip in chips :
 			# pdb.set_trace ()
 			chipfile = chip.attrib.get ('file')
 			if os.path.exists (chipfile) :
 				valid_chips.append (chip)
 			else :
-				print '\t...unable to find file: ', chipfile
-	print '\n\tGenerated valid chip file: ', output_file
-	print ''
+				print('\t...unable to find file: ', chipfile)
+	print('\n\tGenerated valid chip file: ', output_file)
+	print('')
 	root, tree = create_new_tree_w_element (filetype)
 	for chip in valid_chips :
 		tree.append (chip)
@@ -1292,20 +1300,48 @@ def replicate_file (orig_file, new_files, output_file) :
 	objfiles1 = load_objs_from_files (orig_file, faces_orig_d, filetype)
 	objfiles2 = load_objs_from_files (new_files, faces_new_d, filetype)
 	newfaces = []
-	for key, faces in faces_orig_d.items () :  ## iterate through old list of tests
+	for key, faces in list(faces_orig_d.items ()) :  ## iterate through old list of tests
 		for face in faces :
 			# pdb.set_trace ()
 			newface = get_new_face (face, faces_new_d) ## get new data for same file
 			if newface :
 				newfaces.append (newface)
 			else :
-				print 'unable to match file:  ', face.attrib.get ('file')
+				print('unable to match file:  ', face.attrib.get ('file'))
 	root, tree = create_new_tree_w_element (filetype)
 	for face in newfaces :
 		tree.append (face)
 	indent (root)
 	tree = ET.ElementTree (root)
 	tree.write (output_file)
+
+##------------------------------------------------------------
+##  convert a string to floats for each label
+##------------------------------------------------------------
+def str_to_float (floats_str) :
+	float_list = []
+	float_strs = floats_str.split ()
+	for float_str in float_strs:
+		f = float (float_str)
+		float_list.append (f)
+	return float_list
+
+##------------------------------------------------------------
+##  plot embeddings
+##------------------------------------------------------------
+def plot_embeddings (input_files) :
+	embeds_d = defaultdict(list)
+	load_objs_from_files (input_files, embeds_d, 'embeddings')
+	label_list = []
+	embeds_list = []
+	for label, embeds in sorted(embeds_d.items()): ## list of embeds
+		for embed in embeds :
+			embeds_list.append (embed)
+			label_list.append (label)
+	tsne = TSNE(n_components=2, random_state=0)
+	features = np.array(embeds_list)
+	reduced = tsne.fit_transform(features)
+	pdb.set_trace ()	
 
 ##------------------------------------------------------------
 ##   main code

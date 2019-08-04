@@ -1,6 +1,7 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import csv
+import os
 import sys
 import argparse
 import xml_utils as u
@@ -19,7 +20,7 @@ def write_images (images_d, filename) :
 
 	for label1, content1 in sorted (images_d.items ()) :
 		for label2, content2 in content1.items () :
-			for i in range (len (content2)/3) :
+			for i in range (int (len (content2)/3)) :
 				image1 = content2[i*3]
 				image2 = content2[i*3+1]
 				dist = content2[i*3+2]
@@ -36,7 +37,7 @@ def write_images (images_d, filename) :
 ##    l1, l2, result, expected result
 ##  print matrix of alls_labels x all_labels populated with accuracy
 ##------------------------------------------------------------
-def write_matrix (matrix_d, filename) :
+def write_matrix (matrix_d, filename, write_accuracy=True) :
 	right = 1
 	wrong = 0
 	labels = []
@@ -57,11 +58,15 @@ def write_matrix (matrix_d, filename) :
 		for label2 in uniq_labels :
 			if len (matrix_d[label1][label2]) :
 				result = matrix_d[label1][label2]
-				accuracy = float (result[right]) / float (result[right]+result[wrong])
-				accuracy_str = "%1.3f, " % (accuracy)
-				matrix_fp.write (accuracy_str)
+				if write_accuracy :
+					accuracy = float (result[right]) / float (result[right]+result[wrong])
+					accuracy_str = "%1.3f, " % (accuracy)
+					matrix_fp.write (accuracy_str)
+				else :
+					matrix_fp.write (str (result[right]+result[wrong]))
+					matrix_fp.write (', ')
 			else :
-				matrix_fp.write ('  ,')
+				matrix_fp.write ('  , ')
 		matrix_fp.write ('\n')
 		
 
@@ -77,51 +82,62 @@ def gen_matrix (files) :
 	images_true_neg = defaultdict (lambda: defaultdict (list))
 	images_false_pos = defaultdict (lambda: defaultdict (list))
 	images_false_neg = defaultdict (lambda: defaultdict (list))
+	print ('\n\tgenerated files: ')
 	for filename in files:
-			## with open(file,newline='') as csvfile:
-			with open(filename) as csvfile :
-				fileContent = csv.reader(csvfile, delimiter=',', quotechar='|')
+		## with open(file,newline='') as csvfile:
+		with open(filename) as csvfile :
+			fileContent = csv.reader(csvfile, delimiter=',', quotechar='|')
+			# pdb.set_trace ()
+			for row in fileContent:
+				label1 = row[0]
+				label2 = row[1]
+				returnValue = row[2]
+				expectedValue = row[3]
+				image1 = row[4]
+				image2 = row[5]
+				dist = row[6]
 				# pdb.set_trace ()
-				for row in fileContent:
-					label1 = row[0]
-					label2 = row[1]
-					returnValue = row[2]
-					expectedValue = row[3]
-					image1 = row[4]
-					image2 = row[5]
-					dist = row[6]
-					# pdb.set_trace ()
-					if len (results[label1][label2]) == 0 :
-						results[label1][label2].append (0)
-						results[label1][label2].append (0)
-					result = results[label1][label2]
-					# pdb.set_trace ()
-					if returnValue == expectedValue :  # correct -> true
-						result[right] += 1
-						if returnValue == '1' : # guessed positive
-							images_true_pos[label1][label2].append (image1)
-							images_true_pos[label1][label2].append (image2)
-							images_true_pos[label1][label2].append (dist)
-						else :  # guessed negative
-							images_true_neg[label1][label2].append (image1)
-							images_true_neg[label1][label2].append (image2)
-							images_true_neg[label1][label2].append (dist)
-					else: 	# incorrect -> false
-						result[wrong] += 1
-						if returnValue == '1' : # guessed positive
-							images_false_pos[label1][label2].append (image1)
-							images_false_pos[label1][label2].append (image2)
-							images_false_pos[label1][label2].append (dist)
-						else :  # guessed negative
-							images_false_neg[label1][label2].append (image1)
-							images_false_neg[label1][label2].append (image2)
-							images_false_neg[label1][label2].append (dist)
-	write_matrix (results, "result_matrix.csv")
-	write_images (images_true_pos, "true_pos.html")
-	write_images (images_true_neg, "true_neg.html")
-	write_images (images_false_pos, "false_pos.html")
-	write_images (images_false_neg, "false_neg.html")
+				if len (results[label1][label2]) == 0 :
+					results[label1][label2].append (0)
+					results[label1][label2].append (0)
+				result = results[label1][label2]
+				# pdb.set_trace ()
+				if returnValue == expectedValue :  # correct -> true
+					result[right] += 1
+					if returnValue == '1' : # guessed positive
+						images_true_pos[label1][label2].append (image1)
+						images_true_pos[label1][label2].append (image2)
+						images_true_pos[label1][label2].append (dist)
+					else :  # guessed negative
+						images_true_neg[label1][label2].append (image1)
+						images_true_neg[label1][label2].append (image2)
+						images_true_neg[label1][label2].append (dist)
+				else: 	# incorrect -> false
+					result[wrong] += 1
+					if returnValue == '1' : # guessed positive
+						images_false_pos[label1][label2].append (image1)
+						images_false_pos[label1][label2].append (image2)
+						images_false_pos[label1][label2].append (dist)
+					else :  # guessed negative
+						images_false_neg[label1][label2].append (image1)
+						images_false_neg[label1][label2].append (image2)
+						images_false_neg[label1][label2].append (dist)
 
+		newfile = os.path.basename (filename)
+		write_matrix (results, newfile + "_ratio.csv")
+		print ('\t\t', newfile + '_ratio.csv')
+		write_matrix (results, newfile + "_count.csv", False)
+		print ('\t\t', newfile + '_count.csv')
+		results.clear ()
+	curtime = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+	write_images (images_true_pos, 'true_pos_'+curtime+'.html')
+	write_images (images_true_neg, 'true_neg_'+curtime+'.html')
+	write_images (images_false_pos, 'false_pos_'+curtime+'.html')
+	write_images (images_false_neg, 'false_neg_'+curtime+'.html')
+	print ('\t\t', 'true_pos_'+curtime+'.html')
+	print ('\t\t', 'true_neg_'+curtime+'.html')
+	print ('\t\t', 'false_pos_'+curtime+'.html')
+	print ('\t\t', 'false_neg_'+curtime+'.html')
 
 ##------------------------------------------------------------
 ##  xml_chip_face_stats *.xml dirs
@@ -135,7 +151,8 @@ def main (argv) :
 	parser.add_argument ('files', nargs='+')
 		# help="increase output verbosity"
 	args = parser.parse_args()
-	gen_matrix (args.files)
+	print ("files: ", args.files)
+	gen_matrix (args.files) 
 
 if __name__ == "__main__":
 	main (sys.argv)

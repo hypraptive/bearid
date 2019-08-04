@@ -46,7 +46,7 @@ def add_box_label (tree, label_str):
 			for box in image.findall ('box'):
 				curLabel = box.findall ('label')
 				if len(curLabel) > 0:
-					print image.text + " has existing label of " + curLabel.text
+					print(image.text + " has existing label of " + curLabel.text)
 					continue
 				label = ET.SubElement (box, 'label')
 				# pdb.set_trace ()
