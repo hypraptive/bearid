@@ -10,6 +10,7 @@
 */
 
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <iostream>
@@ -22,6 +23,7 @@
 
 using namespace std;
 using namespace dlib;
+using namespace boost::algorithm;
 using boost::property_tree::ptree;
 using boost::property_tree::write_xml;
 using boost::property_tree::xml_writer_settings;
@@ -302,11 +304,22 @@ int populate_chip (ptree &xml_chip, image_dataset_metadata::box box, dlib::vecto
 int main(int argc, char** argv) try
 {
     int total_faces = 0;
+	std::string img_root = "/home/data/bears/imageSource/";
 
-    if (argc != 2)
+	if (argc == 4)
+	{
+		if (strcmp (argv[1], "-root") != 0)
+		{
+			cout << "Call this program like this:" << endl;
+			cout << "./bearchip [-root <img_root_dir> <metadata_file>" << endl;
+			return 0;
+		}
+		img_root = argv[2];
+	}
+    else if (argc != 2)
     {
         cout << "Call this program like this:" << endl;
-        cout << "./bearchip <metadata_file>" << endl;
+        cout << "./bearchip [-root <img_root_dir> <metadata_file>" << endl;
         return 0;
     }
 
@@ -335,10 +348,12 @@ int main(int argc, char** argv) try
         matrix<rgb_pixel> img;
 		std::vector<dlib::vector<double,2> > face_features; // for all features
 
-        boost::filesystem::path orig_path(data.images[i].filename.c_str());
-        std::string orig_ext = orig_path.extension().string();
+        std::string orig_path(data.images[i].filename.c_str());
+        boost::filesystem::path b_orig_path (orig_path);
+        std::string orig_ext = b_orig_path.extension().string();
         // cout << "File: " << orig_path.string() << endl;
         // cout << "Image type " << orig_ext << endl;
+		// remove root from path.
 
         load_image(img, data.images[i].filename.c_str());
 
@@ -359,7 +374,13 @@ int main(int argc, char** argv) try
 		// iterate through each face in image
         for (size_t i = 0; i < faces.size(); ++i) 
         {
-          std::string chip_file = orig_path.stem().string() + "_chip_" + to_string(i) + ".jpg";
+          std::string img_subdir_file = erase_first_copy (orig_path, img_root); // -> bf/fitz/bf480/IMG123.JPG
+		  
+          boost::filesystem::path p_img_subdir_file (img_subdir_file); // bf/fitz/bf_480/IMG123.JPG
+
+		  boost::filesystem::path p_img_subdir = p_img_subdir_file.parent_path (); // bf/fitz/bf_480
+		  boost::filesystem::create_directories (p_img_subdir.string());
+          std::string chip_file = p_img_subdir_file.stem().string() + "_chip_" + to_string(i) + ".jpg";
 
 		  ptree &xml_chip = chips.add ("chip", "");
 		  // create chip info for chip.xml
@@ -368,10 +389,10 @@ int main(int argc, char** argv) try
 		  auto nose = face_features[j+1];
 		  auto reye = face_features[j+2];
 		  boost::filesystem::path cur_dir = boost::filesystem::current_path();
-		  std::string pathed_chip_file = cur_dir.string() + "/" + chip_file;
-		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, pathed_chip_file, orig_path.string ());
-          cout << argv[i] << ": extracted chip " << to_string(i) << " to " << chip_file << endl;
-          save_jpeg(faces[i], chip_file, 95);
+		  std::string rel_pathed_chip_file = cur_dir.string() + "/" + p_img_subdir.string () + "/" + chip_file;
+		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, rel_pathed_chip_file, orig_path);
+          cout << argv[i] << ": extracted chip " << to_string(i) << " to " << rel_pathed_chip_file << endl;
+          save_jpeg(faces[i], rel_pathed_chip_file, 95);
         }
     }
 	boost::filesystem::path xml_file (argv[1]);
