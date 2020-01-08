@@ -78,7 +78,7 @@ matrix<rgb_pixel> downscale_large_image (
       else
         pxRatio = (float)MAX_SHORT_SIDE / (float)img.nc();
     }
-    cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
+    // cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
     matrix<rgb_pixel> smimg((int)(img.nr() * pxRatio), (int)(img.nc() * pxRatio));
     resize_image(img, smimg);
     bDownscaled = true;
@@ -296,7 +296,7 @@ const matrix<double,1,3> my_test_object_detection_function (
 	{
 		std::vector<mmod_rect> hits;
         matrix<rgb_pixel> img;
-        cout << img_data.images[i].filename.c_str() << "..." << endl;
+        // cout << img_data.images[i].filename.c_str() << "..." << endl;
         load_image(img, img_data.images[i].filename.c_str());
 
 		float pxRatio;
@@ -396,10 +396,11 @@ const matrix<double,1,3> my_test_object_detection_function (
 		for (unsigned long i = 0; i < img_data.images.size(); ++i)
 		{
 			matrix<rgb_pixel> img;
-			cout << img_data.images[i].filename.c_str() << "..." << endl;
+			// cout << i << ": " << img_data.images[i].filename.c_str() << "..." << endl;
 			load_image(img, img_data.images[i].filename.c_str());
 
-			float pxRatio;
+			float pxRatio = 1.0;
+			// --- scale image -----
 			img = downscale_large_image (img, pxRatio);
 			// extract box rects from img_data
 			auto objects = img_data.images[i].boxes;
@@ -423,6 +424,8 @@ const matrix<double,1,3> my_test_object_detection_function (
 				{
 					
 					double score = length(det.part(k) - itr->second)/scale;
+					// cout << "score for " << itr->first << ": " << score; 
+					// cout << " : " <<  det.part(k) << endl;
 					rs.add(score);
 					k++;
                 }
@@ -506,7 +509,7 @@ int main(int argc, char** argv)
 		}
 		cout << "num boxes :  " << num_boxes << endl;
 		*/
-		/*
+		// ---  running test on object detection -----
 		matrix<double, 1, 3> res = my_test_object_detection_function(net, data, face_boxes_test);
 		cout << "precision =  correct hits / total hits         " << endl;
 		cout << "recall    =  correct hits / total true targets " << endl;
@@ -514,7 +517,6 @@ int main(int argc, char** argv)
 		cout << "                   precision    average precision" << endl;
 		cout << "                           recall " << endl;
 		cout << "testing results:  " << res << endl;
-		*/
 		// cout << "precision  (correct hits / total hits         :  " << res.data.data[0] << endl;
 		// cout << "recall     (correct hits / total true targets :  " << res.data.data[1] << endl;
 		// cout << "av precision:  " << res.data.data[2] << endl;
