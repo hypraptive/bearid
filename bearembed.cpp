@@ -38,6 +38,7 @@ using namespace dlib;
 using namespace std;
 using namespace boost::posix_time;
 using namespace boost::gregorian;
+using namespace boost::algorithm;
 using boost::property_tree::ptree;
 
 // ----------------------------------------------------------------------------------------
@@ -462,11 +463,13 @@ std::vector<std::vector<string>> load_chips_xml (
       parser.add_option("output","Used with train, specifies trained weights file.  Use with -embed, specifies directory to put embeddings. Defaults to local.",1);
       // --anet only used with --pretrain
       parser.add_option("anet","Use affine net");
-      // defaults to 10000
+      // --threshold <num_iterations>.  defaults to 10000
       parser.add_option("threshold","Iterations without progess before stopping [default = 10000]",1);
-      // defaults to 5
+      // --numid <count_per_minibatch> . defaults to 5
       parser.add_option("numid","Number if IDs used per mini batch [default = 5]",1);
       parser.add_option("numface","Number of face images used per ID [default = 5]",1);
+	  // --root <chip_root_path> . defaults to /home/data/bears/faceDogHip
+      parser.add_option("root","Root of chip files, used in extracting embed file path.", 1);
 
       parser.parse(argc, argv);
 
@@ -1109,6 +1112,7 @@ else if (parser.option("embed"))
   // Generate embeddings in a directory
   //   use optional --output, else create dir in current directory
   boost::filesystem::path src_path(parser[0]);
+  std::string chip_root = "/home/data/bears/faceDogHip/dhTreeChip/";
   cout << "Generating embeddings..." << endl;
   std::string dst_path;
   if (parser.option ("output"))
@@ -1117,8 +1121,12 @@ else if (parser.option("embed"))
     if (boost::filesystem::exists(dst_path)) // create new directory
     {
       cout << "Directory " << dst_path << " already exists." << endl;
+	  dst_path.clear ();
     }
-    dst_path.clear ();
+  }
+  if (parser.option ("root"))
+  {
+  	chip_root = parser.option ("root").argument();
   }
   if (dst_path.empty())
   {
@@ -1199,85 +1207,89 @@ else if (parser.option("embed"))
       {
         embedded = embedding_anet(image);
       }
-      boost::filesystem::path emb_file(emb_str);
-      // boost::replace_first(emb_file, src_path, dst_path);
-      boost::filesystem::path emb_path = emb_dir / emb_file.filename();
+	  // extract subdir path of file.  if nothing matched, the result
+	  //   is the orig path.
+      std::string chip_subdir_file = erase_first_copy (emb_str, chip_root); // -> bf/fitz/bf480/IMG123.JPG
+
+      boost::filesystem::path emb_subdir_file (chip_subdir_file);
+      boost::filesystem::path emb_path = emb_dir / emb_subdir_file;
       emb_path.replace_extension("dat");
+      boost::filesystem::create_directories(emb_path.parent_path());
       /*
       if (!boost::filesystem::exists(emb_path.parent_path()))
       {
       //cout << "mkdir " << emb_path.parent_path() << endl;
       boost::filesystem::create_directories(emb_path.parent_path());
-    }
-    */
-    ptree &xml_embed = embeds.add ("embedding", "");
-	char embed_str[2048]={0};
-	float embed_val;
-	std::string s, embed_stdstr;
+		}
+		*/
+		ptree &xml_embed = embeds.add ("embedding", "");
+		char embed_str[2048]={0};
+		float embed_val;
+		std::string s, embed_stdstr;
 
 
-    for (long r = 0; r < embedded.nr(); ++r)
-    {
-        // loop over all the columns
-        for (long c = 0; c < embedded.nc(); ++c)
-        {
-			embed_val = embedded (r,c);
-			s = boost::lexical_cast<std::string>(embed_val);
-			embed_stdstr.append (" ");
-			embed_stdstr.append (s);
-			// sprintf (embed_str + strlen (embed_str), " %a", embed_val);
-        }
-    }
-	xml_embed.add ("embed_val", embed_stdstr);
-    xml_embed.add ("<xmlattr>.file", emb_path.string());
-	xml_embed.add ("label", obj_labels[i]);
-	xml_embed.add ("chip_source", img_str);
+		for (long r = 0; r < embedded.nr(); ++r)
+		{
+			// loop over all the columns
+			for (long c = 0; c < embedded.nc(); ++c)
+			{
+				embed_val = embedded (r,c);
+				s = boost::lexical_cast<std::string>(embed_val);
+				embed_stdstr.append (" ");
+				embed_stdstr.append (s);
+				// sprintf (embed_str + strlen (embed_str), " %a", embed_val);
+			}
+		}
+		xml_embed.add ("embed_val", embed_stdstr);
+		xml_embed.add ("<xmlattr>.file", emb_path.string());
+		xml_embed.add ("label", obj_labels[i]);
+		xml_embed.add ("chip_source", img_str);
 
-    serialize(emb_path.string()) << embedded;
-    //cout << "Embedded: " << emb_path.string() << endl;
-    if (0) //((i==0) && (j==0))
-    {
-      cout << "Check embedding for " << img_str << endl;
-      matrix<float,0,1> new_embedded;
-      deserialize(emb_path.string()) >> new_embedded;
-      cout << "embedded: " << endl;
-      cout << csv << embedded << endl;
-      cout << "new embedded: " << endl;
-      cout << csv << new_embedded << endl;
-      if (embedded == new_embedded)
-      {
-        cout << "YAY!" << endl;
-      } else
-      {
-        cout << "BOO!" << endl;
-      }
-    }
+		serialize(emb_path.string()) << embedded;
+		//cout << "Embedded: " << emb_path.string() << endl;
+		if (0) //((i==0) && (j==0))
+		{
+		  cout << "Check embedding for " << img_str << endl;
+		  matrix<float,0,1> new_embedded;
+		  deserialize(emb_path.string()) >> new_embedded;
+		  cout << "embedded: " << endl;
+		  cout << csv << embedded << endl;
+		  cout << "new embedded: " << endl;
+		  cout << csv << new_embedded << endl;
+		  if (embedded == new_embedded)
+		  {
+			cout << "YAY!" << endl;
+		  } else
+		  {
+			cout << "BOO!" << endl;
+		  }
+		}
+	}
   }
-}
 
-boost::filesystem::path xml_file (parser[0]);
-std::string embed_xml_file = xml_file.filename().stem().string() + "_embeds.xml";
-xml_add_headers (); // put at end since writing reverse order added
-write_xml(embed_xml_file, g_xml_tree,std::locale(),
-boost::property_tree::xml_writer_make_settings<std::string>(' ', 4, "utf-8"));
-cout << "\ngenerated: \n\t-- " << embed_xml_file << endl;
-cout << "\n\t-- " << embeddings_count << " embedding files under " << dst_path << "\n" << endl;
-}
-else
-{
-  cout << "Need one of <train|test|embed> to run bearembed." << endl;
-}
-time_t timeEnd = time(NULL);
+  boost::filesystem::path xml_file (parser[0]);
+  std::string embed_xml_file = xml_file.filename().stem().string() + "_embeds.xml";
+  xml_add_headers (); // put at end since writing reverse order added
+  write_xml(embed_xml_file, g_xml_tree,std::locale(),
+  boost::property_tree::xml_writer_make_settings<std::string>(' ', 4, "utf-8"));
+  cout << "\ngenerated: \n\t-- " << embed_xml_file << endl;
+  cout << "\n\t-- " << embeddings_count << " embedding files under " << dst_path << "\n" << endl;
+  }
+  else
+  {
+	cout << "Need one of <train|test|embed> to run bearembed." << endl;
+  }
+  time_t timeEnd = time(NULL);
 
-cout << "End time: " << timeStart << endl;
-cout << "Elapsed time (s): " << difftime(timeEnd, timeStart) << endl;
-}
+  cout << "End time: " << timeStart << endl;
+  cout << "Elapsed time (s): " << difftime(timeEnd, timeStart) << endl;
+  }
 
-catch (exception& e)
-{
-  // Note that this will catch any cmd_line_parse_error exceptions and print
-  // the default message.
-  cout << e.what() << endl;
-}
+  catch (exception& e)
+  {
+	// Note that this will catch any cmd_line_parse_error exceptions and print
+	// the default message.
+	cout << e.what() << endl;
+  }
 
 }
