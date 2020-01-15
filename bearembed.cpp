@@ -1118,15 +1118,10 @@ else if (parser.option("embed"))
   if (parser.option ("output"))
   {
     dst_path = parser.option("output").argument();
-    if (boost::filesystem::exists(dst_path)) // create new directory
+    if (!boost::filesystem::exists(dst_path)) // create new directory
     {
-      cout << "Directory " << dst_path << " already exists." << endl;
-	  dst_path.clear ();
+	  boost::filesystem::create_directories(dst_path);
     }
-  }
-  if (parser.option ("root"))
-  {
-  	chip_root = parser.option ("root").argument();
   }
   if (dst_path.empty())
   {
@@ -1140,8 +1135,12 @@ else if (parser.option("embed"))
     strftime(buffer,sizeof(buffer),"%Y%m%d%I%M",timeinfo);
     dst_path = "embed_";
     dst_path.append (buffer);
+	boost::filesystem::create_directories(dst_path);
   }
-  boost::filesystem::create_directories(dst_path);
+  if (parser.option ("root"))
+  {
+  	chip_root = parser.option ("root").argument();
+  }
 
   // create XML content file
   std::string cmd;
