@@ -123,9 +123,6 @@ int main(int argc, char** argv)
   std::vector<double> labels;
   std::vector <string> fields;
   std::vector <string> ids;
-  std::vector<sample_type> new_samples;
-  std::vector<double> new_labels;
-  std::vector <string> new_ids;
 
   // Onve vs One trainer
   typedef one_vs_one_trainer<any_trainer<sample_type> > ovo_trainer;
@@ -145,20 +142,20 @@ int main(int argc, char** argv)
 	//   labels (list of label indices of respective embedding. 0,1,1,2)
 	//   ids (list of labels [b1, b2, b3])
 
-	// NEW: get content from metadata file
+	// get content from metadata file
 	std::vector<std::vector<string>> emb_objs;
-	emb_objs = load_embeds_map (argv[1], new_ids);
+	emb_objs = load_embeds_map (argv[1], ids);
 	// create flattened list of embeddings
 	for (size_t i=0; i < emb_objs.size(); ++i)
 	{
 		cout << "ID: " << i << "\t: " << emb_objs[i].size() << " Files \t: ";
-		cout << new_ids[i] << endl;
+		cout << ids[i] << endl;
 		for (size_t j = 0; j < emb_objs[i].size(); ++j)
 		{
 			sample_type embedded;
 			deserialize(emb_objs[i][j]) >> embedded;
-			new_samples.push_back(embedded);
-			new_labels.push_back(i);
+			samples.push_back(embedded);
+			labels.push_back(i);
 		}
 	}
 
@@ -167,36 +164,28 @@ int main(int argc, char** argv)
   // Now let's do 5-fold cross-validation using the one_vs_one_trainer we just setup.
   // As an aside, always shuffle the order of the samples before doing cross validation.
 
-	{
-  ovo_trainer new_trainer;
-  svm_c_linear_trainer<kernel_type> new_linear_trainer;
-  new_linear_trainer.set_c(100);
-
-  // Use the SVM classifier for the OVO trainer
-  new_trainer.set_trainer(new_linear_trainer);
-
-
-  randomize_samples(new_samples, new_labels);
-  cout << "\ncross validation: \n" << cross_validate_multiclass_trainer(new_trainer, new_samples, new_labels, folds) << endl;
+  randomize_samples(samples, labels);
 
   // Create a decision function
-  one_vs_one_decision_function<ovo_trainer> df = new_trainer.train(new_samples, new_labels);
+  one_vs_one_decision_function<ovo_trainer> df = trainer.train(samples, labels);
 
   // Test one_vs_one_decision_function
-  cout << "predicted label: "<< df(new_samples[0])  << ", true label: "<< new_labels[0] << endl;
+  // cout << "predicted label: "<< df(samples[0])  << ", true label: "<< labels[0] << endl;
 
   // Save SVM to disk
   one_vs_one_decision_function<ovo_trainer,
   decision_function<kernel_type>    // This is the output of the linear_trainer
   > df2, df3;
   df2 = df;
-  serialize("bear_svm_new.dat") << df2;
-  serialize("bear_svm_ids_new.dat") << new_ids;
+  serialize("bear_svm.dat") << df2;
+  serialize("bear_svm_ids.dat") << ids;
 
   // Check serialization
   std::vector <string> ids2;
-  deserialize("bear_svm_ids_new.dat") >> ids2;
-  deserialize("bear_svm_new.dat") >> df3;
-  cout << "predicted label: "<< df3(new_samples[0])  << ", true label: "<< new_labels[0] << " == " << ids2[new_labels[0]] << "\n" << endl;
-	}
+  deserialize("bear_svm_ids.dat") >> ids2;
+  deserialize("bear_svm.dat") >> df3;
+  // cout << "predicted label: "<< df3(samples[0])  << ", true label: "<< labels[0] << " == " << ids2[labels[0]] << "\n" << endl;
+  matrix<double> cm = test_multiclass_decision_function(df3, samples, labels);
+  cout << "test df: \n" << cm << endl;
+  cout << "accuracy: "  << sum(diag(cm))/sum(cm) << endl;
 }
