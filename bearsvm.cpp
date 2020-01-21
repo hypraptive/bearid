@@ -145,16 +145,17 @@ int main(int argc, char** argv)
 		command_line_parser parser;
 
 		parser.add_option("h","Display this help message.");
-		parser.add_option("train","Train the svm. Writes to network file.", 1);
+		parser.add_option("train","Train the svm. Takes embedding xml, Writes a svm file and ids file.", 1);
 		// --test <network>
-		parser.add_option("test","Test the face embedding network. Takes trained network", 1);
+		parser.add_option("test","Test the svm. Takes embedding xml.", 1);
+		parser.add_option("infer","Infer the IDs of embeddings. Takes an embedding xml", 1);
 		// --output: <trained_network> with --train; <embed_directory> with --embed
 		parser.add_option("output","Used with train, specifies trained weights file.  Use with -embed, specifies directory to put embeddings. Defaults to local.",1);
 		parser.parse(argc, argv);
 
 		// Now we do a little command line validation.  Each of the following functions
 		// checks something and throws an exception if the test fails.
-		const char* one_time_opts[] = {"h", "train", "test"};
+		const char* one_time_opts[] = {"h", "train", "test", "infer"};
 		parser.check_one_time_options(one_time_opts); // Can't give an option more than once
 
 		if (parser.option("h"))
@@ -236,6 +237,24 @@ int main(int argc, char** argv)
 			// cout << "test df: \n" << cm << endl;
 			cout << "correct: "  << sum(diag(cm)) << " : total : " << sum(cm) << endl;
 			cout << "accuracy: "  << sum(diag(cm))/sum(cm) << endl;
+		}
+		else if (parser.option("infer"))
+		{
+			embed_file = parser.option("infer").argument();
+			one_vs_one_decision_function<ovo_trainer,
+				decision_function<kernel_type> > df3;
+			// Check serialization
+			std::vector <string> ids2;
+			int idx;
+			deserialize("bear_svm_ids.dat") >> ids2;
+			deserialize("bear_svm.dat") >> df3;
+		  cout << "\nInferring with embed file.... : " << embed_file << endl;
+			extract_embeds (embed_file, samples, label_indices, ids, label_map);
+			for (int i = 0 ; i < samples.size (); ++i)
+			{
+				idx = df3 (samples[i]);
+				cout << "ID: " << ids2[idx] << endl;
+			}
 		}
 		else
 		{
