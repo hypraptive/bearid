@@ -9,6 +9,28 @@ import datetime
 import pdb
 from collections import defaultdict
 
+all_labels=[
+	'bc_adeane', 'bc_also', 'bc_amber', 'bc_aurora', 'bc_beatrice', 'bc_bella',
+	'bc_bellanore', 'bc_bracket', 'bc_bruno', 'bc_caramel', 'bc_chestnut', 'bc_cleo',
+	'bc_clyde', 'bc_coco', 'bc_cross-paw', 'bc_dani-bear', 'bc_diablo', 'bc_fisher',
+	'bc_flora', 'bc_frank', 'bc_freckles', 'bc_freda', 'bc_freya', 'bc_gary', 'bc_gc',
+	'bc_glory', 'bc_hoeya', 'bc_jaque', 'bc_kiokh', 'bc_kwatse', 'bc_lenore', 'bc_lillian',
+	'bc_lil-willy', 'bc_lucky', 'bc_matsui', 'bc_millerd', 'bc_mouse', 'bc_neana',
+	'bc_no-tail', 'bc_old-girl', 'bc_oso', 'bc_peanut', 'bc_pete', 'bc_pirate',
+	'bc_pretty-boy', 'bc_river', 'bc_sallie', 'bc_santa', 'bc_shaniqua', 'bc_simoom',
+	'bc_stella', 'bc_steve', 'bc_teddy-blonde', 'bc_teddy-brown', 'bc_toffee', 'bc_topaz',
+	'bc_trouble', 'bc_tuna', 'bc_ursa', 'bf_032', 'bf_039', 'bf_045', 'bf_051', 'bf_068']
+all_labels += [
+	'bf_083', 'bf_089', 'bf_093', 'bf_094', 'bf_128', 'bf_130', 'bf_132', 'bf_151',
+	'bf_153', 'bf_171', 'bf_201', 'bf_218', 'bf_261', 'bf_263', 'bf_273', 'bf_274',
+	'bf_284', 'bf_289', 'bf_293', 'bf_294', 'bf_401', 'bf_402', 'bf_409', 'bf_410',
+	'bf_415', 'bf_425', 'bf_435', 'bf_451', 'bf_461', 'bf_469', 'bf_474', 'bf_477',
+	'bf_480', 'bf_482', 'bf_489', 'bf_500', 'bf_503', 'bf_504', 'bf_505', 'bf_510',
+	'bf_511', 'bf_600', 'bf_602', 'bf_603', 'bf_604', 'bf_610', 'bf_611', 'bf_613',
+	'bf_614', 'bf_615', 'bf_634', 'bf_700', 'bf_708', 'bf_717', 'bf_718',	 'bf_719',
+	'bf_720', 'bf_744', 'bf_747', 'bf_755', 'bf_775', 'bf_813', 'bf_814', 'bf_818',
+	'bf_854', 'bf_856', 'bf_868', 'bf_879'
+	]
 
 ##------------------------------------------------------------
 ##  write_images
@@ -32,6 +54,34 @@ def write_images (images_d, filename) :
 	images_fp.close ()
 
 ##------------------------------------------------------------
+##  print true - matrix_d is a defaultdict (defaultdict (list))
+##    key = label. value = dict of labels, whose value is
+##    l1, l2, result, expected result
+##  write table of alls_labels accuracy number and count 
+##------------------------------------------------------------
+def write_matched_result_table (matrix_d, filename) :
+	right = 1
+	wrong = 0
+	matrix_fp = open (filename, "w")
+	## using static list instead.  need all output lists to have the same labels
+	uniq_labels = sorted (all_labels)
+
+	matrix_fp.write (' ,')
+	matrix_fp.write ('accuracy, count\n')
+	for label1 in uniq_labels :
+		if len (matrix_d[label1]) == 0 or len (matrix_d[label1][label1]) == 0 :  # no data
+			matrix_fp.write (label1 + ', , ')  # whole row
+		else : # has data
+			result = matrix_d[label1][label1]
+			# pdb.set_trace ()
+			accuracy = float (result[right]) / float (result[right]+result[wrong])
+			accuracy_str = "%1.3f" % (accuracy)
+			matrix_fp.write (label1 + ', ')  # row label
+			matrix_fp.write (accuracy_str + ', ')	# row accuracy
+			matrix_fp.write (str (result[right]+result[wrong])) # row count
+		matrix_fp.write ('\n')
+
+##------------------------------------------------------------
 ##  print matrix - matrix_d is a defaultdict (defaultdict (list))
 ##    key = label. value = dict of labels, whose value is
 ##    l1, l2, result, expected result
@@ -48,6 +98,8 @@ def write_matrix (matrix_d, filename, write_accuracy=True) :
 			labels.append (label2)
 	labels_set = set (labels)
 	uniq_labels = sorted (list (labels_set))
+	## using static list instead.  need all output lists to have the same labels
+	uniq_labels = sorted (all_labels)
 
 	matrix_fp.write (' ,')
 	for label in uniq_labels :   # write column labels
@@ -128,6 +180,8 @@ def gen_matrix (files) :
 		print ('\t\t', newfile + '_ratio.csv')
 		write_matrix (results, newfile + "_count.csv", False)
 		print ('\t\t', newfile + '_count.csv')
+		write_matched_result_table (results, newfile + '_matched_pairs.csv')
+		print ('\t\t', newfile + '_matched_pairs.csv')
 		results.clear ()
 	curtime = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 	write_images (images_true_pos, 'true_pos_'+curtime+'.html')
