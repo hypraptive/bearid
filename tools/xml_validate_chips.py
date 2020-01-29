@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import sys
 import argparse
@@ -32,8 +32,8 @@ def main (argv) :
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("valid_chips_%Y%m%d_%H%M.xml")
 	if verbose > 0 :
-		print 'input   : ', args.xml_file
-		print "output  : ", args.output
+		print('input   : ', args.xml_file)
+		print("output  : ", args.output)
 	u.set_argv (argv)
 	u.set_exec_name  ('xml_validate_chips')
 	u.validate_file (args.xml_file, args.output)

@@ -8,7 +8,7 @@ import pdb
 from collections import defaultdict
 
 ##------------------------------------------------------------
-##  xml_replicate_list face_list_source *.xml/dirs
+##  xml_extract_list face_list_source *.xml/dirs
 ##    given list of images, return same list of images with 
 ##		new data from argument list.
 ##      

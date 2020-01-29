@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import sys
 import argparse
@@ -36,9 +36,9 @@ def main (argv) :
 	if args.pt :
 		pt = (args.pt).split (' ')
 		if len (pt) != 2 :
-			print "Input error for -pt: needs exactly 2 numbers.  Using default."
+			print("Input error for -pt: needs exactly 2 numbers.  Using default.")
 		elif not pt[0].isdigit () or not pt[1].isdigit () :
-			print "Input error for -pt: needs to be 2 numbers.  Using default."
+			print("Input error for -pt: needs to be 2 numbers.  Using default.")
 		else :
 			center[0] = int (pt[0])
 			center[1] = int (pt[1])
@@ -49,14 +49,14 @@ def main (argv) :
 	distance = 0
 	if args.distance :
 		if not (args.distance).isdigit () :
-			print "Input error for --distance: needs to be a number.  Using default."
+			print("Input error for --distance: needs to be a number.  Using default.")
 		else :
 			distance = int (args.distance)
 			
 	if verbose > 0 :
-		print "output  : ", args.output
-		print "center  : ", center
-		print "distance: ", distance
+		print("output  : ", args.output)
+		print("center  : ", center)
+		print("distance: ", distance)
 	xml_files = u.generate_xml_file_list (args.files)
 	u.filter_chips (xml_files, center, distance, args.output)
 

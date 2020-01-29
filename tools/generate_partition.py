@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import sys
 import pdb
@@ -46,24 +46,24 @@ def main (argv) :
 	#    image_count_minimum, test_count_minimum
 	### --------------
 	if verbose > 2 :
-		print
-		print "x: ", args.x
-		print "y: ", args.y
-		print "sum: ", int (args.y) + int (args.x)
-		print "output: ", args.output
-		print "input: ", args.input
+		print()
+		print("x: ", args.x)
+		print("y: ", args.y)
+		print("sum: ", int (args.y) + int (args.x))
+		print("output: ", args.output)
+		print("input: ", args.input)
 
 	if int(args.x) + int(args.y) != 100 :
-		print "error: (x + y) needs to be 100"
+		print("error: (x + y) needs to be 100")
 		return
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("part_%Y%m%d_%H%M")
 		if verbose > 0 :
-			print "new output: ", args.output
+			print("new output: ", args.output)
 	
 	filetype = args.filetype
 	if (filetype != "chips") and (filetype != "faces") :
-		print 'unrecognized filetype :', filetype, ', setting filetype to "chips".'
+		print('unrecognized filetype :', filetype, ', setting filetype to "chips".')
 		filetype = "chips"
 
 	xml_files = u.generate_xml_file_list (args.input)
