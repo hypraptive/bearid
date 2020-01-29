@@ -10,6 +10,7 @@ import argparse
 import xml_explore as xe
 import os
 import datetime
+import csv
 from xml.dom import minidom
 from copy import deepcopy
 from collections import namedtuple
@@ -32,6 +33,29 @@ g_stats_few = []
 g_stats_many = []
 g_argv = ''
 g_exec_name = 'bearID v0.1'
+
+all_labels=[
+	'bc_adeane', 'bc_also', 'bc_amber', 'bc_aurora', 'bc_beatrice', 'bc_bella',
+	'bc_bellanore', 'bc_bracket', 'bc_bruno', 'bc_caramel', 'bc_chestnut', 'bc_cleo',
+	'bc_clyde', 'bc_coco', 'bc_cross-paw', 'bc_dani-bear', 'bc_diablo', 'bc_fisher',
+	'bc_flora', 'bc_frank', 'bc_freckles', 'bc_freda', 'bc_freya', 'bc_gary', 'bc_gc',
+	'bc_glory', 'bc_hoeya', 'bc_jaque', 'bc_kiokh', 'bc_kwatse', 'bc_lenore', 'bc_lillian',
+	'bc_lil-willy', 'bc_lucky', 'bc_matsui', 'bc_millerd', 'bc_mouse', 'bc_neana',
+	'bc_no-tail', 'bc_old-girl', 'bc_oso', 'bc_peanut', 'bc_pete', 'bc_pirate',
+	'bc_pretty-boy', 'bc_river', 'bc_sallie', 'bc_santa', 'bc_shaniqua', 'bc_simoom',
+	'bc_stella', 'bc_steve', 'bc_teddy-blonde', 'bc_teddy-brown', 'bc_toffee', 'bc_topaz',
+	'bc_trouble', 'bc_tuna', 'bc_ursa', 'bf_032', 'bf_039', 'bf_045', 'bf_051', 'bf_068']
+all_labels += [
+	'bf_083', 'bf_089', 'bf_093', 'bf_094', 'bf_128', 'bf_130', 'bf_132', 'bf_151',
+	'bf_153', 'bf_171', 'bf_201', 'bf_218', 'bf_261', 'bf_263', 'bf_273', 'bf_274',
+	'bf_284', 'bf_289', 'bf_293', 'bf_294', 'bf_401', 'bf_402', 'bf_409', 'bf_410',
+	'bf_415', 'bf_425', 'bf_435', 'bf_451', 'bf_461', 'bf_469', 'bf_474', 'bf_477',
+	'bf_480', 'bf_482', 'bf_489', 'bf_500', 'bf_503', 'bf_504', 'bf_505', 'bf_510',
+	'bf_511', 'bf_600', 'bf_602', 'bf_603', 'bf_604', 'bf_610', 'bf_611', 'bf_613',
+	'bf_614', 'bf_615', 'bf_634', 'bf_700', 'bf_708', 'bf_717', 'bf_718',	 'bf_719',
+	'bf_720', 'bf_744', 'bf_747', 'bf_755', 'bf_775', 'bf_813', 'bf_814', 'bf_818',
+	'bf_854', 'bf_856', 'bf_868', 'bf_879'
+	]
 
 ##------------------------------------------------------------
 ##  add indentations to xml content for readability
@@ -151,7 +175,7 @@ def load_objs (root, d_objs, filetype) :
 				continue
 			if len (box) > 1 :
 				g_stats_many.append (facefile)
-				print("too many boxes (faces) : ", len (box))
+				print("too many boxes (faces) : ", len (box), " in file ", facefile)
 				continue
 			label_list = box[0].findall ('label')
 			label = label_list[0].text
@@ -1107,15 +1131,19 @@ def print_pairs_stats (objs_d) :
 
 	flatten_unmatched = [label for tupl in unmatched_labels for label in tupl]
 	# pdb.set_trace ()
-	for i in sorted (set (matched_labels)):
-		print(i, ':', matched_labels.count (i))
+	print('------------------------')
+	print('--- matched stats:--- ')
+	print('------------------------')
+	for i in sorted (set (all_labels)):
+		print(i, '\t,\t', matched_labels.count (i))
 	print('------------------------')
 	print('total : ', len (matched_labels))
 
 	print('------------------------')
-	print('unmatched stats:')
-	for i in sorted (set (flatten_unmatched)):
-		print(i, ':', flatten_unmatched.count (i))
+	print('--- unmatched stats:--- ')
+	print('------------------------')
+	for i in sorted (set (all_labels)):
+		print(i, '\t,\t', flatten_unmatched.count (i))
 	print('unmatched pairs: ', len (unmatched_labels))
 
 ##------------------------------------------------------------
@@ -1133,8 +1161,8 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 	img_cnt_per_label = [len (objs) for key, objs in all_objs]
 	obj_count = sum (img_cnt_per_label)
 	if get_verbosity () > 1 :
-		for label, chips in all_objs :
-			print(label, '	:', len (chips))
+		for label in sorted (set (all_labels)):
+			print(label, '	,	', len (objs_d[label]))
 	u_combos = 0
 	chips_count_list = img_cnt_per_label
 	diff_chip_count  = obj_count
