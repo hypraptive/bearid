@@ -13,6 +13,7 @@
 #include <dlib/svm.h>
 #include <dlib/image_io.h>
 #include <dlib/cmd_line_parser.h>
+#include <boost/filesystem.hpp>
 #include <boost/foreach.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -129,6 +130,17 @@ void extract_embeds (std::string embed_file,
 		}
 }
 //-----------------------------------------------------------------
+//  returns network_ids.dat  from network.dat
+//-----------------------------------------------------------------
+std::string get_network_id_name (std::string network_str)
+{
+	boost::filesystem::path network_path (network_str);
+	std::string ids_str = network_path.stem().c_str();
+	ids_str += "_ids";
+	ids_str += network_path.extension().c_str();
+	return ids_str;
+}
+
 
 // Set folds higer for cross validation
 // However, any bears with less than folds number of embeddings will be skipped
@@ -145,12 +157,11 @@ int main(int argc, char** argv)
 		command_line_parser parser;
 
 		parser.add_option("h","Display this help message.");
-		parser.add_option("train","Train the svm. Takes embedding xml, Writes a svm file and ids file.", 1);
+		parser.add_option("train","Train the svm and write to network file.  Also write an ids file.", 1);
 		// --test <network>
-		parser.add_option("test","Test the svm. Takes embedding xml.", 1);
-		parser.add_option("infer","Infer the IDs of embeddings. Takes an embedding xml", 1);
+		parser.add_option("test","Test the svm using the network file.", 1);
+		parser.add_option("infer","Infer the IDs of embeddings using network file.", 1);
 		// --output: <trained_network> with --train; <embed_directory> with --embed
-		parser.add_option("output","Used with train, specifies trained weights file.  Use with -embed, specifies directory to put embeddings. Defaults to local.",1);
 		parser.parse(argc, argv);
 
 		// Now we do a little command line validation.  Each of the following functions
@@ -158,9 +169,10 @@ int main(int argc, char** argv)
 		const char* one_time_opts[] = {"h", "train", "test", "infer"};
 		parser.check_one_time_options(one_time_opts); // Can't give an option more than once
 
-		if (parser.option("h"))
+		if (parser.option("h") || parser.number_of_arguments () != 1)
 		{
-			cout << "Usage: bearsvm [options] <embed_file>\n";
+			cout << "\nUsage  : bearsvm <option network_file> <embed_file>\n";
+			cout << "\nExample: bearsvm -test bearsvm_network.dat val_embeds.xml\n\n";
 			parser.print_options();
 
 			return EXIT_SUCCESS;
@@ -174,12 +186,14 @@ int main(int argc, char** argv)
 		std::vector<double> label_indices;
 		std::vector <std::string> ids; 
 		std::map<std::string,int> label_map;
-		std::string embed_file;
+		std::string embed_file = parser[0];
+		std::string svm_network_name, svm_network_ids_name;
 
 		// -----  Training ------------
 		if (parser.option("train"))
 		{
-			embed_file = parser.option("train").argument();
+			svm_network_name = parser.option("train").argument();
+			svm_network_ids_name = get_network_id_name (svm_network_name);
 		  cout << "\nTraining with embed file.... : " << embed_file << endl;
 
 			extract_embeds (embed_file, samples, label_indices, ids, label_map);
@@ -211,19 +225,20 @@ int main(int argc, char** argv)
 			decision_function<kernel_type>    // This is the output of the linear_trainer
 			> df2, df3;
 			df2 = df;
-			serialize("bear_svm.dat") << df2;
-			serialize("bear_svm_ids.dat") << ids;
-			cout << "\nWrote bear_svm.dat and bear_svm_ids.dat\n" << endl;
+			serialize(svm_network_name) << df2;
+			serialize(svm_network_ids_name) << ids;
+			cout << "\nWrote " << svm_network_name << " and " << svm_network_ids_name << ".\n" << endl;
 		}
 		else if (parser.option("test"))
 		{
-			embed_file = parser.option("test").argument();
+			svm_network_name = parser.option("test").argument();
+			svm_network_ids_name = get_network_id_name (svm_network_name);
 			one_vs_one_decision_function<ovo_trainer,
 				decision_function<kernel_type> > df3;
 			// Check serialization
 			std::vector <string> ids2;
-			deserialize("bear_svm_ids.dat") >> ids2;
-			deserialize("bear_svm.dat") >> df3;
+			deserialize(svm_network_ids_name) >> ids2;
+			deserialize(svm_network_name) >> df3;
 			// recreate label:index map from training run 
 			for (int i = 0; i < ids2.size (); ++i) 
 			{
@@ -240,14 +255,15 @@ int main(int argc, char** argv)
 		}
 		else if (parser.option("infer"))
 		{
-			embed_file = parser.option("infer").argument();
+			svm_network_name = parser.option("infer").argument();
+			svm_network_ids_name = get_network_id_name (svm_network_name);
 			one_vs_one_decision_function<ovo_trainer,
 				decision_function<kernel_type> > df3;
 			// Check serialization
 			std::vector <string> ids2;
 			int idx;
-			deserialize("bear_svm_ids.dat") >> ids2;
-			deserialize("bear_svm.dat") >> df3;
+			deserialize(svm_network_name) >> ids2;
+			deserialize(svm_network_ids_name) >> df3;
 		  cout << "\nInferring with embed file.... : " << embed_file << endl;
 			extract_embeds (embed_file, samples, label_indices, ids, label_map);
 			for (int i = 0 ; i < samples.size (); ++i)
@@ -258,7 +274,7 @@ int main(int argc, char** argv)
 		}
 		else
 		{
-			cout << "Need one of <train|test> to run bearsvm." << endl;
+			cout << "Need one of <train|test|infer> to run bearsvm." << endl;
 		}
   }
   catch (exception& e)
