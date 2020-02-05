@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import sys
 import argparse
@@ -36,11 +36,11 @@ def main (argv) :
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("pairs_%Y%m%d_%H%M.xml")
 	if verbose > 0 :
-		print "matched   : ", args.matched
-		print "unmatched : ", args.unmatched
-		print "triplets  : ", args.triplets
-		print "output    : ", args.output
-		print "chipfile  : ", args.chipfile
+		print("matched   : ", args.matched)
+		print("unmatched : ", args.unmatched)
+		print("triplets  : ", args.triplets)
+		print("output    : ", args.output)
+		print("chipfile  : ", args.chipfile)
 
 	'''
 	filetype = args.filetype
@@ -49,7 +49,7 @@ def main (argv) :
 		filetype = "chips"
 	'''
 	if (args.triplets > 0) and ((args.matched > 0) or (args.unmatched > 0)) :
-		print 'triplets argument will override matched and unmatched arguments'
+		print('triplets argument will override matched and unmatched arguments')
 	xml_files = u.generate_xml_file_list (args.chipfile)
 	u.generate_chip_pairs (xml_files, int (args.matched), int (args.unmatched), int (args.triplets), args.output)
 
