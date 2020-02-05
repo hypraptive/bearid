@@ -362,13 +362,13 @@ int main(int argc, char** argv) try
   		std::vector<image_dataset_metadata::box> boxes = data.images[i].boxes;
         faces = find_chips (boxes, img, transform_features, face_features);
         // cout << "Faces found: " << to_string(faces.size()) << endl;
-		/*  check for more than one face.  shouldn't happen yet
+		/*  check for more than one face.  shouldn't happen yet */
 		if (faces.size() > 1)
 		{
-			cout << "faces found: " << faces.size() << endl;
-			cin.get();
+			// cout << "faces found: " << faces.size() << endl;
+			// cin.get();
+			continue;
 		}
-		*/
         total_faces += faces.size();
 		std::string chip_dim = std::to_string(g_chip_size) + " " + std::to_string(g_chip_size);
 		// iterate through each face in image
