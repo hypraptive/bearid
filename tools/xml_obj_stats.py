@@ -25,7 +25,8 @@ def main (argv) :
 		action="store_true",
 		help='print ordered list of filenames.')
 	parser.add_argument ('-v', '--verbosity', type=int, default=1,
-		choices=[0, 1, 2, 3], help=argparse.SUPPRESS)
+		choices=[0, 1, 2, 3], help='2 will generate count per label')
+		# choices=[0, 1, 2, 3], help=argparse.SUPPRESS)
 		# help="increase output verbosity"
 	args = parser.parse_args()
 	# print "ls : ", args.ls
