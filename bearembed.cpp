@@ -239,7 +239,7 @@ std::vector<std::vector<string>> load_pairs_map (
 
 //-----------------------------------------------------------------
 // Grab all the chip files from xml and store each under its label.
-// When doing infer/embed, chips will not have label so return 
+// When doing infer/embed, chips will not have label so return
 //   vector of 1 list and empty string.
 //   Generate warning for chips with no label when test and train.
 //-----------------------------------------------------------------
@@ -490,6 +490,7 @@ std::vector<std::vector<string>> load_chips_xml (
       parser.add_option("numface","Number of face images used per ID [default = 5]",1);
 	  // --root <chip_root_path> . defaults to /home/data/bears/faceDogHip
       parser.add_option("root","Root of chip files, used in extracting embed file path.", 1);
+      parser.add_option("roc","Generate ROC Curve data");
 
       parser.parse(argc, argv);
 
@@ -880,6 +881,8 @@ else if (parser.option("test") && parser.option("pair"))
   std::vector<string> matchedLabels = objs[2];
   std::vector<string> unmatchedLabels = objs[3];
 
+  std::vector<double> true_dets, false_dets;
+
   int num_right = 0;
   int num_wrong = 0;
   int num_true_pos = 0;
@@ -918,6 +921,7 @@ else if (parser.option("test") && parser.option("pair"))
 
     std::vector<matrix<float,0,1>> matchedEmbedded = testing_net(images);
     double images_dist = length(matchedEmbedded[0]-matchedEmbedded[1]);
+    true_dets.push_back(images_dist);
 
     if (images_dist < dist_max)
     {
@@ -952,6 +956,7 @@ else if (parser.option("test") && parser.option("pair"))
 
     std::vector<matrix<float,0,1>> unmatchedEmbedded = testing_net(images);
     double images_dist = length(unmatchedEmbedded[0]-unmatchedEmbedded[1]);
+    false_dets.push_back(images_dist);
 
     if (images_dist >= dist_max)
     {
@@ -991,6 +996,29 @@ else if (parser.option("test") && parser.option("pair"))
   cout << "True negative rate: " << fixed << tnr << endl;
   cout << "False positive rate: " << fixed << fpr << endl;
   cout << "F1 score: " << fixed << f1 << endl;
+
+  if (parser.option("roc"))
+  {
+    ofstream poc_file;
+    poc_file.open ("roc_curve.csv");
+    // ROC Curve
+    cout << "\nGenerate ROC Curve data" << endl;
+    //cout << "TD: " << true_dets[0] << " FD: " << false_dets[0] << endl;
+    std::vector<roc_point> ROC = compute_roc_curve (true_dets, false_dets);
+    cout << "ROC size: " << ROC.size() << endl;
+
+    // compute_roc_curve expects positive scores to be higher than negative scores
+    // For the bearembed distance metric, lower is better
+    // So compute_roc_curve is actually returning FNR and TNR
+    // To get TPR and FPR, we need to invert (1-TPR and 1-FPR)
+    poc_file << "Detection Threshold" << ", " << "True Positive Rate" << ", " << "False Positive Rate" << endl;
+    for (size_t i = 0; i < ROC.size(); i+=1)
+    {
+      // Note TPR and FPR are inverted as descibed above
+      poc_file << ROC[i].detection_threshold << ", " << (1-ROC[i].true_positive_rate) << ", " << (1-ROC[i].false_positive_rate) << endl;
+    }
+    poc_file.close();
+  }
 }
 
 // Testing OLD

@@ -382,17 +382,19 @@ const matrix<double,1,3> my_test_object_detection_function (
 
     double my_test_shape_predictor (
         const shape_predictor& sp,
-        dlib::image_dataset_metadata::dataset img_data
+        dlib::image_dataset_metadata::dataset img_data,
+        double & mean,
+        double & stddev
     )
     {
 	/*
 		dlib::array<array2d<unsigned char> > images_test2;
 		std::vector<std::vector<full_object_detection> > faces_test;
 		load_image_dataset(images_test2, faces_test, imgs_file);
-        cout << "shape predictor mean testing error:  " << 
+        cout << "shape predictor mean testing error:  " <<
             my_test_shape_predictor(sp, images_test2, faces_test, get_interocular_distances(faces_test)) << endl;
 	*/
-	
+
         running_stats<double> rs;
 		for (unsigned long i = 0; i < img_data.images.size(); ++i)
 		{
@@ -423,23 +425,25 @@ const matrix<double,1,3> my_test_object_detection_function (
 				unsigned long k = 0;
 				for (itr = objects[j].parts.begin(); itr != objects[j].parts.end(); ++itr)
 				{
-					
+
 					double score = length(det.part(k) - itr->second)/scale;
-					// cout << "score for " << itr->first << ": " << score; 
+					// cout << "score for " << itr->first << ": " << score;
 					// cout << " : " <<  det.part(k) << endl;
 					rs.add(score);
 					k++;
                 }
             }
         }
-        return rs.mean();
+        mean = rs.mean();
+        stddev = rs.stddev();
+        return mean;
     }
 
 // ----------------------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------------------
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {try
 {
     //image_window win_wireframe;
@@ -501,6 +505,7 @@ int main(int argc, char** argv)
 		// load_image_dataset(images_test, face_boxes_test, imgs_file);
 		dlib::image_dataset_metadata::dataset data;
 		load_image_dataset_metadata(data, imgs_file);
+    cout << "num testing images:  " << data.images.size() << endl;
 		/*
 		cout << "num testing images:  " << images_test.size() << endl;
 		cout << "num testing boxes:  " << face_boxes_test.size() << endl;
@@ -526,14 +531,17 @@ int main(int argc, char** argv)
 		cout << "starting shape predictor test" << endl;
 		dlib::array<array2d<unsigned char> > images_test2;
 		std::vector<std::vector<full_object_detection> > faces_test;
+    double sp_mean, sp_stddev;
+
+    my_test_shape_predictor(sp, data, sp_mean, sp_stddev);
 		// load_image_dataset(images_test2, faces_test, imgs_file);
-        cout << "shape predictor mean testing error:  " << 
-            my_test_shape_predictor(sp, data) << endl;
+        cout << "shape predictor mean testing error:  " <<
+            sp_mean << " +/- " << sp_stddev << endl;
 
 		cout << "on " << data.images.size() << " tests" << endl;
 		cout << endl;
 		return 0;
-	} 
+	}
 
 	// doing inferencing
 
@@ -591,12 +599,12 @@ double interocular_distance (
 )
 {
     dlib::vector<double,2> l, r;
-    // Find the center of the left eye by averaging the points around 
+    // Find the center of the left eye by averaging the points around
     // the eye.
 	l = det.part(2);
 
 
-    // Find the center of the right eye by averaging the points around 
+    // Find the center of the right eye by averaging the points around
     // the eye.
 	r = det.part(5);
 
@@ -618,5 +626,3 @@ std::vector<std::vector<double> > get_interocular_distances (
     }
     return temp;
 }
-
-
