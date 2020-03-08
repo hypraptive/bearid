@@ -33,6 +33,7 @@
 
 using namespace std;
 using namespace dlib;
+using namespace boost::filesystem;
 
 // ----------------------------------------------------------------------------------------
 
@@ -563,16 +564,17 @@ int main(int argc, char** argv)
         total_faces += faces.size();
     }
     cout << "Total faces found: " << total_faces << endl;
-	boost::filesystem::path orig_path(imgs_file);
-	std::string faces_file = orig_path.stem().string() + "_faces.xml";
+	path orig_path(imgs_file);
+	std::string faces_file = orig_path.parent_path().string () + "/" + orig_path.stem().string() + "_faces.xml";
+	cout << "faces_file: " << faces_file << endl;
     save_image_dataset_metadata(data, faces_file);
     if (!bLabelFixed)
     {
-      cout << "\n\tGenerated with no label: " << faces_file << "\n" << endl;
+      cout << "\n\tGenerated " << total_faces << " faces in file: " << faces_file << "\n" << endl;
     }
     else
     {
-      cout << "\n\tGenerated with label " << bearID <<  ": " << faces_file << "\n" << endl;
+      cout << "\n\tGenerated " << total_faces << " faces with label " << bearID << " in file: " << faces_file << "\n" << endl;
     }
 }
 catch(std::exception& e)
