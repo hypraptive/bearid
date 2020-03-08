@@ -1369,7 +1369,22 @@ def plot_embeddings (input_files) :
 	tsne = TSNE(n_components=2, random_state=0)
 	features = np.array(embeds_list)
 	reduced = tsne.fit_transform(features)
-	pdb.set_trace ()	
+	# pdb.set_trace ()	
+	embeds_tsv_file = open ("embeds.tsv", "w")
+	labels_tsv_file = open ("labels.tsv", "w")
+	for i in range(len (embeds_list)):
+		embeds_tsv_file.write ('\t'.join (str(x) for x in embeds_list[i]))
+		embeds_tsv_file.write ('\n')
+		labels_tsv_file.write (label_list[i])
+		labels_tsv_file.write ('\n')
+	embeds_tsv_file.close ()
+	labels_tsv_file.close ()
+
+	print ("generated tsv files: ")
+	print ("\tembed.tsv")
+	print ("\tlabels.tsv")
+
+	# print ('\t'.join (str(x) for x in embeds_list[0]))
 
 ##------------------------------------------------------------
 ##   main code
