@@ -72,6 +72,8 @@ using boost::property_tree::ptree;
 // subfolders, and each subfolder contains images of a single person.
 
 ptree g_xml_tree;
+std::string g_mode; // one of {train,test,embed}
+std::vector <ptree> g_chips;
 
 //--------------------------------------------------
 // initialize xml
@@ -165,7 +167,8 @@ std::vector<std::vector<string>> load_pairs_map (
   {
     //std::map<string,std::vector<std::string>> chips_map;
     ptree tree;
-    boost::property_tree::read_xml (xml_file, tree);
+    boost::property_tree::read_xml (xml_file, tree,
+			boost::property_tree::xml_parser::trim_whitespace);
 
     cout << "load_pairs_map" << endl;
 
@@ -236,18 +239,22 @@ std::vector<std::vector<string>> load_pairs_map (
 
 //-----------------------------------------------------------------
 // Grab all the chip files from xml and store each under its label.
-// Generate warning for chips with no label.
+// When doing infer/embed, chips will not have label so return 
+//   vector of 1 list and empty string.
+//   Generate warning for chips with no label when test and train.
 //-----------------------------------------------------------------
 std::vector<std::vector<string>> load_chips_map (
   const std::string& xml_file, std::vector<std::string>& obj_labels)
   {
     std::map<string,std::vector<std::string>> chips_map;
     ptree tree;
-    boost::property_tree::read_xml (xml_file, tree);
+    boost::property_tree::read_xml (xml_file, tree,
+			boost::property_tree::xml_parser::trim_whitespace);
+		std::string mode = g_mode;
 
     std::vector<std::vector<string>> objects;		// return object
 
-    // add all chip files to map by bearID
+    // for traing and test, add all chip filenames to map by bearID
     BOOST_FOREACH(ptree::value_type& child, tree.get_child("dataset.chips"))
     {
       std::string child_name = child.first;
@@ -257,11 +264,17 @@ std::vector<std::vector<string>> load_chips_map (
         ptree chip = child.second;
         std::string chipfile = child.second.get<std::string>("<xmlattr>.file");
         std::string bearID = child.second.get<std::string>("label");
-        if (bearID.empty())
+        if (bearID.empty() && g_mode != "embed")
         {
-          std::cout << "Error: chipfile " << chipfile << " has no bearID.\n" << endl;
-          continue;
+			std::cout << "Error: ignoring chipfile " << chipfile << " wwith no bearID.\n" << endl;
+			continue;
         }
+		if (bearID.empty())
+		{
+			bearID = "  ";
+			// TODO:  need to support for unknown images
+		}
+		g_chips.push_back (chip);
         chips_map[bearID].push_back (chipfile);
       }
     }
@@ -279,6 +292,8 @@ std::vector<std::vector<string>> load_chips_map (
     return objects;
   }
 
+//-----------------------------------------------------------------
+//-----------------------------------------------------------------
 std::vector<std::vector<string>> load_chips_xml (
   const std::string& xml_file, bool pair, std::vector<std::string>& obj_labels)
   {
@@ -296,6 +311,9 @@ std::vector<std::vector<string>> load_chips_xml (
     }
     return objects;
   }
+
+
+//-----------------------------------------------------------------
 
   // This function takes the output of load_objects_list() as input and randomly
   // selects images for training.  It should also be pointed out that it's really
@@ -463,6 +481,8 @@ std::vector<std::vector<string>> load_chips_xml (
       parser.add_option("output","Used with train, specifies trained weights file.  Use with -embed, specifies directory to put embeddings. Defaults to local.",1);
       // --anet only used with --pretrain
       parser.add_option("anet","Use affine net");
+      // --network_steps  <num_iterations>.  defaults to 2000
+      parser.add_option("network_steps","Steps before writing to new network file [default = 2000]",1);
       // --threshold <num_iterations>.  defaults to 10000
       parser.add_option("threshold","Iterations without progess before stopping [default = 10000]",1);
       // --numid <count_per_minibatch> . defaults to 5
@@ -498,7 +518,16 @@ std::vector<std::vector<string>> load_chips_xml (
       cout << "\nXML chip file.... : " << parser[0] << endl;
 
 
-	  std::vector<string> obj_labels;
+      std::vector<string> obj_labels;
+
+			// if train or test, load chips with labels
+			// if infer, has no labels, load list of chips
+			if (parser.option ("embed"))
+				g_mode = "embed";
+			else if (parser.option ("test"))
+				g_mode = "test";
+			else if (parser.option ("train"))
+				g_mode = "train";
       auto objs = load_chips_xml (parser[0], parser.option("pair"), obj_labels);
       cout << "objs.size(): "<< objs.size() << endl;
 
@@ -578,12 +607,31 @@ std::vector<std::vector<string>> load_chips_xml (
             std::thread data_loader3([data_loader](){ data_loader(3); });
             std::thread data_loader4([data_loader](){ data_loader(4); });
             std::thread data_loader5([data_loader](){ data_loader(5); });
+						int step_count=1;
+						int network_count=1;
+						int network_step_size = 2000;
+						if (parser.option("network_steps"))
+							network_step_size = std::stoi (parser.option("network_steps").argument());
             while(trainer.get_learning_rate() >= 1e-4)
             {
               qimages.dequeue(images);
               qlabels.dequeue(labels);
               trainer.train_one_step(images, labels);
               cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
+							// generating occasional networks to create learning curve
+							if (parser.option("network_steps"))
+							{
+								if (step_count % network_step_size == 0)
+								{
+									trainer.get_net();
+									std::string intermediate_network = trained_network+std::to_string(network_count);
+									cout << "writing network " << intermediate_network << endl;
+									anet_150.clean();
+									serialize(intermediate_network) << anet_150;
+									network_count++;
+								}
+							}
+							step_count++;
             }
             trainer.get_net();
             cout << "done training" << endl;
@@ -1149,9 +1197,9 @@ else if (parser.option("embed"))
 	cmd.append (" ");
   }
   boost::filesystem::path current_dir (boost::filesystem::current_path());
-  g_xml_tree.add ("command", cmd);
-  g_xml_tree.add ("cwd", current_dir);
-  g_xml_tree.add ("filetype", "embeddings");
+  g_xml_tree.add ("dataset.command", cmd);
+  g_xml_tree.add ("dataset.cwd", current_dir);
+  g_xml_tree.add ("dataset.filetype", "embeddings");
   ptree &embeds = g_xml_tree.add ("dataset.embeddings", "");
 
   /*
@@ -1239,10 +1287,13 @@ else if (parser.option("embed"))
 				// sprintf (embed_str + strlen (embed_str), " %a", embed_val);
 			}
 		}
+		std::vector <ptree> chips = g_chips;
 		xml_embed.add ("embed_val", embed_stdstr);
 		xml_embed.add ("<xmlattr>.file", emb_path.string());
 		xml_embed.add ("label", obj_labels[i]);
 		xml_embed.add ("chip_source", img_str);
+		xml_embed.add_child ("chip", g_chips[i]);
+		embeds.add_child ("embedding.chip", g_chips[i]);
 
 		serialize(emb_path.string()) << embedded;
 		//cout << "Embedded: " << emb_path.string() << endl;
@@ -1267,10 +1318,15 @@ else if (parser.option("embed"))
   }
 
   boost::filesystem::path xml_file (parser[0]);
-  std::string embed_xml_file = xml_file.filename().stem().string() + "_embeds.xml";
+  std::string embed_xml_file = xml_file.parent_path().string() + "/" + xml_file.filename().stem().string() + "_embeds.xml";
   xml_add_headers (); // put at end since writing reverse order added
+  // boost::property_tree::xml_writer_settings<char> settings ('\t', 1);
+  boost::property_tree::xml_writer_settings<std::string> settings (' ', 4);
+  write_xml(embed_xml_file, g_xml_tree,std::locale(),settings);
+	/*
   write_xml(embed_xml_file, g_xml_tree,std::locale(),
   boost::property_tree::xml_writer_make_settings<std::string>(' ', 4, "utf-8"));
+	*/
   cout << "\ngenerated: \n\t-- " << embed_xml_file << endl;
   cout << "\n\t-- " << embeddings_count << " embedding files under " << dst_path << "\n" << endl;
   }
