@@ -396,8 +396,8 @@ int main(int argc, char** argv) try
         }
     }
 	boost::filesystem::path xml_file (argv[1]);
-	std::string chips_jpg_file = xml_file.stem().string() + "_chip_composite.jpg";
-	std::string chips_xml_file = xml_file.filename().stem().string() + "_chips.xml";
+	std::string chips_jpg_file = xml_file.parent_path().string () + "/" + xml_file.stem().string() + "_chip_composite.jpg";
+	std::string chips_xml_file = xml_file.parent_path().string () + "/" + xml_file.filename().stem().string() + "_chips.xml";
     save_jpeg(g_composite_features, chips_jpg_file, 95);
     cout << "Total faces found: " << total_faces << endl;
 
