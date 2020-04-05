@@ -17,7 +17,7 @@ def main (argv) :
     # parser.formatter.max_help_position = 50
 	parser.add_argument ('files', nargs='+')
 	parser.add_argument ('-filetype', '--filetype', default="chips",
-		help='type of xml file: <chips,faces,pairs> .')
+		help='type of xml file: <imgs,chips,faces,pairs> .')
 	parser.add_argument ('-write', '--write', default="",
 		action="store_true",
 		help='write stats into file stats_*_<currentDate> .')
