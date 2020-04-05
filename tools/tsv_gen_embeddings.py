@@ -27,7 +27,7 @@ def main (argv) :
 		print("files: ", args.files)
 
 	xml_files = u.generate_xml_file_list (args.files)
-	u.plot_embeddings (xml_files)
+	u.write_embed_tsv (xml_files)
 
 if __name__ == "__main__":
 	main (sys.argv)
