@@ -23,6 +23,8 @@ using namespace std;
 using namespace dlib;
 using boost::property_tree::ptree;
 
+std::string g_mode = "none";
+
 // This function spiders the top level directory and obtains a list of all the
 // files.
 std::vector<std::vector<string>> load_objects_list (
@@ -87,34 +89,39 @@ std::vector<std::vector<string>> load_embeds_map (
   return objects;
 }
 //-----------------------------------------------------------------
-// get content from metadata file and generating 3 vectors:
-//   samples (list of embeddings. [b1.dat,b2-1.dat,b2-2.dat,b3.dat)
+// get content from metadata file and generating 4 vectors:
+//   embeddings (list of face embeddings. [b1.dat,b2-1.dat,b2-2.dat,b3.dat)
 //   labels_idx (list of label indices of respective embedding. 0,1,1,2)
-//   ids (list of labels [b1, b2, b3])
+//   ids (list of labels ["b1", "b2", "b3"])
+//	 embed_filenames (list of embeding files)
+//	 label_id_map (map of label to id)
 //   create flattened list of embeddings
-//   if label_map exists, use exsisting mapping instead of new one.
+//   if label_id_map exists (?), use exsisting mapping instead of new one.
 //-----------------------------------------------------------------
-void extract_embeds (std::string embed_file, 
-		std::vector<matrix<float,128,1>> &samples, 
+void extract_embeds (std::string embed_xml, 
+		std::vector<matrix<float,128,1>> &embeddings, 
 		std::vector<double> & labels_idx, 
 		std::vector <std::string> & ids, 
-		std::map<std::string,int> label_map)
+		std::vector <std::string> & embed_filenames, 
+		std::map<std::string,int> label_id_map)
 {
 		std::vector<std::vector<string>> emb_objs;
 		// gets ids from metadata file 
-		emb_objs = load_embeds_map (embed_file, ids);
+		emb_objs = load_embeds_map (embed_xml, ids);
 		double label_idx;
+		std::string embed_filename;
+		std::string mode = g_mode;
 		for (size_t i=0; i < emb_objs.size(); ++i)
 		{
 			label_idx = i;
-			if (label_map.size () > 0) // use existing mapping
+			if (label_id_map.size () > 0) // use existing mapping
 			{
-				if (label_map.count (ids[i]) > 0) // label exists
+				if (label_id_map.count (ids[i]) > 0) // label exists
 				{
-					label_idx = label_map[ids[i]];
+					label_idx = label_id_map[ids[i]];
 					// cout << "index: " << label_idx << " : " << ids[i] << endl;
 				}
-				else		// unknown label, skip to next label
+				else if (g_mode != "infer")   // unknown label, skip to next label
 				{
 					cout << "Ignoring unrecognized label: " << ids[i] << endl;
 					continue;
@@ -122,9 +129,12 @@ void extract_embeds (std::string embed_file,
 			}
 			for (size_t j = 0; j < emb_objs[i].size(); ++j)
 			{
-				matrix<float,128,1> embedded;
-				deserialize(emb_objs[i][j]) >> embedded;
-				samples.push_back(embedded);
+				matrix<float,128,1> embedding;
+				embed_filename = emb_objs[i][j];
+				embed_filenames.push_back (embed_filename);
+
+				deserialize(embed_filename) >> embedding;
+				embeddings.push_back(embedding);
 				labels_idx.push_back(label_idx);
 			}
 		}
@@ -135,13 +145,77 @@ void extract_embeds (std::string embed_file,
 std::string get_network_id_name (std::string network_str)
 {
 	boost::filesystem::path network_path (network_str);
-	std::string ids_str = network_path.stem().c_str();
+	std::string ids_str = network_path.parent_path().c_str();
+	if (!ids_str.empty())
+		ids_str += "/";
+	ids_str += network_path.stem().c_str();
 	ids_str += "_ids";
 	ids_str += network_path.extension().c_str();
 	return ids_str;
 }
 
+// ----------------------------------------------------------------------------
+//  Copy of test_multiclass_decision_function from dlib/svm.
+//    Added source_files and lookup map to identify images with wrong answers.
+// ----------------------------------------------------------------------------
 
+    template <
+        typename dec_funct_type,
+        typename sample_type,
+        typename label_type
+        >
+    const matrix<double> bearid_test_multiclass_decision_function (
+        const dec_funct_type& dec_funct,
+        const std::vector<sample_type>& x_test,
+        const std::vector<label_type>& y_test,
+        const std::vector<std::string>& source_files,
+		const std::map<int, std::string>& id_label_map
+    )
+    {
+        const std::vector<label_type> all_labels = dec_funct.get_labels();
+
+        // make a lookup table that maps from labels to their index in all_labels
+        std::map<label_type,unsigned long> label_to_int;
+        for (unsigned long i = 0; i < all_labels.size(); ++i)
+            label_to_int[all_labels[i]] = i;
+
+        matrix<double, 0, 0, typename dec_funct_type::mem_manager_type> res;
+        res.set_size(all_labels.size(), all_labels.size());
+
+        res = 0;
+
+        typename std::map<label_type,unsigned long>::const_iterator iter;
+
+        // now test this trained object 
+        for (unsigned long i = 0; i < x_test.size(); ++i)
+        {
+            iter = label_to_int.find(y_test[i]);
+            // ignore samples with labels that the decision function doesn't know about.
+            if (iter == label_to_int.end())
+                continue;
+
+            const unsigned long truth = iter->second;
+			int label_id = dec_funct(x_test[i]);
+            const unsigned long pred  = label_to_int[dec_funct(x_test[i])];
+			std::string label = id_label_map.find (label_id)->second;
+			boost::filesystem::path path_full_imgfile (source_files[i]);
+			boost::filesystem::path path_imgfile = path_full_imgfile.filename ();
+			boost::filesystem::path path_parent_path = path_full_imgfile.parent_path ();
+			boost::filesystem::path path_parent = path_parent_path.filename ();
+			boost::filesystem::path path_source_path = path_parent / path_imgfile;
+
+            res(truth,pred) += 1;
+			// cout << "Matched " << path_source_path.string() << " to " <<  label << endl;
+			if (truth != pred)
+			{
+				cout << "Matched " << path_source_path.string() << " to " <<  label << endl;
+			}
+        }
+
+        return res;
+    }
+
+// ----------------------------------------------------------------------------------------
 // Set folds higer for cross validation
 // However, any bears with less than folds number of embeddings will be skipped
 int folds = 3;
@@ -171,12 +245,19 @@ int main(int argc, char** argv)
 
 		if (parser.option("h") || parser.number_of_arguments () != 1)
 		{
-			cout << "\nUsage  : bearsvm <option network_file> <embed_file>\n";
+			cout << "\nUsage  : bearsvm <option network_file> <embed_xml>\n";
 			cout << "\nExample: bearsvm -test bearsvm_network.dat val_embeds.xml\n\n";
 			parser.print_options();
 
 			return EXIT_SUCCESS;
 		}
+
+		if (parser.option("train"))
+			g_mode = "train";
+		else if (parser.option("test"))
+			g_mode = "test";
+		else if (parser.option("infer"))
+			g_mode = "infer";
 
 		// Samples are embeddings, which ar 128D vector of floats
 		typedef matrix<float,128,1> sample_type;
@@ -185,8 +266,10 @@ int main(int argc, char** argv)
 		std::vector<sample_type> samples;
 		std::vector<double> label_indices;
 		std::vector <std::string> ids; 
-		std::map<std::string,int> label_map;
-		std::string embed_file = parser[0];
+		std::vector <std::string> embed_files; 
+		std::map<std::string,int> label_id_map;
+		std::map<int, std::string> id_label_map;
+		std::string embed_xml = parser[0];
 		std::string svm_network_name, svm_network_ids_name;
 
 		// -----  Training ------------
@@ -194,9 +277,9 @@ int main(int argc, char** argv)
 		{
 			svm_network_name = parser.option("train").argument();
 			svm_network_ids_name = get_network_id_name (svm_network_name);
-		  cout << "\nTraining with embed file.... : " << embed_file << endl;
+		  cout << "\nTraining with embed file.... : " << embed_xml << endl;
 
-			extract_embeds (embed_file, samples, label_indices, ids, label_map);
+			extract_embeds (embed_xml, samples, label_indices, ids, embed_files, label_id_map);
 			// Onve vs One trainer
 			ovo_trainer trainer;
 
@@ -243,12 +326,17 @@ int main(int argc, char** argv)
 			for (int i = 0; i < ids2.size (); ++i) 
 			{
 				// cout << "ID: " << i << "\t: " << ids2[i] << endl;
-				label_map [ids2[i]] = i;
+				label_id_map [ids2[i]] = i;
+				id_label_map [i] = ids2[i];
 			}
 
-		  cout << "\nTesting with embed file.... : " << embed_file << endl;
-			extract_embeds (embed_file, samples, label_indices, ids, label_map);
-			matrix<double> cm = test_multiclass_decision_function(df3, samples, label_indices);
+		  cout << "\nTesting with embed file.... : " << embed_xml << endl;
+			extract_embeds (embed_xml, samples, label_indices, ids, embed_files, label_id_map);
+
+
+			// call copy of test_multiclass_decision_function.  Add embed_files 
+			//       to identify images with wrong answers.
+			matrix<double> cm = bearid_test_multiclass_decision_function(df3, samples, label_indices, embed_files, id_label_map);
 			// cout << "test df: \n" << cm << endl;
 			cout << "correct: "  << sum(diag(cm)) << " : total : " << sum(cm) << endl;
 			cout << "accuracy: "  << sum(diag(cm))/sum(cm) << endl;
@@ -262,10 +350,10 @@ int main(int argc, char** argv)
 			// Check serialization
 			std::vector <string> ids2;
 			int idx;
-			deserialize(svm_network_name) >> ids2;
-			deserialize(svm_network_ids_name) >> df3;
-		  cout << "\nInferring with embed file.... : " << embed_file << endl;
-			extract_embeds (embed_file, samples, label_indices, ids, label_map);
+			deserialize(svm_network_ids_name) >> ids2;
+			deserialize(svm_network_name) >> df3;
+		  cout << "\nInferring with embed file.... : " << embed_xml << endl;
+			extract_embeds (embed_xml, samples, label_indices, ids, embed_files, label_id_map);
 			for (int i = 0 ; i < samples.size (); ++i)
 			{
 				idx = df3 (samples[i]);
