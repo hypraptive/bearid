@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 import sys
 import argparse
@@ -30,14 +30,14 @@ def main (argv) :
 	u.set_filetype ('chips')
 	verbose = 0
 	if verbose > 0:
-		print "n: ", args.n
-		print "output: ", args.output
-		print "files: ", args.files
+		print("n: ", args.n)
+		print("output: ", args.output)
+		print("files: ", args.files)
 
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 		if verbose > 0:
-			print "new output: ", args.output
+			print("new output: ", args.output)
 	xml_files = u.generate_xml_file_list (args.files)
 	u.do_generate_folds (xml_files, args.n, args.output, args.mode)
 
