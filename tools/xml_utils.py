@@ -7,7 +7,6 @@ import random
 import logging
 import xml.dom.minidom
 import argparse
-import xml_explore as xe
 import os
 import datetime
 import csv
@@ -21,6 +20,7 @@ import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.manifold import TSNE
+from PIL import Image
 
 
 g_x = 0
@@ -139,6 +139,59 @@ def set_argv (argv) :
 def get_argv () :
 	return g_argv
 
+##------------------------------------------------------------------------
+#  return count of specified pathed element from tree node
+#  example of counting labels:
+#      count_elem (root, "images image box label")
+##------------------------------------------------------------------------
+def count_elem (node, child_elem):
+	count=0
+	elems = child_elem.split ()
+	if (len (elems) == 1):
+		children = node.findall (child_elem)
+		return len (children)
+	# get the next child down, recurse
+	elems = child_elem.split (' ', 1)
+	for child in node.findall (elems[0]):
+		count += count_elem (child, elems[1])
+	return count	
+    
+#---------------------------------------------------------------------------
+#  return count of faces/boxes in xml
+#---------------------------------------------------------------------------
+def count_faces (faces_xml):
+	tree = ET.parse (faces_xml)
+	root = tree.getroot()
+	count = count_elem (root, "images image box")
+	return count
+    
+#---------------------------------------------------------------------------
+#  insert element label to "images image box" with specified string
+#---------------------------------------------------------------------------
+def add_box_label (tree, label_str):
+	label_count=0
+	for images in tree.findall ('images'):
+		for image in images.findall ('image'):
+			for box in image.findall ('box'):
+				curLabel = box.findall ('label')
+				if len(curLabel) > 0:
+					print(image.text + " has existing label of " + curLabel.text)
+					continue
+				label = ET.SubElement (box, 'label')
+				# pdb.set_trace ()
+				label.text = label_str;
+				label_count += 1
+				# print "added label"
+	return label_count
+
+#---------------------------------------------------------------------------
+#  load file, return root
+#---------------------------------------------------------------------------
+def load_file (file):
+	tree = ET.parse (file)
+	root = tree.getroot()
+	return root, tree
+	
 ##------------------------------------------------------------
 ##  load xml into dictionary of <string><element_list>
 ##  ex:  d["b-032"] = ["<Element 'chip' at 0x123,..,<Element 'chip' at 0x43]
@@ -165,6 +218,11 @@ def load_objs (root, d_objs, filetype) :
 			label = label_list[0].text
 			objects.append (chipfile)
 			d_objs[label].append(chip)
+	elif filetype == 'images' :
+		# pdb.set_trace ()
+		for image in root.findall ('./images/image'):
+			facefile = image.attrib.get ('file')
+			objects.append (facefile)
 	elif filetype == 'faces' :
 		# pdb.set_trace ()
 		for image in root.findall ('./images/image'):
@@ -539,7 +597,7 @@ def create_new_tree_w_element (filetype="chips") :
 	if filetype == "faces" :
 		elem_name = "images"
 	else :
-		elem_name = "chips"
+		elem_name = filetype
 	r_elem = ET.SubElement (r, elem_name)
 	return r, r_elem
 
@@ -567,7 +625,7 @@ def write_file_with_label (xml_file_in, xml_file_out, key):
 def unpath_chips (xml_files, append):
 	# pdb.set_trace ()
 	for xml_file in xml_files:
-		root, tree = xe.load_file (xml_file)
+		root, tree = load_file (xml_file)
 		for chip in root.findall ('./chips/chip'):
 			label_list = chip.findall ('label')
 			pathed_chipfile = chip.attrib.get ('file')
@@ -603,9 +661,10 @@ def generate_xml_file_list (inputfiles):
 ##------------------------------------------------------------
 ##  load objs from list of files into objs_d
 ##    if filename is directory, load all its xml files
+##  return list files in metadata
 ##------------------------------------------------------------
 def load_objs_from_files (filenames, objs_d, filetype="chips"):
-	chipfiles = []
+	objfiles = []
 	# print "in load_objs_from_files"
 	# pdb.set_trace ()
 	## load all chips into objs_d
@@ -613,10 +672,10 @@ def load_objs_from_files (filenames, objs_d, filetype="chips"):
 	for file in filenames:
 		print("\t", file)
 		# pdb.set_trace()
-		root, tree = xe.load_file (file)
-		chipfiles.extend (load_objs (root, objs_d, filetype))
+		root, tree = load_file (file)
+		objfiles.extend (load_objs (root, objs_d, filetype))
 	# pdb.set_trace()
-	return chipfiles
+	return objfiles
 
 ##------------------------------------------------------------
 ##  filter chips :
@@ -1147,11 +1206,60 @@ def print_pairs_stats (objs_d) :
 	print('unmatched pairs: ', len (unmatched_labels))
 
 ##------------------------------------------------------------
+##  prints: 
+##     min size, 
+##     max size, 
+##	   resolution of min image, 
+##     resoulution of max image
+##     count of each diffent types of images 
+##        img.format (), img.size 
+##------------------------------------------------------------
+def print_imgs_stats (img_files) :
+	imgs_d = defaultdict(int)
+	# print (len (img_files), ': ', img_files)
+	for i in range (len (img_files)) : 	# all labels
+		img = Image.open (img_files[i])
+		imgs_d [img.format] += 1
+		if img.format == 'MPO' :
+			mpo_file = img_files[i]
+		width, height = img.size
+		size = width * height
+		if i == 0 :
+			min_size = size
+			max_size = size
+			min_img = img
+			max_img = img
+			min_img_file = img_files[i]
+			max_img_file = img_files[i]
+		if size < min_size :
+			min_size = size
+			min_img = img
+			min_img_file = img_files[i]
+		elif size > max_size :
+			max_size = size
+			max_img = img
+			max_img_file = img_files[i]
+	print ('min image : ', min_img_file)
+	print ('resolution: ', min_img.width, min_img.height)
+	print ('min size  : ', min_size)
+	print ('max image : ', max_img_file)
+	print ('resolution: ', max_img.width, max_img.height)
+	print ('max size  : ', max_size)
+
+	for img_format, count in imgs_d.items () :  ## iterate through all chips
+		print (img_format, ' : ', count)
+	print ('\n\t MPO : ', mpo_file)
+	return
+
+##------------------------------------------------------------
 ##  return label stats in file
 ##------------------------------------------------------------
 def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, write_stats=False):
 	objs_d = defaultdict(list)
 	objfiles = load_objs_from_files (filenames, objs_d, filetype)
+	if filetype == "images" :
+		print_imgs_stats (objfiles)
+		return
 	if filetype == "pairs" :
 		print_pairs_stats (objs_d)
 		return
@@ -1162,10 +1270,12 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 	obj_count = sum (img_cnt_per_label)
 	if get_verbosity () > 1 :
 		for label in sorted (set (all_labels)):
-			print(label, '	,	', len (objs_d[label]))
+			if get_verbosity () > 2 or len (objs_d[label]) > 0 :
+				print(label, '	,	', len (objs_d[label]))
 	u_combos = 0
 	chips_count_list = img_cnt_per_label
 	diff_chip_count  = obj_count
+	# pdb.set_trace ()
 	for i in range (len (chips_count_list)-1) : 	# all labels
 		i_count = len (all_objs[i][1])			# count of ith label
 		diff_chip_count -= i_count				# count of different labels
@@ -1173,8 +1283,8 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 
 	print('-----------------------------')
 	print('            total', filetype, ':', obj_count)
-	print('                # bears :', len (objs_d))
-	print(' average', filetype, 'per bear :', obj_count / len (objs_d))
+	print('                # bears :', len (chips_count_list))
+	print(' average', filetype, 'per bear :', obj_count / len (chips_count_list))
 	combos = sum ([(n*(n-1)/2) for n in img_cnt_per_label if n > 1])
 	print('  median', filetype, 'per bear :', np.median (img_cnt_per_label))
 	print('  possible matched sets :', combos)
@@ -1231,7 +1341,7 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 ##------------------------------------------------------------
 def print_faces_stats (write_unused_images) :
 	print("-----------------------------")
-	print("....files with no faces : ", len (g_stats_few))
+	print("....files with no faces      : ", len (g_stats_few))
 	print("....files with multiple faces: ", len (g_stats_many))
 	# pdb.set_trace ()
 	if write_unused_images:
@@ -1357,7 +1467,7 @@ def str_to_float (floats_str) :
 ##------------------------------------------------------------
 ##  plot embeddings
 ##------------------------------------------------------------
-def plot_embeddings (input_files) :
+def write_embed_tsv (input_files) :
 	embeds_d = defaultdict(list)
 	load_objs_from_files (input_files, embeds_d, 'embeddings')
 	label_list = []
@@ -1366,10 +1476,6 @@ def plot_embeddings (input_files) :
 		for embed in embeds :
 			embeds_list.append (embed)
 			label_list.append (label)
-	tsne = TSNE(n_components=2, random_state=0)
-	features = np.array(embeds_list)
-	reduced = tsne.fit_transform(features)
-	# pdb.set_trace ()	
 	embeds_tsv_file = open ("embeds.tsv", "w")
 	labels_tsv_file = open ("labels.tsv", "w")
 	for i in range(len (embeds_list)):
@@ -1381,10 +1487,95 @@ def plot_embeddings (input_files) :
 	labels_tsv_file.close ()
 
 	print ("generated tsv files: ")
-	print ("\tembed.tsv")
+	print ("\tembeds.tsv")
 	print ("\tlabels.tsv")
 
 	# print ('\t'.join (str(x) for x in embeds_list[0]))
+
+##------------------------------------------------------------
+##  plot embeddings
+##------------------------------------------------------------
+def plot_embeddings (input_files) :
+	embeds_d = defaultdict(list)
+	load_objs_from_files (input_files, embeds_d, 'embeddings')
+	label_list = []
+	embeds_list = []
+	for label, embeds in sorted(embeds_d.items()): ## list of embeds
+		for embed in embeds :
+			embeds_list.append (embed)
+			label_list.append (label)
+	tsne = TSNE(n_components=2, random_state=0, perplexity=5, learning_rate=10, method='exact', n_iter=2000)
+	features = np.array(embeds_list)
+	X_2d = tsne.fit_transform(features)
+	label_list_set = set (label_list)
+	target_names = list (label_list_set)
+	target_names.sort ()
+	target_ids = range(len(target_names))
+	y = np.array (label_list)
+	pdb.set_trace ()	
+
+	have_display = "DISPLAY" in os.environ
+	if have_display:
+		plt.figure()
+		ax = plt.subplot (111)
+		markers = 'o', 'o', 'o', 'o', 'o', 'o', 'o', 'o', '^', '^', '^', '^', '^', '^', '^', '^'
+		colors  = 'r', 'g', 'b', 'c', 'm', 'y', 'k', 'w', 'r', 'g', 'b', 'c', 'm', 'y', 'k', 'w'
+		for i, c, label, m in zip(target_ids, colors, target_names, markers):
+			# print (i, ' ', c, ' ', label)
+			ax.scatter(X_2d[y == label, 0], X_2d[y == label, 1], c=c, label=label, marker=m, s=100)
+			# pdb.set_trace ()	
+		chartBox = ax.get_position ()
+		plt.tight_layout()
+		ax.set_position ([chartBox.x0, chartBox.y0, chartBox.width*0.90, chartBox.height])
+		ax.legend(bbox_to_anchor=(0.87,1.0),loc='upper left', ncol=1, scatterpoints=1)
+		plt.xticks([])
+		plt.yticks([])
+		plt.savefig('emb.png')
+		plt.show()
+	else:
+		print ('\n\tUnable to plot, no display detected.\n')
+
+	# print ('\t'.join (str(x) for x in embeds_list[0]))
+
+##------------------------------------------------------------
+##  extract embeddings
+##------------------------------------------------------------
+def extract_bc_embeddings (input_files) :
+	embeds_d = defaultdict(list)
+	bc_embeds = []
+	bc1_embeds = []
+	bf_embeds = []
+	xml_files = generate_xml_file_list (input_files)
+	print ('\nextracting embeddings from file: ')
+	for x_file in xml_files:
+		print("\t", x_file)
+		# pdb.set_trace()
+		root, tree = load_file (x_file)
+		# separate out bc & bf bears
+		for embedding in root.findall ('./embeddings/embedding'):    
+			label = embedding.find ('./label')
+			# pdb.set_trace ()
+			if label.text[:2] == 'bc' : # bc bear
+				if label.text == 'bc_also' or label.text == 'bc_amber' or label.text == 'bc_beatrice' or label.text == 'bc_bella' or label.text == 'bc_flora' or label.text == 'bc_frank' or label.text == 'bc_gc' or label.text == 'bc_hoeya' or label.text == 'bc_kwatse' or label.text == 'bc_lenore' or label.text == 'bc_lillian' or label.text == 'bc_lucky' or label.text == 'bc_river' or label.text == 'bc_steve' or label.text == 'bc_toffee' or label.text == 'bc_topaz' :
+					bc1_embeds.append (embedding)
+				else :
+					bc_embeds.append (embedding)
+			else : # brooks bear
+				bf_embeds.append (embedding)
+	# write out bc bears
+	print ('\t... # bc bears: ', len (bc_embeds))
+	print ('\t... # bc1 bears: ', len (bc1_embeds))
+	print ('\t... # bf bears: ', len (bf_embeds))
+	# pdb.set_trace ()
+	t_root, t_embeds = create_new_tree_w_element ("embeddings")
+	for i in range (len (bc1_embeds)) :
+		embed = bc1_embeds[i]
+		t_embeds.append (embed)
+	tree = ET.ElementTree (t_root)
+	t_name = "bc1_embeds.xml"
+	indent (t_root)
+	tree.write (t_name)
+	print ('wrote bc embeddings to ', t_name)
 
 ##------------------------------------------------------------
 ##   main code
