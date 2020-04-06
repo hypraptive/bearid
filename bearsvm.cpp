@@ -357,7 +357,8 @@ int main(int argc, char** argv)
 			for (int i = 0 ; i < samples.size (); ++i)
 			{
 				idx = df3 (samples[i]);
-				cout << "ID: " << ids2[idx] << endl;
+				boost::filesystem::path path_emd_file (embed_files[i]);
+				cout << path_emd_file.stem().string() << " : " << ids2[idx] << endl;
 			}
 		}
 		else
