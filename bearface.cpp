@@ -472,19 +472,15 @@ int main(int argc, char** argv)
 		default:
 		  cout << "unrecognized argument: " << c << endl;
 		  cout << "\nUsage:" << endl;
-		  cout << "\t./bearface [-l label] mmod_dog_hipsterizer.dat <source_img_file>" << endl;
+		  cout << "\t./bearface [-t] <bearface_network_file> <source_img_file>" << endl;
 		  cout << "\nDetect bear faces in images.\n" << endl;
-		  cout << "mmod_dog_hipsterizer.dat can be found at:\n";
-		  cout << "\t /home/bearid/dlib-data/mmod_dog_hipsterizer.dat\n" << endl;
 		  return 0;
     }
 	if ((argc - optind) != 2)
 	{
 		cout << "\nUsage:" << endl;
-		cout << "\t./bearface [-l label] mmod_dog_hipsterizer.dat <source_img_file>" << endl;
+		cout << "\t./bearface [-t] <bearface_network_file> <source_img_file>" << endl;
 		cout << "\nDetect bear faces in images.\n" << endl;
-		cout << "mmod_dog_hipsterizer.dat can be found at:\n";
-		cout << "\t /home/bearid/dlib-data/mmod_dog_hipsterizer.dat\n" << endl;
 		return 0;
 	}
 	std::string network = argv[optind];

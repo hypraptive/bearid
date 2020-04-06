@@ -260,17 +260,17 @@ int xml_populate_chip_source (ptree &xml_chip, image_dataset_metadata::box box, 
 	xml_chip_source_box.add ("label", box.label);
 	// all 6 parts
 	ptree &sr_lear = xml_chip_source_box.add ("part", "");
-	xml_add_part (sr_lear, "lear", lear); 
+	xml_add_part (sr_lear, "lear", lear);
 	ptree &src_leye = xml_chip_source_box.add ("part", "");
-	xml_add_part (src_leye, "leye", leye); 
+	xml_add_part (src_leye, "leye", leye);
 	ptree &src_nose = xml_chip_source_box.add ("part", "");
-	xml_add_part (src_nose, "nose", nose); 
+	xml_add_part (src_nose, "nose", nose);
 	ptree &src_rear = xml_chip_source_box.add ("part", "");
-	xml_add_part (src_rear, "rear", rear); 
+	xml_add_part (src_rear, "rear", rear);
 	ptree &src_reye = xml_chip_source_box.add ("part", "");
-	xml_add_part (src_reye, "reye", reye); 
+	xml_add_part (src_reye, "reye", reye);
 	ptree &src_top = xml_chip_source_box.add ("part", "");
-	xml_add_part (src_top, "top", top); 
+	xml_add_part (src_top, "top", top);
 	return 0;
 }
 
@@ -310,16 +310,19 @@ int main(int argc, char** argv) try
 	{
 		if (strcmp (argv[1], "-root") != 0)
 		{
-			cout << "Call this program like this:" << endl;
-			cout << "./bearchip [-root <img_root_dir> <metadata_file>" << endl;
+			cout << "unrecognized argument: " << argv[1] << endl;
+			cout << "\nUsage:" << endl;
+			cout << "./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
+			cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
 			return 0;
 		}
 		img_root = argv[2];
 	}
     else if (argc != 2)
     {
-        cout << "Call this program like this:" << endl;
-        cout << "./bearchip [-root <img_root_dir> <metadata_file>" << endl;
+			cout << "\nUsage:" << endl;
+        cout << "./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
+				cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
         return 0;
     }
 
@@ -372,10 +375,10 @@ int main(int argc, char** argv) try
         total_faces += faces.size();
 		std::string chip_dim = std::to_string(g_chip_size) + " " + std::to_string(g_chip_size);
 		// iterate through each face in image
-        for (size_t i = 0; i < faces.size(); ++i) 
+        for (size_t i = 0; i < faces.size(); ++i)
         {
           std::string img_subdir_file = erase_first_copy (orig_path, img_root); // -> bf/fitz/bf480/IMG123.JPG
-		  
+
           boost::filesystem::path p_img_subdir_file (img_subdir_file); // bf/fitz/bf_480/IMG123.JPG
 
 		  boost::filesystem::path p_img_subdir = p_img_subdir_file.parent_path (); // bf/fitz/bf_480
