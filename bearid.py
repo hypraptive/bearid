@@ -102,8 +102,12 @@ def main (argv) :
 	echo = '' 
 	run = 'test'
 	run = 'bearid'
+	args = ''
+	for a in sys.argv[1:] :
+		args += ' '
+		args += a
 	if run == 'bearid' :
-		cmds.append (echo + imglab + " -c " + imgs_xml + " " + sys.argv[1])
+		cmds.append (echo + imglab + " -c " + imgs_xml + " " + args)
 		outfiles.append ("imglab.out")
 		cmds.append (echo + bearface + " " + bearface_network + " " + imgs_xml)
 		outfiles.append ("bearface.out")
@@ -115,7 +119,7 @@ def main (argv) :
 		outfiles.append ("bearsvm.out")
 		printfiles.append ("bearsvm.out")
 	elif run == 'test' :
-		cmds.append (echo + imglab + " -c " + imgs_xml + " " + sys.argv[1])
+		cmds.append (echo + imglab + " -c " + imgs_xml + " " + args)
 		outfiles.append ("imglab.out")
 		cmds.append (echo + bearface + " " + bearface_network + " " + imgs_xml)
 		outfiles.append ("bearface.out")
