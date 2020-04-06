@@ -395,6 +395,9 @@ int main(int argc, char** argv) try
 		  std::string rel_pathed_chip_file = cur_dir.string() + "/" + p_img_subdir.string () + "/" + chip_file;
 		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, rel_pathed_chip_file, orig_path);
           cout << argv[i] << ": extracted chip " << to_string(i) << " to " << rel_pathed_chip_file << endl;
+		  boost::filesystem::path chip_file_path (rel_pathed_chip_file);
+		  if (!boost::filesystem::exists(chip_file_path.parent_path()))
+			  boost::filesystem::create_directories(chip_file_path.parent_path());
           save_jpeg(faces[i], rel_pathed_chip_file, 95);
         }
     }
