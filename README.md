@@ -23,7 +23,22 @@ How to run end-to-end inferencing using ```bearid.py``` or each of it's componen
 ### Running bearid
 Use the ```bearid.py``` python 3 script to predict the bear identities from a set of images.
 
-```./bearid.py <image_file/directories>```
+The ```bearid.py``` script expects all of the binaries and networks to be in the same directory as the script. If, for example, you cloned and built bearid as ~/bearid and cloned the models as ~/bearid-models, you can:
+
+```
+mkdir ~/tools
+cp ~/bearid/bearid.py ~/tools
+cp ~/bearid/build/bear* ~/tools
+cp ~/bearid-models/*.dat ~/tools
+```
+
+Then you can run:
+
+```
+~/tools/bearid.py <image_file/directories>
+```
+
+Intermediate results and log files will be written to the current working directory. Progress messages and final results are printed to standard out.
 
 ### Running each component
 Use the imglab and the C++ bearid components:
