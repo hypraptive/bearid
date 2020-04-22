@@ -8,7 +8,7 @@
   The input XML file can be generated using "imglab -c". The output file can be
   viewed and edited using imglab.
 
-  The face detector uses a pretrained CNN from the dlib example:
+	  The face detector uses a pretrained CNN from the dlib example:
 
   https://github.com/davisking/dlib/blob/master/examples/dnn_mmod_dog_hipsterizer.cpp
 
@@ -21,6 +21,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 #include <iostream>
+#include <dlib/cmd_line_parser.h>
 #include <dlib/dnn.h>
 #include <dlib/data_io.h>
 #include <dlib/image_processing.h>
@@ -35,18 +36,39 @@ using namespace std;
 using namespace dlib;
 using namespace boost::filesystem;
 
-// ----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
+// A 3x3 conv layer that doesn't do any downsampling
+template <long num_filters, typename SUBNET> using con3  = con<num_filters,3,3,1,1,SUBNET>;
+// A 5x5 conv layer that does 2x downsampling
 template <long num_filters, typename SUBNET> using con5d = con<num_filters,5,5,2,2,SUBNET>;
 template <long num_filters, typename SUBNET> using con5  = con<num_filters,5,5,1,1,SUBNET>;
 
 template <typename SUBNET> using downsampler  = relu<affine<con5d<32, relu<affine<con5d<32, relu<affine<con5d<16,SUBNET>>>>>>>>>;
+template <typename SUBNET> using downsampler_bn  = relu<bn_con<con5d<32, relu<bn_con<con5d<32, relu<bn_con<con5d<16,SUBNET>>>>>>>>>;
 template <typename SUBNET> using rcon5  = relu<affine<con5<45,SUBNET>>>;
+template <typename SUBNET> using rcon5_bn  = relu<bn_con<con5<45,SUBNET>>>;
 
 using net_type = loss_mmod<con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<input_rgb_image_pyramid<pyramid_down<6>>>>>>>>;
+using net_type_bn = loss_mmod<con<1,9,9,1,1,rcon5_bn<rcon5_bn<rcon5_bn<downsampler_bn<input_rgb_image_pyramid<pyramid_down<6>>>>>>>>;
 
-// ----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Define the 8x downsampling block with conv5d blocks.  
+// Use relu and batch normalization in the standard way.
+template <typename SUBNET> using downsampler_t  = relu<bn_con<con5d<32, relu<bn_con<con5d<32, relu<bn_con<con5d<32,SUBNET>>>>>>>>>;
 
+// The rest of the network will be 3x3 conv layers with batch normalization and
+// relu.  So we define the 3x3 block we will use here.
+template <typename SUBNET> using rcon3  = relu<bn_con<con3<32,SUBNET>>>;
+
+// Finally, we define the entire network.   The special input_rgb_image_pyramid
+// layer causes the network to operate over a spatial pyramid, making the detector
+// scale invariant.
+using net_type_t  = loss_mmod<con<1,6,6,1,1,rcon3<rcon3<rcon3<downsampler_t<input_rgb_image_pyramid<pyramid_down<6>>>>>>>>;
+
+// -----------------------------------------------------------------------------
+
+std::string g_mode;  // one of train, test, infer
 const unsigned MAX_LONG_SIDE = 2000;
 const unsigned MAX_SHORT_SIDE = 1500;
 const unsigned MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
@@ -101,10 +123,12 @@ void scale_parts (
 	}
 }
 
+//------------------------------------------------------------------------------ 
+//  scale the rect by the ratio
+//------------------------------------------------------------------------------ 
 void scale_rect (
 	rectangle &rect,
 	float pxRatio
-
 )
 {
 	// cout << "before scale: " << rect.left () << endl;
@@ -114,6 +138,43 @@ void scale_rect (
 	rect.set_bottom((int)((float)rect.bottom() * pxRatio));
 	// cout << "after scale: " << rect.left () << endl;
 }
+
+//------------------------------------------------------------------------------ 
+// clear labels from boxes so they won't be trained with images
+//------------------------------------------------------------------------------ 
+void clear_box_labels (std::vector<std::vector<mmod_rect>> &faces_list)
+{
+	for (unsigned long i=0; i < faces_list.size() ; ++i)
+	{
+		for (unsigned long j=0; j < faces_list[i].size() ; ++j)
+			(faces_list[i][j]).label = "";
+	}
+}
+
+//------------------------------------------------------------------------------ 
+// downscale imgs and face boxes
+//------------------------------------------------------------------------------ 
+void downscale_imgs_and_faces (
+	std::vector<matrix<rgb_pixel>> &imgs,
+	std::vector<std::vector<mmod_rect>> &faces_list
+	)
+{
+	matrix<rgb_pixel> img;
+	float pxRatio = 1.0;
+	std::vector<mmod_rect> faces;
+	for (unsigned long i=0; i < imgs.size() ; ++i)
+	{
+		img = imgs[i];
+		img = downscale_large_image (img, pxRatio);
+		if (pxRatio != 1) { // downscaled.  apply to faces of img
+			imgs[i] = img;
+			faces = faces_list[i];
+			for (unsigned long j=0; j < faces_list[i].size() ; ++j)
+				scale_rect ((faces_list[i][j]).rect, pxRatio);
+		}
+	}
+}
+
 
 // Find Faces and face landmarks
 void find_faces (
@@ -339,7 +400,7 @@ const matrix<double,1,3> my_test_object_detection_function (
 				{
 					ignore.push_back(b);
 				}
-				else if (b.label == label)
+				else // if (b.label == label)
 				{
 					truth_boxes.push_back(full_object_detection(b.rect));
 					++total_true_targets;
@@ -347,7 +408,7 @@ const matrix<double,1,3> my_test_object_detection_function (
 			}
 			for (auto&& b : hits)
 			{
-				if (b.label == label)
+				// if (b.label == label)
 					boxes.push_back(std::make_pair(b.detection_confidence, b.rect));
 			}
 
@@ -446,45 +507,74 @@ const matrix<double,1,3> my_test_object_detection_function (
 int main(int argc, char** argv)
 {try
 {
+		time_t timeStart = time(NULL);
+		command_line_parser parser;
+
+		parser.add_option("h","Display this help message.");
+		parser.add_option("train","Train bearface with network.", 1);
+		parser.add_option("out_network","Newly trained network.", 1);
+		parser.add_option("net_only","Train only obj detector.");
+		parser.add_option("sp_only","Train only shape predictor.");
+		parser.add_option("test","Test bearface using network file.", 1);
+		parser.add_option("infer","Detect faces using network file.", 1);
+		parser.parse(argc, argv);
+
+		const char* one_time_opts[] = {"h", "train", "test", "infer"};
+		parser.check_one_time_options(one_time_opts); // Can't give an option more than once
+
+		if (parser.option("h") || parser.number_of_arguments () != 1)
+		{
+			cout << "\n\t bearface is used to detect a bear face in an image using a\n";
+			cout << "\tnetwork file.  It can be trained and tested using the --train \n";
+			cout << "\tand --test flags, respectively.\n\n";
+			cout << "\nUsage  : bearface --<infer|test|train> <network_file> <img_xml>\n";
+			cout << "\nUsage  : bearface --infer bearface_network.dat imgs.xml\n";
+			cout << "\nExample: bearface --test bearface_network.dat imgs.xml\n\n";
+			cout << "\nExample: bearface --train bearface_network.dat -out new_network.dat imgs.xml\n\n";
+			parser.print_options();
+
+			return EXIT_SUCCESS;
+		}
+		std::string network;
+		if (parser.option("train"))
+		{
+			g_mode = "train";
+			network = parser.option ("train").argument();
+		}
+		else if (parser.option("test"))
+		{
+			g_mode = "test";
+			network = parser.option ("test").argument();
+		}
+		else if (parser.option("infer"))
+		{
+			g_mode = "infer";
+			network = parser.option ("infer").argument();
+		}
+		if (parser.option("net_only"))
+		{
+			if (g_mode != "train")
+				cout << "\n\t'net_only' option ignored when not in train mode." << endl;
+		}
+		if (parser.option("sp_only"))
+		{
+			if (g_mode != "train")
+				cout << "\n\t'sp_only' option ignored when not in train mode." << endl;
+		}
+
+
+
+	//----------------------------------------------------------------------
     //image_window win_wireframe;
     int total_faces = 0;
 
-	//----------------------------------------------------------------------
-	int aflag = 0;
-	int bflag = 0;
-	int tflag = 0;
 	char *lvalue = NULL;
 	int index;
 	int c;
 	std::string bearID;
   bool bLabelFixed = false;
 
-	while ((c = getopt (argc, argv, "t")) != -1)
-	  switch (c)
-		{
-		case 't':  // test flag
-		  tflag = 1;
-		  break;
-		case 'l':
-		  bearID = optarg;
-      bLabelFixed = true;
-		  break;
-		default:
-		  cout << "unrecognized argument: " << c << endl;
-		  cout << "\nUsage:" << endl;
-		  cout << "\t./bearface [-t] <bearface_network_file> <source_img_file>" << endl;
-		  cout << "\nDetect bear faces in images.\n" << endl;
-		  return 0;
-    }
-	if ((argc - optind) != 2)
-	{
-		cout << "\nUsage:" << endl;
-		cout << "\t./bearface [-t] <bearface_network_file> <source_img_file>" << endl;
-		cout << "\nDetect bear faces in images.\n" << endl;
-		return 0;
-	}
-	std::string network = argv[optind];
-	std::string imgs_file = argv[optind+1];
+	std::string imgs_file = parser[0];
 
     // load the models as well as glasses and mustache.
     net_type net;
@@ -493,9 +583,8 @@ int main(int argc, char** argv)
     deserialize(network) >> net >> sp >> glasses >> mustache;
 
 	// doing testing
-	if (tflag) {
-		cout << "doing testing..." << endl;
-		cout << "image file : " << imgs_file << endl;
+	if (g_mode == "test") {
+		cout << "\tTesting with " << imgs_file << endl;
 		std::vector<matrix<rgb_pixel>> images_test;
 		std::vector<std::vector<mmod_rect>> face_boxes_test;
 		// load_image_dataset(images_test, face_boxes_test, imgs_file);
@@ -538,6 +627,117 @@ int main(int argc, char** argv)
 		cout << endl;
 		return 0;
 	}
+	//----------------------------------------------------------------------
+	// 
+	//----------------------------------------------------------------------
+	if (g_mode == "train") {
+		std::string out_network = "";
+		const std::string train_file = imgs_file;
+		cout << "\n\tTraining with file: " << train_file << endl;
+		dlib::image_dataset_metadata::dataset data;
+		load_image_dataset_metadata(data, imgs_file);
+
+		std::string out_net;
+		if (parser.option ("out_network"))
+		{
+			out_net = parser.option ("out_network").argument();
+			boost::filesystem::path p_out_network (out_net);
+			if (p_out_network.has_parent_path () &&
+				!boost::filesystem::exists(p_out_network.parent_path()))
+				boost::filesystem::create_directories(p_out_network.parent_path());
+		}
+		else
+		{
+			time_t rawtime;
+			struct tm * timeinfo;
+			char buffer[80];
+
+			time (&rawtime);
+			timeinfo = localtime(&rawtime);
+
+			strftime(buffer,sizeof(buffer),"%Y%m%d%I%M",timeinfo);
+			out_net = "network_";
+			out_net.append (buffer);
+			out_net.append (".dat");
+		}
+		if (parser.option("net_only"))
+		{
+			cout << "\n\tTraining nets only." << endl;
+		}
+		if (parser.option("sp_only"))
+		{
+			cout << "\n\tTraining shape predictor only." << endl;
+		}
+
+		std::vector<matrix<rgb_pixel>> images_train;
+		std::vector<std::vector<mmod_rect>> face_boxes_train;
+		load_image_dataset(images_train, face_boxes_train, train_file);
+		cout << "num training images: " << images_train.size() << endl;
+		// --- scale images and face boxes ---
+		downscale_imgs_and_faces (images_train, face_boxes_train);
+		clear_box_labels (face_boxes_train);
+
+		// mmod_options options(face_boxes_train, 40,40); // doghip
+		mmod_options options(face_boxes_train, 80,80);
+		// The detector will automatically decide to use multiple sliding windows if needed.
+		// For the face data, only one is needed however.
+		cout << "num detector windows: "<< options.detector_windows.size() << endl;
+		for (auto& w : options.detector_windows)
+			cout << "detector window width by height: " << w.width << " x " << w.height << endl;
+		cout << "overlap NMS IOU thresh:             " << options.overlaps_nms.get_iou_thresh() << endl;
+		cout << "overlap NMS percent covered thresh: " << options.overlaps_nms.get_percent_covered_thresh() << endl;
+
+		// Now we are ready to create our network and trainer.
+		net_type_bn net(options);
+		// The MMOD loss requires that the number of filters in the final network layer equal
+		// options.detector_windows.size().  So we set that here as well.
+		net.subnet().layer_details().set_num_filters(options.detector_windows.size());
+		dnn_trainer<net_type_bn> trainer(net);
+		trainer.set_learning_rate(0.1);
+		trainer.be_verbose();
+		trainer.set_synchronization_file("mmod_sync", std::chrono::minutes(5));
+		// trainer.set_iterations_without_progress_threshold(300); // doghip
+		trainer.set_iterations_without_progress_threshold(8000);
+
+		// Now let's train the network.  We are going to use mini-batches of 150
+		// images.   The images are random crops from our training set (see
+		// random_cropper_ex.cpp for a discussion of the random_cropper).
+		std::vector<matrix<rgb_pixel>> mini_batch_samples;
+		std::vector<std::vector<mmod_rect>> mini_batch_labels;
+		random_cropper cropper;
+		// cropper.set_chip_dims(200, 200);  // doghip
+		// cropper.set_min_object_size(0.2);  // doghip
+		dlib::rand rnd;
+		// Run the trainer until the learning rate gets small.  This will probably take several
+		// hours.
+		cout << "\tRunning training ... \n" << endl;
+		while(trainer.get_learning_rate() >= 1e-4)
+		{
+			// cropper(150, images_train, face_boxes_train, mini_batch_samples, mini_batch_labels);
+			// crop size of 10
+			cropper(75, images_train, face_boxes_train, mini_batch_samples, mini_batch_labels);
+			// We can also randomly jitter the colors and that often helps a detector
+			// generalize better to new images.
+			for (auto&& img : mini_batch_samples)
+				disturb_colors(img, rnd);
+			trainer.train_one_step(mini_batch_samples, mini_batch_labels);
+		}
+		// wait for training threads to stop
+		trainer.get_net();
+		cout << "done training" << endl;
+
+		// Save the network to disk
+		net.clean();
+
+		serialize(out_net+"_bn") << net << sp << glasses << mustache;
+		cout << "\n\tWriting to network: " << out_net+"_bn" << endl;
+		net_type anet = net;
+		serialize(out_net) << anet << sp << glasses << mustache;
+		cout << "\n\tWriting to network: " << out_net << endl;
+
+		return 0;
+	}
+
 
 	// doing inferencing
 
@@ -569,7 +769,12 @@ int main(int argc, char** argv)
     }
     cout << "Total faces found: " << total_faces << endl;
 	path orig_path(imgs_file);
-	std::string faces_file = orig_path.parent_path().string () + "/" + orig_path.stem().string() + "_faces.xml";
+	std::string faces_file;
+	if (orig_path.has_parent_path ())
+	{
+		faces_file = orig_path.parent_path().string () + "/";
+	}
+	faces_file += orig_path.stem().string() + "_faces.xml";
 	cout << "faces_file: " << faces_file << endl;
     save_image_dataset_metadata(data, faces_file);
     if (!bLabelFixed)
