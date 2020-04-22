@@ -53,26 +53,28 @@ def main (argv) :
 	embeds_xml = outdir + "imgs_faces_chips_embeds.xml"
 	imglab = "/usr/local/bin/imglab"
 
+	dirname = os.path.dirname(__file__)
+
 	#--------------------------------------------------
 	#  list all required files here.
 	#--------------------------------------------------
 	files_dep = []   # list of files required to exist
 	files_dep.append (imglab)
-	bearface = "/home/mary/tools/bearface"
+	bearface = dirname + "/bearface"
 	files_dep.append (bearface)
-	bearchip = "/home/mary/tools/bearchip"
+	bearchip = dirname + "/bearchip"
 	files_dep.append (bearchip)
-	bearembed = "/home/mary/tools/bearembed"
+	bearembed = dirname + "/bearembed"
 	files_dep.append (bearembed)
-	bearsvm = "/home/mary/tools/bearsvm"
+	bearsvm = dirname + "/bearsvm"
 	files_dep.append (bearsvm)
-	bearface_network = "/home/ed/dev/bearid-models/bearface_network.dat"
+	bearface_network = dirname + "/bearface_network.dat"
 	files_dep.append (bearface_network)
-	bearembed_network = "/home/ed/dev/bearid-models/bearembed_network.dat"
+	bearembed_network = dirname + "/bearembed_network.dat"
 	files_dep.append (bearembed_network)
-	bearsvm_network = "/home/mary/tmp/dh_gold_diff/bearsvm_network.dat"
+	bearsvm_network = dirname + "/bearsvm_network.dat"
 	files_dep.append (bearsvm_network)
-	bearsvm_ids = "/home/mary/tmp/dh_gold_diff/bearsvm_network_ids.dat"
+	bearsvm_ids = dirname + "/bearsvm_network_ids.dat"
 	files_dep.append (bearsvm_ids)
 	#--------------------------------------------------
 	# validate that all those files exist
@@ -99,7 +101,7 @@ def main (argv) :
 	#--------------------------------------------------
 
 	echo = 'echo '
-	echo = '' 
+	echo = ''
 	run = 'test'
 	run = 'bearid'
 	args = ''
@@ -157,7 +159,7 @@ def main (argv) :
 		i += 1
 
 #		process = subprocess.Popen(cmd.split(),
-#			stdout=subprocess.PIPE, 
+#			stdout=subprocess.PIPE,
 #			stderr=subprocess.PIPE)
 #			print ('stdout      : ', stdout.decode ('utf-8'))
 #			print ('stderr      : ', stderr.decode ('utf-8'))
@@ -192,5 +194,3 @@ if __name__ == "__main__":
 #
 #
 ##------------------------------------------------------------
-
-
