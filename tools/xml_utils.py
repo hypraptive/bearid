@@ -184,6 +184,95 @@ def add_box_label (tree, label_str):
 				# print "added label"
 	return label_count
 
+##------------------------------------------------------------
+##  read in image and scale to max values.
+##  return scale ratio and scaled image
+##------------------------------------------------------------
+def downscale_image (imgfile, max_long, max_short) :
+	img = Image.open (imgfile)
+	w, h = img.size
+	ratio = 1
+	if w * h < max_long * max_short : 
+		resized_img = img.resize ((w, h))
+		return resized_img, ratio
+	if w > h :
+		if (max_long / w) < (max_short / h) :
+			ratio = max_long / w
+		else :
+			ratio = max_short / h
+	else :
+		if (max_long / h) < (max_short / w) :
+			ratio = max_long / h
+		else :
+			ratio = max_short / w
+	new_w = int (w*ratio)
+	new_h = int (h*ratio)
+	# print ('scaling ', imgfile, ' by ', ratio )
+	# print ('\nfrom : ', w, 'x', h, ' to: ', new_w, 'x', new_h, '\n')
+
+	resized_img = img.resize ((new_w, new_h))
+	return resized_img, ratio
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+
+##------------------------------------------------------------
+##	scales attributes in box using ratio
+##    modifies: box (height, width, top, left), box.part (x, y)
+##------------------------------------------------------------
+def scale_box (box, pxRatio) :
+	for attrib in ('height', 'width', 'top', 'left') :
+		val = box.attrib.get (attrib)
+		# print ('attrib: ', attrib, ' val: ', val)
+		if val != None :
+			val = int (val)
+			box.set (attrib, str (int (val * pxRatio)))
+		else :
+			print ('attrib ', attrib, 'not found')
+	for part in box.findall ('./part') :
+		for attrib in ('x', 'y') :
+			val = part.attrib.get (attrib)
+			if val != None :
+				val = int (val)
+				part.set (attrib, str (int (val * pxRatio)))
+			else :
+				print ('attrib ', attrib, 'not found')
+
+##------------------------------------------------------------
+#   for each image in file, if larger than 1500 by 2000, 
+#     - downscale image and face info
+#	  - write image to parallel directory
+#	  - write out xml with new info
+##------------------------------------------------------------
+def downscale_face_file (orig_file, max_x=1500, max_y=2000) :
+
+	root, tree = load_file (orig_file)
+	print ('\n... downscaling : ', orig_file, '\n')
+	for image_tag in root.findall ('./images/image'):
+		# get file and downscale
+		imgfile = image_tag.attrib.get ('file')
+		scaled_image, ratio  = downscale_image (imgfile, max_x, max_y)
+		new_imgfile = imgfile.replace ('imageSource', 'imageSourceSmall')
+		new_imgfile_dir = os.path.dirname (new_imgfile)
+		if not os.path.isdir (new_imgfile_dir) :
+			os.makedirs (new_imgfile_dir)
+		# imgbase, imgext = os.path.splitext (os.path.basename (imgfile)) #-test
+		# new_imgfile = imgbase + '_small' + imgext #-test
+		# print ('\t... writing new image to: ', new_imgfile, '\n')
+		scaled_image.save (new_imgfile)
+		image_tag.set ('file', new_imgfile) # fix xml image_tag
+		for box_tag in image_tag.findall ('box') :
+			# fix xml box_tag using ratio
+			scale_box (box_tag, ratio)
+			# pdb.set_trace ()
+	filebase, fileext = os.path.splitext (orig_file)
+	new_file = filebase + '_small' + fileext
+	print("\n\t... writing new face xml : ", new_file, "\n\n")
+	indent (root)
+	# pdb.set_trace ()
+	tree.write (new_file)
+	return 
+
 #---------------------------------------------------------------------------
 #  load file, return root
 #---------------------------------------------------------------------------
