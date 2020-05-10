@@ -68,7 +68,7 @@ using net_type_t  = loss_mmod<con<1,6,6,1,1,rcon3<rcon3<rcon3<downsampler_t<inpu
 
 // -----------------------------------------------------------------------------
 
-std::string g_mode;  // one of train, test, infer
+std::string g_mode;  // one of train_obj, train_sp, test, infer
 const unsigned MAX_LONG_SIDE = 2000;
 const unsigned MAX_SHORT_SIDE = 1500;
 const unsigned MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
@@ -254,7 +254,7 @@ void find_faces (
   }
 
   // For each face, find the face landmarks
-  cout << "Finding landmarks..." << endl;
+  // cout << "Finding landmarks..." << endl;
   for (auto&& d : dets)
   {
       // get the landmarks for this face
@@ -439,6 +439,8 @@ const matrix<double,1,3> my_test_object_detection_function (
 
 // ----------------------------------------------------------------
 // initial copy from dlib/image_processing/shape_preditor.h
+//   modified to take metadata instead of array of images
+//	 due to memory limit.  load a single image and scale as needed.
 // ----------------------------------------------------------------
 
     double my_test_shape_predictor (
@@ -500,6 +502,83 @@ const matrix<double,1,3> my_test_object_detection_function (
         return mean;
     }
 
+//----------------------------------------------------------------
+//  train_sp 
+//----------------------------------------------------------------
+shape_predictor run_train_sp (std::string train_file)
+{
+	cout << "\n\tTraining with file: " << train_file << endl;
+	// dlib::image_dataset_metadata::dataset data;
+	// load_image_dataset_metadata(data, imgs_file);
+
+	// std::vector<matrix<rgb_pixel>> images_train;
+	// std::vector<std::vector<mmod_rect>> face_boxes_train;
+	// load_image_dataset(images_train, face_boxes_train, train_file);
+	// --- scale images and face boxes ---
+	// downscale_imgs_and_faces (images_train, face_boxes_train);
+
+//----------------------------------------------------------------------
+
+	dlib::array<array2d<unsigned char> > images_train;
+	std::vector<std::vector<full_object_detection> > faces_train;
+	load_image_dataset(images_train, faces_train, train_file);
+	cout << "num training images: " << images_train.size() << endl;
+	shape_predictor_trainer trainer;
+	trainer.set_oversampling_amount(300);
+	trainer.set_nu(0.05);
+	trainer.set_tree_depth(2);
+	trainer.set_num_threads(2);
+	// cascade depth=20, tree depth=5, padding=0.2
+	trainer.set_cascade_depth (20);
+	trainer.set_tree_depth (5);
+	trainer.set_feature_pool_region_padding (0.2);
+
+	trainer.be_verbose();
+	cout << "\trunning shape predictor training ... \n";
+	shape_predictor sp = trainer.train(images_train, faces_train);
+	return sp; 
+	/*
+	cout << "mean training error: "<< 
+		test_shape_predictor(sp, images_train, faces_train, get_interocular_distances(faces_train)) << endl;
+	cout << "mean testing error:  "<< 
+		test_shape_predictor(sp, images_test, faces_test, get_interocular_distances(faces_test)) << endl;
+	serialize("sp.dat") << sp;
+	*/
+}
+
+//----------------------------------------------------------------
+// get_output_network_name ()
+//	 if specified in argument, ensure parent directory exist.
+//	 else append current timestamp
+//----------------------------------------------------------------
+std::string get_output_network_name (command_line_parser& parser)
+{
+	std::string out_net;
+	if (parser.option ("out_network"))
+	{
+		out_net = parser.option ("out_network").argument();
+		boost::filesystem::path p_out_network (out_net);
+		if (p_out_network.has_parent_path () &&
+			!boost::filesystem::exists(p_out_network.parent_path()))
+			boost::filesystem::create_directories(p_out_network.parent_path());
+	}
+	else
+	{
+		time_t rawtime;
+		struct tm * timeinfo;
+		char buffer[80];
+
+		time (&rawtime);
+		timeinfo = localtime(&rawtime);
+
+		strftime(buffer,sizeof(buffer),"%Y%m%d%I%M",timeinfo);
+		out_net = "network_";
+		out_net.append (buffer);
+		out_net.append (".dat");
+	}
+	return out_net;
+}
+
 // ----------------------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------------------
@@ -511,62 +590,61 @@ int main(int argc, char** argv)
 		command_line_parser parser;
 
 		parser.add_option("h","Display this help message.");
-		parser.add_option("train","Train bearface with network.", 1);
+		parser.add_option("train_obj","Train object detector.", 1);
 		parser.add_option("out_network","Newly trained network.", 1);
-		parser.add_option("net_only","Train only obj detector.");
-		parser.add_option("sp_only","Train only shape predictor.");
-		parser.add_option("test","Test bearface using network file.", 1);
+		parser.add_option("train_sp","Train shape predictor.", 1);
+		parser.add_option("test_obj","Test object detector.", 1);
+		parser.add_option("test_sp","Test shape predictor.", 1);
 		parser.add_option("infer","Detect faces using network file.", 1);
 		parser.parse(argc, argv);
 
-		const char* one_time_opts[] = {"h", "train", "test", "infer"};
+		const char* one_time_opts[] = {"h", "train_obj", "train_sp", "test_obj", "test_sp", "infer"};
 		parser.check_one_time_options(one_time_opts); // Can't give an option more than once
 
 		if (parser.option("h") || parser.number_of_arguments () != 1)
 		{
 			cout << "\n\t bearface is used to detect a bear face in an image using a\n";
-			cout << "\tnetwork file.  It can be trained and tested using the --train \n";
-			cout << "\tand --test flags, respectively.\n\n";
-			cout << "\nUsage  : bearface --<infer|test|train> <network_file> <img_xml>\n";
+			cout << "\tnetwork file with the --infer option.";
+			cout << "\tIt can be trained using the --train_obj or --train_sp \n";
+			cout << "\tand tested with the --test flags.\n\n";
+			cout << "\nUsage  : bearface --<infer|test|train_sp|train_obj> <network_file> <img_xml>\n";
 			cout << "\nUsage  : bearface --infer bearface_network.dat imgs.xml\n";
 			cout << "\nExample: bearface --test bearface_network.dat imgs.xml\n\n";
-			cout << "\nExample: bearface --train bearface_network.dat -out new_network.dat imgs.xml\n\n";
+			cout << "\nExample: bearface --train_obj bearface_network.dat -out new_network.dat imgs.xml\n\n";
 			parser.print_options();
 
 			return EXIT_SUCCESS;
 		}
 		std::string network;
-		if (parser.option("train"))
+		if (parser.option("train_obj"))
 		{
-			g_mode = "train";
-			network = parser.option ("train").argument();
+			g_mode = "train_obj";
+			network = parser.option ("train_obj").argument();
 		}
-		else if (parser.option("test"))
+		else if (parser.option("train_sp"))
 		{
-			g_mode = "test";
-			network = parser.option ("test").argument();
+			g_mode = "train_sp";
+			network = parser.option ("train_sp").argument();
+		}
+		else if (parser.option("test_obj"))
+		{
+			g_mode = "test_obj";
+			network = parser.option ("test_obj").argument();
+		}
+		else if (parser.option("test_sp"))
+		{
+			g_mode = "test_sp";
+			network = parser.option ("test_sp").argument();
 		}
 		else if (parser.option("infer"))
 		{
 			g_mode = "infer";
 			network = parser.option ("infer").argument();
 		}
-		if (parser.option("net_only"))
-		{
-			if (g_mode != "train")
-				cout << "\n\t'net_only' option ignored when not in train mode." << endl;
-		}
-		if (parser.option("sp_only"))
-		{
-			if (g_mode != "train")
-				cout << "\n\t'sp_only' option ignored when not in train mode." << endl;
-		}
-
 
 
 	//----------------------------------------------------------------------
     //image_window win_wireframe;
-    int total_faces = 0;
 
 	char *lvalue = NULL;
 	int index;
@@ -583,91 +661,62 @@ int main(int argc, char** argv)
     deserialize(network) >> net >> sp >> glasses >> mustache;
 
 	// doing testing
-	if (g_mode == "test") {
+	if ((g_mode == "test_sp") || (g_mode == "test_obj")) {
 		cout << "\tTesting with " << imgs_file << endl;
 		std::vector<matrix<rgb_pixel>> images_test;
 		std::vector<std::vector<mmod_rect>> face_boxes_test;
-		// load_image_dataset(images_test, face_boxes_test, imgs_file);
 		dlib::image_dataset_metadata::dataset data;
 		load_image_dataset_metadata(data, imgs_file);
-    cout << "num testing images:  " << data.images.size() << endl;
-		/*
-		cout << "num testing images:  " << images_test.size() << endl;
-		cout << "num testing boxes:  " << face_boxes_test.size() << endl;
-		int num_boxes = 0;
-		for (int i = 0; i < face_boxes_test.size(); i++ ) {
-			num_boxes += face_boxes_test[i].size();
-		}
-		cout << "num boxes :  " << num_boxes << endl;
-		*/
+		cout << "num testing images:  " << data.images.size() << endl;
 		// ---  running test on object detection -----
-		matrix<double, 1, 3> res = my_test_object_detection_function(net, data, face_boxes_test);
-		cout << "precision =  correct hits / total hits         " << endl;
-		cout << "recall    =  correct hits / total true targets " << endl;
-		cout << "av precision  " << endl;
-		cout << "                   precision    average precision" << endl;
-		cout << "                           recall " << endl;
-		cout << "testing results:  " << res << endl;
-		// cout << "precision  (correct hits / total hits         :  " << res.data.data[0] << endl;
-		// cout << "recall     (correct hits / total true targets :  " << res.data.data[1] << endl;
-		// cout << "av precision:  " << res.data.data[2] << endl;
+		if (g_mode == "test_obj") {
+			cout << "\tstarting object detector test..." << endl;
+			matrix<double, 1, 3> res = my_test_object_detection_function(net, data, face_boxes_test);
+			cout << "precision =  correct hits / total hits         " << endl;
+			cout << "recall    =  correct hits / total true targets " << endl;
+			cout << "av precision  " << endl;
+			cout << "                   precision    average precision" << endl;
+			cout << "                           recall " << endl;
+			cout << "testing results:  " << res << endl;
+		} else {
+			// doing shape predictor testing
+			cout << "\tstarting shape predictor test..." << endl;
+			dlib::array<array2d<unsigned char> > images_test2;
+			std::vector<std::vector<full_object_detection> > faces_test;
+			double sp_mean, sp_stddev;
 
-		// doing shape predictor testing
-		cout << "starting shape predictor test" << endl;
-		dlib::array<array2d<unsigned char> > images_test2;
-		std::vector<std::vector<full_object_detection> > faces_test;
-    double sp_mean, sp_stddev;
+			my_test_shape_predictor(sp, data, sp_mean, sp_stddev);
+			cout << "shape predictor mean testing error:  " <<
+				sp_mean << " +/- " << sp_stddev << endl;
 
-    my_test_shape_predictor(sp, data, sp_mean, sp_stddev);
-		// load_image_dataset(images_test2, faces_test, imgs_file);
-        cout << "shape predictor mean testing error:  " <<
-            sp_mean << " +/- " << sp_stddev << endl;
-
-		cout << "on " << data.images.size() << " tests" << endl;
-		cout << endl;
+			cout << "on " << data.images.size() << " tests" << endl;
+			cout << endl;
+		}
 		return 0;
 	}
 	//----------------------------------------------------------------------
 	// 
 	//----------------------------------------------------------------------
-	if (g_mode == "train") {
+	if (g_mode == "train_sp") {
+		std::string out_net = get_output_network_name (parser);
+		shape_predictor new_sp = run_train_sp (imgs_file);
+
+		cout << "\n\tWriting to network: " << out_net+"_bn" << endl;
+		net.clean();
+		net_type anet = net;
+		serialize(out_net) << anet << new_sp << glasses << mustache;
+		cout << "\n\tWriting to network: " << out_net << endl;
+
+		return 0;
+	}
+	else if (g_mode == "train_obj") {
 		std::string out_network = "";
 		const std::string train_file = imgs_file;
 		cout << "\n\tTraining with file: " << train_file << endl;
 		dlib::image_dataset_metadata::dataset data;
 		load_image_dataset_metadata(data, imgs_file);
 
-		std::string out_net;
-		if (parser.option ("out_network"))
-		{
-			out_net = parser.option ("out_network").argument();
-			boost::filesystem::path p_out_network (out_net);
-			if (p_out_network.has_parent_path () &&
-				!boost::filesystem::exists(p_out_network.parent_path()))
-				boost::filesystem::create_directories(p_out_network.parent_path());
-		}
-		else
-		{
-			time_t rawtime;
-			struct tm * timeinfo;
-			char buffer[80];
-
-			time (&rawtime);
-			timeinfo = localtime(&rawtime);
-
-			strftime(buffer,sizeof(buffer),"%Y%m%d%I%M",timeinfo);
-			out_net = "network_";
-			out_net.append (buffer);
-			out_net.append (".dat");
-		}
-		if (parser.option("net_only"))
-		{
-			cout << "\n\tTraining nets only." << endl;
-		}
-		if (parser.option("sp_only"))
-		{
-			cout << "\n\tTraining shape predictor only." << endl;
-		}
+		std::string out_net = get_output_network_name (parser);
 
 		std::vector<matrix<rgb_pixel>> images_train;
 		std::vector<std::vector<mmod_rect>> face_boxes_train;
@@ -741,6 +790,10 @@ int main(int argc, char** argv)
 
 	// doing inferencing
 
+    int total_faces = 0;
+	int files_with_faces = 0;
+	int files_without_faces = 0;
+	cout << "\nDoing inferencing ...\n" << endl;
     // Load XML metadata file
     dlib::image_dataset_metadata::dataset data;
     load_image_dataset_metadata(data, imgs_file);
@@ -751,7 +804,7 @@ int main(int argc, char** argv)
     {
         matrix<rgb_pixel> img;
 
-        cout << data.images[i].filename.c_str() << "...";
+        cout << "processing: " << data.images[i].filename.c_str() << "...";
         load_image(img, data.images[i].filename.c_str());
 
 		if (!bLabelFixed)
@@ -766,8 +819,14 @@ int main(int argc, char** argv)
 
         cout << "faces found: " << to_string(faces.size()) << endl;
         total_faces += faces.size();
+		if (faces.size () == 0)
+			files_without_faces++;
+		else
+			files_with_faces++;
     }
-    cout << "Total faces found: " << total_faces << endl;
+    cout << "Files with detected faces   : " << files_with_faces << endl;
+    cout << "Files without detected faces: " << files_without_faces << endl;
+    cout << "Total faces found           : " << total_faces << endl;
 	path orig_path(imgs_file);
 	std::string faces_file;
 	if (orig_path.has_parent_path ())
