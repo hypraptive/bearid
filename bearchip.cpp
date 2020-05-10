@@ -190,6 +190,10 @@ std::vector<matrix<rgb_pixel>> find_chips (
       auto nose_new = pta(part[3])*chip_x;
       nose_new.x() = std::min(nose_new.x(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
       nose_new.y() = std::min(nose_new.y(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
+	  if (nose_new.y() < 0)
+	  	nose_new.y() = g_feature_radius;
+	  if (nose_new.x() < 0)
+	  	nose_new.x() = g_feature_radius;
       auto reye_new = pta(part[5])*chip_x;
 	  face_features.push_back (leye_new);
 	  face_features.push_back (nose_new);
@@ -368,9 +372,9 @@ int main(int argc, char** argv) try
 		/*  check for more than one face.  shouldn't happen yet */
 		if (faces.size() > 1)
 		{
-			// cout << "faces found: " << faces.size() << endl;
+			cout << "multiple faces found: " << faces.size() << endl;
 			// cin.get();
-			continue;
+			// continue;
 		}
         total_faces += faces.size();
 		std::string chip_dim = std::to_string(g_chip_size) + " " + std::to_string(g_chip_size);
@@ -394,7 +398,7 @@ int main(int argc, char** argv) try
 		  boost::filesystem::path cur_dir = boost::filesystem::current_path();
 		  std::string rel_pathed_chip_file = cur_dir.string() + "/" + p_img_subdir.string () + "/" + chip_file;
 		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, rel_pathed_chip_file, orig_path);
-          cout << argv[i] << ": extracted chip " << to_string(i) << " to " << rel_pathed_chip_file << endl;
+          cout << "... extracted chip " << to_string(i) << " to " << rel_pathed_chip_file << endl;
 		  boost::filesystem::path chip_file_path (rel_pathed_chip_file);
 		  if (!boost::filesystem::exists(chip_file_path.parent_path()))
 			  boost::filesystem::create_directories(chip_file_path.parent_path());
@@ -402,8 +406,14 @@ int main(int argc, char** argv) try
         }
     }
 	boost::filesystem::path xml_file (argv[1]);
-	std::string chips_jpg_file = xml_file.parent_path().string () + "/" + xml_file.stem().string() + "_chip_composite.jpg";
-	std::string chips_xml_file = xml_file.parent_path().string () + "/" + xml_file.filename().stem().string() + "_chips.xml";
+	std::string chips_jpg_file, chips_xml_file;
+	if (xml_file.has_parent_path ()) 
+	{
+		chips_jpg_file = xml_file.parent_path().string () + "/";
+		chips_xml_file = xml_file.parent_path().string () + "/";
+	}
+	chips_jpg_file += xml_file.stem().string() + "_chip_composite.jpg";
+	chips_xml_file += xml_file.stem().string() + "_chips.xml";
     save_jpeg(g_composite_features, chips_jpg_file, 95);
     cout << "Total faces found: " << total_faces << endl;
 
