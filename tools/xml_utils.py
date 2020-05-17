@@ -185,16 +185,15 @@ def add_box_label (tree, label_str):
 	return label_count
 
 ##------------------------------------------------------------
-##  read in image and scale to max values.
-##  return scale ratio and scaled image
+##  read in image and determine ratio to scale to max values.
+##  return ratio 
 ##------------------------------------------------------------
-def downscale_image (imgfile, max_long, max_short) :
+def get_downscale_ratio (imgfile, max_long, max_short) :
 	img = Image.open (imgfile)
 	w, h = img.size
 	ratio = 1
 	if w * h < max_long * max_short : 
-		resized_img = img.resize ((w, h))
-		return resized_img, ratio
+		return ratio
 	if w > h :
 		if (max_long / w) < (max_short / h) :
 			ratio = max_long / w
@@ -205,13 +204,110 @@ def downscale_image (imgfile, max_long, max_short) :
 			ratio = max_long / h
 		else :
 			ratio = max_short / w
+	return ratio
+
+##------------------------------------------------------------
+##  
+## 
+##------------------------------------------------------------
+def get_faces_boundary (image_tag) :
+	max_left = 0
+	max_right = 0
+	max_top = 0
+	max_bottom = 0
+	for box in image_tag.findall ('box') :
+		left = int (box.attrib.get ('left'))
+		top = int (box.attrib.get ('top'))
+		height = int (box.attrib.get ('height'))
+		width = int (box.attrib.get ('width'))
+		right = left + width
+		bottom = top + height
+		if left > max_left :
+			max_left = left
+		if right > max_right :
+			max_right = right
+		if top > max_top :
+			max_top = top
+		if bottom > max_bottom :
+			max_bottom = bottom
+	return max_left, max_top, max_right, max_bottom
+
+##------------------------------------------------------------
+##  crop image to max size or min of faces
+##  return new image
+##------------------------------------------------------------
+def crop_image (img, image_tag, max_x, max_y) :
+	w, h = img.size
+	# print ('in crop function: orig w x h ', w, h, '\n')
+	if w * h < max_x * max_y :
+		print (' -- no cropping')
+		return img
+	if w < h :
+		print ('swapped x & y')
+		tmp_x = max_x
+		max_x = max_y
+		max_y = tmp_x
+	new_origin_x = 0
+	new_origin_y = 0
+	left, top, right, bottom = get_faces_boundary (image_tag)
+	# print ('face boundary: ', left, top, right, bottom)
+	faces_width = right - left
+	faces_height = bottom - top
+	if faces_width > max_x :  ## faces larger than max image!
+		max_x = faces_width
+	if faces_height > max_y :  ## faces height larger than max image!
+		max_y = faces_height
+	# doing proportion crop
+	# pdb.set_trace ()
+	new_cropped_left = int (left / w * max_y)  # new left after crop
+	new_cropped_top = int (top / h * max_x)  # new left after crop
+	new_origin_left = left - new_cropped_left
+	new_origin_top = top - new_cropped_top
+	# print ('new origin (left,top): ', new_origin_left, new_origin_top)
+	# print ('cropping to (l,t,r,b) :', new_origin_left, new_origin_top, new_origin_left+max_y, new_origin_top+max_x)
+	cropped_img = img.crop ((new_origin_left, new_origin_top, new_origin_left+max_y, new_origin_top+max_x))
+	pan_boxes (image_tag, new_origin_left, new_origin_top)
+	return cropped_img
+
+##------------------------------------------------------------
+##  downscale image by ratio
+##  return new image
+##------------------------------------------------------------
+def downscale_image (imgfile, ratio) :
+	img = Image.open (imgfile)
+	w, h = img.size
+
 	new_w = int (w*ratio)
 	new_h = int (h*ratio)
-	# print ('scaling ', imgfile, ' by ', ratio )
-	# print ('\nfrom : ', w, 'x', h, ' to: ', new_w, 'x', new_h, '\n')
 
 	resized_img = img.resize ((new_w, new_h))
-	return resized_img, ratio
+	return resized_img
+
+##------------------------------------------------------------
+##  downscale image and boxes by ratio
+##  return new image
+##------------------------------------------------------------
+def downscale_image_and_boxes (imgfile, image_tag, ratio) :
+	resized_img = downscale_image (imgfile, ratio)
+	for box_tag in image_tag.findall ('box') :
+		scale_box (box_tag, ratio)
+	return resized_img
+
+##------------------------------------------------------------
+## return largest of any dimension of face
+##------------------------------------------------------------
+def get_min_img_face_size (image_tag) :
+	min_face_size = 2000
+	for box_tag in image_tag.findall ('box') :
+		for attrib in ('height', 'width') :
+			val = box_tag.attrib.get (attrib)
+			if val != None :
+				val = int (val)
+				if val < min_face_size :
+					min_face_size = val
+			else :
+				print ('attrib ', attrib, 'not found')
+	return min_face_size
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
@@ -237,6 +333,92 @@ def scale_box (box, pxRatio) :
 				part.set (attrib, str (int (val * pxRatio)))
 			else :
 				print ('attrib ', attrib, 'not found')
+
+##------------------------------------------------------------
+##	scales attributes in box using ratio
+##    modifies: box (height, width, top, left), box.part (x, y)
+##------------------------------------------------------------
+def pan_boxes (image_tag, new_origin_left, new_origin_top) :
+
+	for box in image_tag.findall ('box') :
+		val = box.attrib.get ('top')
+		if val != None :
+			val = int (val)
+			box.set ('top', str (int (val - new_origin_top)))
+		else :
+			print ('attrib ', 'top', ' not found')
+		val = box.attrib.get ('left')
+		if val != None :
+			val = int (val)
+			box.set ('left', str (int (val - new_origin_left)))
+		else :
+			print ('attrib ', 'left', ' not found')
+
+		for part in box.findall ('./part') :
+			val = part.attrib.get ('x')
+			if val != None :
+				val = int (val)
+				part.set ('x', str (int (val - new_origin_left )))
+			else :
+				print ('attrib ', 'x', ' not found')
+			val = part.attrib.get ('y')
+			if val != None :
+				val = int (val)
+				part.set ('y', str (int (val - new_origin_top )))
+			else :
+				print ('attrib ', 'y', ' not found')
+
+##------------------------------------------------------------
+#   for each image in file if larger than max_dimension
+#	  - downscale to max_dimension or min_face_size
+#	  - if downscale to min_face_size, crop to max_dimension 
+#	  - write image to parallel directory
+#	  - write out xml with new info
+##------------------------------------------------------------
+def resize_face_file (orig_file, max_x=1500, max_y=2000, min_face_size=180) :
+
+	root, tree = load_file (orig_file)
+	print ('\n... processing file : ', orig_file)
+	for image_tag in root.findall ('./images/image'):
+		imgfile = image_tag.attrib.get ('file')
+		ratio_downscale = get_downscale_ratio (imgfile, max_x, max_y)
+		min_img_face_size = get_min_img_face_size (image_tag)
+		ratio_min_face = min_face_size / min_img_face_size 
+		print ('..... resizing ', imgfile)
+		print ('\tface size: ', min_img_face_size) #-test
+		if min_img_face_size < 150 :
+			print ('\tface less than 150.')
+		elif min_img_face_size < 224 :
+			print ('\tface less than 224.')
+		# print ('ratio_min_face: ', ratio_min_face, '\n') #-test
+		# print ('ratio_downscale: ', ratio_downscale, '\n') #-test
+		if ratio_min_face > 1 : # orig face smaller than min, don't downscale
+			resized_image = Image.open (imgfile)
+			# print ('no scaling \n') #-test
+		elif ratio_downscale > ratio_min_face :	# larger ratio == less downscaling
+			resized_image = downscale_image_and_boxes (imgfile, image_tag, ratio_downscale)
+			# print ('scaling by image\n') #-test
+		else :
+			resized_image = downscale_image_and_boxes (imgfile, image_tag, ratio_min_face)
+			# print ('scaling by min face\n') #-test
+		resized_image = crop_image (resized_image, image_tag, max_x, max_y)
+		new_imgfile = imgfile.replace ('imageSource', 'imageSourceSmall')
+		new_imgfile_dir = os.path.dirname (new_imgfile)
+		if not os.path.isdir (new_imgfile_dir) :
+			os.makedirs (new_imgfile_dir)
+		# imgfile_base, imgfile_ext = os.path.splitext (os.path.basename (imgfile)) #-test
+		# new_imgfile = imgfile_base + '_resize' + imgfile_ext #-test
+		# pdb.set_trace ()
+		resized_image.save (new_imgfile)
+		print ('\t... writing image to : ', new_imgfile)
+		image_tag.set ('file', new_imgfile) # fix xml image_tag
+	filebase, fileext = os.path.splitext (orig_file)
+	new_file = filebase + '_resize' + fileext
+	print("\n... writing new face xml : ", new_file, "\n\n")
+	indent (root)
+	# pdb.set_trace ()
+	tree.write (new_file)
+	return 
 
 ##------------------------------------------------------------
 #   for each image in file, if larger than 1500 by 2000, 
