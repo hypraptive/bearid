@@ -45,7 +45,7 @@ Use the imglab and the C++ bearid components:
 * Imglab (from dlib) - create an XML file containing all source images
   * ```imglab -c <source_img_file> <image files/directories>```
 * Bearface - find bear faces and face landmarks
-  * ```./bearface <bearface_network_file> <source_img_file>```
+  * ```./bearface --infer <bearface_network_file> <source_img_file>```
 * Bearchip - align and crop bear faces and produce bear chips
   * ```./bearchip [-root <img_root_dir>] <face_metadata_file>```
 * Bearembed - generate a 128D embedding from bear chips
