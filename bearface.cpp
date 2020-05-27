@@ -77,7 +77,7 @@ std::vector<std::vector<double> > get_interocular_distances (
     const std::vector<std::vector<full_object_detection> >& objects
 );
 
-matrix<rgb_pixel> downscale_large_image (
+matrix<rgb_pixel> downscale_large_image_old (
   matrix<rgb_pixel>& img,
   float& pxRatio
 )
@@ -110,6 +110,32 @@ matrix<rgb_pixel> downscale_large_image (
   return img;
 }
 
+//------------------------------------------------------------------------------ 
+//  scale image down to MAX_SIZE, fill in pxRatio
+//------------------------------------------------------------------------------ 
+matrix<rgb_pixel> downscale_image (
+  matrix<rgb_pixel>& img,
+  float& pxRatio
+)
+{
+  pxRatio = 1;
+  if (img.size() > (MAX_SIZE))
+  {
+	long orig_img_size = img.size ();
+	pxRatio = sqrt (img.size() / MAX_SIZE);
+    // cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
+    matrix<rgb_pixel> smimg((int)(img.nr() * pxRatio), (int)(img.nc() * pxRatio));
+    resize_image(img, smimg);
+	long new_img_size = img.size ();
+	float new_ratio = sqrt (orig_img_size / new_img_size);
+    return smimg;
+  }
+  return img;
+}
+
+//------------------------------------------------------------------------------ 
+//  scale parts by ratio
+//------------------------------------------------------------------------------ 
 void scale_parts (
 	std::map<std::string,point> &parts,
 	float pxRatio
@@ -124,9 +150,23 @@ void scale_parts (
 }
 
 //------------------------------------------------------------------------------ 
+//  set rect
+//------------------------------------------------------------------------------ 
+void set_face_rect (
+	rectangle &rect,
+	rectangle detect_rect
+)
+{
+	rect.set_left (detect_rect.left());
+	rect.set_top (detect_rect.top());
+	rect.set_right (detect_rect.right());
+	rect.set_bottom (detect_rect.bottom());
+}
+
+//------------------------------------------------------------------------------ 
 //  scale the rect by the ratio
 //------------------------------------------------------------------------------ 
-void scale_rect (
+void scale_face_rect (
 	rectangle &rect,
 	float pxRatio
 )
@@ -137,6 +177,38 @@ void scale_rect (
 	rect.set_right((int)((float)rect.right() * pxRatio));
 	rect.set_bottom((int)((float)rect.bottom() * pxRatio));
 	// cout << "after scale: " << rect.left () << endl;
+}
+
+//------------------------------------------------------------------------------ 
+//  set face 
+//------------------------------------------------------------------------------ 
+void set_face_parts (
+	image_dataset_metadata::box &face,
+    full_object_detection shape
+)
+{
+	std::vector<std::string> landmarks = {"head_top", "lear", "leye", "nose", "rear", "reye"};
+	for (int i = 0; i < landmarks.size (); ++i)
+	{
+		face.parts[landmarks[i]].x() = shape.part(i).x();
+		face.parts[landmarks[i]].y() = shape.part(i).y();
+	}
+}
+
+//------------------------------------------------------------------------------ 
+//  scale face parts by ratio
+//------------------------------------------------------------------------------ 
+void scale_face_parts (
+	image_dataset_metadata::box &face,
+	float pxRatio
+)
+{
+	std::vector<std::string> landmarks = {"head_top", "lear", "leye", "nose", "rear", "reye"};
+	for (int i = 0; i < landmarks.size(); ++i)
+	{
+		face.parts[landmarks[i]].x() *= pxRatio;
+		face.parts[landmarks[i]].y() = face.parts[landmarks[i]].y() * pxRatio;
+	}
 }
 
 //------------------------------------------------------------------------------ 
@@ -165,19 +237,66 @@ void downscale_imgs_and_faces (
 	for (unsigned long i=0; i < imgs.size() ; ++i)
 	{
 		img = imgs[i];
-		img = downscale_large_image (img, pxRatio);
-		if (pxRatio != 1) { // downscaled.  apply to faces of img
+		img = downscale_image (img, pxRatio);
+		if (pxRatio != 1.0) { // downscaled.  apply to faces of img
 			imgs[i] = img;
 			faces = faces_list[i];
 			for (unsigned long j=0; j < faces_list[i].size() ; ++j)
-				scale_rect ((faces_list[i][j]).rect, pxRatio);
+				scale_face_rect ((faces_list[i][j]).rect, pxRatio);
 		}
 	}
 }
 
+//------------------------------------------------------------------------------ 
+// upscale image if it will remain under MAX_SIZE
+//------------------------------------------------------------------------------ 
+bool upscale_image (
+  matrix<rgb_pixel>& img,
+  float& pxRatio
+) 
+{
+  int upscaleRatio = 2;
+	long origImgSize = img.size ();
+    if (img.size() < (MAX_SIZE/(upscaleRatio*upscaleRatio)))
+	{
+	  cout << "upscaling..." << endl;
+	  pyramid_up(img);
+	  pxRatio = sqrt (img.size () / origImgSize);
+	  cout << "Upscaled image size: " << img.size() << endl;
+	  return true;
+	}
+	return false;
+}
 
+//------------------------------------------------------------------------------ 
+// Find Faces
+//------------------------------------------------------------------------------ 
+std::vector<dlib::mmod_rect> find_faces (
+  net_type& net,
+  matrix<rgb_pixel>& img,
+  float &sideRatio
+)
+{
+  img = downscale_image (img, sideRatio);
+
+  // Find faces
+  cout << "Finding faces..." << endl;
+  std::vector<dlib::mmod_rect> dets;
+  // auto dets = net(img);
+  dets = net(img);
+
+  // if no faces, try with upscaling
+  if (dets.size() == 0) 
+  {
+	if (upscale_image (img, sideRatio))
+	  dets = net(img);
+  }
+  return dets;
+}
+//------------------------------------------------------------------------------ 
 // Find Faces and face landmarks
-void find_faces (
+//------------------------------------------------------------------------------ 
+void find_faces_and_landmarks (
   net_type& net,
   shape_predictor& sp,
   matrix<rgb_pixel>& img,
@@ -185,136 +304,28 @@ void find_faces (
   std::string bearID
 )
 {
-  bool bUpscaled = false;
-  bool bDownscaled = false;
-  float pxRatio;
+  float pxRatio = 1.0;
+  int numShapeParts = 6;
+  // auto dets = net(img);
 
-  // cout << "Image size: " << img.size() << " NR: " << img.nr() << " NC: " << img.nc() << endl;
+  auto dets = find_faces (net, img, pxRatio);
 
-  // If the image is too big (this is a memory constraint), we need to downsample it
-  if (img.size() > (MAX_SIZE))
-  {
-    if (img.nc() > img.nr())
-    {
-      if (((float)MAX_LONG_SIDE / (float)img.nc()) < (float)MAX_SHORT_SIDE / (float)img.nr())
-        pxRatio = (float)MAX_LONG_SIDE / (float)img.nc();
-      else
-        pxRatio = (float)MAX_SHORT_SIDE / (float)img.nr();
-    }
-    else
-    {
-      if (((float)MAX_LONG_SIDE / (float)img.nr()) < (float)MAX_SHORT_SIDE / (float)img.nc())
-        pxRatio = (float)MAX_LONG_SIDE / (float)img.nr();
-      else
-        pxRatio = (float)MAX_SHORT_SIDE / (float)img.nc();
-    }
-    cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
-    //cout << "New X: " << (int)(img.nc() * pxRatio) << " New Y: " << (int)(img.nr() * pxRatio) << endl;
-    matrix<rgb_pixel> smimg((int)(img.nr() * pxRatio), (int)(img.nc() * pxRatio));
-    resize_image(img, smimg);
-    //resize_image((double)2.0, img);
-    //resize_image(img, smimg, interpolate_billinear());
-    //resize_image((double)(MAX_SIZE / img.size()), itImage);
-    //pyramid_down(img);
-    //cout << "Rescaled image size: " << smimg.size() << " NR: " << smimg.nr() << " NC: " << smimg.nc() << endl;
-    bDownscaled = true;
-    img = smimg;
-    //return;
-  }
-
-  // Upsampling the image will allow us to find smaller faces but will use more
-  // computational resources.
-  //pyramid_up(img);
-
-  // Find faces
-  cout << "Finding faces..." << endl;
-  auto dets = net(img);
-
-  // if no faces, try with upscaling
-  if ((dets.size() == 0) && !bDownscaled)
-  {
-    cout << "Try upscaling..." << endl;
-    if (img.size() > (MAX_SIZE/4))
-    {
-      //cout << "File TOO BIG to UPSCALE" << endl;
-      return;
-    }
-
-    pyramid_up(img);
-    //cout << "File UPSCALED" << endl;
-    dets = net(img);
-
-    if (dets.size() == 0)
-    {
-      //cout << "File has no faces" << endl;
-      return;
-    }
-    cout << "Upscaled image size: " << img.size() << endl;
-    bUpscaled = true;
-  }
-
-  // For each face, find the face landmarks
+  // --- For each face, find the face landmarks ----
   // cout << "Finding landmarks..." << endl;
   for (auto&& d : dets)
   {
       // get the landmarks for this face
       auto shape = sp(img, d.rect);
 
-      // fill in the data to faces
+      // fill in the data for faces
       image_dataset_metadata::box face;
+	  float scaleRatio = 1/pxRatio;
+	  // face: dlib::image_dataset_metadata::box
 
-      if (bUpscaled)
-      {
-        cout << "File was upscaled" << endl;
-        // TODO figure out the scale factor from pyramid_up
-        face.rect.set_left(d.rect.left() / 2);
-        face.rect.set_top(d.rect.top() / 2);
-        face.rect.set_right(d.rect.right() / 2);
-        face.rect.set_bottom(d.rect.bottom() / 2);
-        face.parts["head_top"].x()  = shape.part(0).x() / 2;
-        face.parts["head_top"].y()  = shape.part(0).y() / 2;
-        face.parts["lear"].x() = shape.part(1).x() / 2;
-        face.parts["lear"].y() = shape.part(1).y() / 2;
-        face.parts["leye"].x() = shape.part(2).x() / 2;
-        face.parts["leye"].y() = shape.part(2).y() / 2;
-        face.parts["nose"].x() = shape.part(3).x() / 2;
-        face.parts["nose"].y() = shape.part(3).y() / 2;
-        face.parts["rear"].x() = shape.part(4).x() / 2;
-        face.parts["rear"].y() = shape.part(4).y() / 2;
-        face.parts["reye"].x() = shape.part(5).x() / 2;
-        face.parts["reye"].y() = shape.part(5).y() / 2;
-      }
-      else if (bDownscaled)
-      {
-        cout << "File was downscaled" << endl;
-        // TODO figure out the scale factor from pyramid_up
-        face.rect.set_left((int)((float)d.rect.left() / pxRatio));
-        face.rect.set_top((int)((float)d.rect.top() / pxRatio));
-        face.rect.set_right((int)((float)d.rect.right() / pxRatio));
-        face.rect.set_bottom((int)((float)d.rect.bottom() / pxRatio));
-        face.parts["head_top"].x()  = (int)((float)shape.part(0).x() / pxRatio);
-        face.parts["head_top"].y()  = (int)((float)shape.part(0).y() / pxRatio);
-        face.parts["lear"].x() = (int)((float)shape.part(1).x() / pxRatio);
-        face.parts["lear"].y() = (int)((float)shape.part(1).y() / pxRatio);
-        face.parts["leye"].x() = (int)((float)shape.part(2).x() / pxRatio);
-        face.parts["leye"].y() = (int)((float)shape.part(2).y() / pxRatio);
-        face.parts["nose"].x() = (int)((float)shape.part(3).x() / pxRatio);
-        face.parts["nose"].y() = (int)((float)shape.part(3).y() / pxRatio);
-        face.parts["rear"].x() = (int)((float)shape.part(4).x() / pxRatio);
-        face.parts["rear"].y() = (int)((float)shape.part(4).y() / pxRatio);
-        face.parts["reye"].x() = (int)((float)shape.part(5).x() / pxRatio);
-        face.parts["reye"].y() = (int)((float)shape.part(5).y() / pxRatio);
-      }
-      else
-      {
-        face.rect = d.rect;
-        face.parts["head_top"]  = shape.part(0);
-        face.parts["lear"] = shape.part(1);
-        face.parts["leye"] = shape.part(2);
-        face.parts["nose"] = shape.part(3);
-        face.parts["rear"] = shape.part(4);
-        face.parts["reye"] = shape.part(5);
-      }
+	  set_face_rect (face.rect, d);
+	  scale_face_rect (face.rect, scaleRatio);
+	  set_face_parts (face, shape);
+	  scale_face_parts (face, scaleRatio);
 	  face.label = bearID;
       faces.push_back(face);
   }
@@ -322,6 +333,10 @@ void find_faces (
 
 // ----------------------------------------------------------------------------------------
 //   copy of test_object_detection_function from dlib/dnn/validation.h
+//		changes: 
+//		- load only one image at time due to memory limitation
+//	  	- downscale image if beyond MAX_SIZE
+//    	- if detect no faces, upscale if doesn't violate MAX_SIZE
 // ----------------------------------------------------------------------------------------
 
 template <
@@ -336,22 +351,13 @@ const matrix<double,1,3> my_test_object_detection_function (
 	const test_box_overlap& overlaps_ignore_tester = test_box_overlap()
 )
 {
-	// make sure requires clause is not broken
-	/*
-	DLIB_CASSERT( is_learning_problem(images,truth_dets) == true ,
-				"\t matrix my_test_object_detection_function()"
-				<< "\n\t invalid inputs were given to this function"
-				<< "\n\t is_learning_problem(images,truth_dets): " << is_learning_problem(images,truth_dets)
-				<< "\n\t images.size(): " << images.size()
-				);
-				*/
-
+	double correct = 0;
 	double correct_hits = 0;
 	double total_true_targets = 0;
 
 	std::vector<std::pair<double,bool> > all_dets;
 	unsigned long missing_detections = 0;
-
+	unsigned long prev_missed = 0;
 	resizable_tensor temp;
 
 	for (unsigned long i = 0; i < img_data.images.size(); ++i)
@@ -361,11 +367,27 @@ const matrix<double,1,3> my_test_object_detection_function (
         // cout << img_data.images[i].filename.c_str() << "..." << endl;
         load_image(img, img_data.images[i].filename.c_str());
 
-		float pxRatio;
-		img = downscale_large_image (img, pxRatio);
-		// extract box rects from img_data
+		float pxRatio = 1.0;
+		//--------------------------------------------------
+		//--------------------------------------------------
+		img = downscale_image (img, pxRatio);
+		detector.to_tensor(&img, &img+1, temp);
+		detector.subnet().forward(temp);
+		detector.loss_details().to_label(temp, detector.subnet(), &hits, adjust_threshold);
+		if (hits.size () == 0)  // no faces found, try upscale image
+		{
+			if (upscale_image (img, pxRatio))
+			{
+				detector.to_tensor(&img, &img+1, temp);
+				detector.subnet().forward(temp);
+				detector.loss_details().to_label(temp, detector.subnet(), &hits, adjust_threshold);
+			}
+		}
+		//--------------------------------------------------
+		//--------------------------------------------------
         std::vector<mmod_rect> truth_dets;
 		truth_dets.clear();
+		// populate truth detects
 		for (unsigned long j = 0; j < img_data.images[i].boxes.size(); ++j)
 		{
 			if (img_data.images[i].boxes[j].ignore)
@@ -374,20 +396,13 @@ const matrix<double,1,3> my_test_object_detection_function (
 			}
 			else
 			{
-
 				if (pxRatio != 1) { // downscaled.  apply to truth recs
-					// cout << "downscaling rect by " << pxRatio << endl;
-					scale_rect (img_data.images[i].boxes[j].rect, pxRatio);
+					scale_face_rect (img_data.images[i].boxes[j].rect, pxRatio);
 				}
 				truth_dets.push_back(mmod_rect(img_data.images[i].boxes[j].rect));
 			}
 		}
-
-		detector.to_tensor(&img, &img+1, temp);
-		detector.subnet().forward(temp);
-		detector.loss_details().to_label(temp, detector.subnet(), &hits, adjust_threshold);
-
-
+		// iterate through labels though we don't use labels
 		for (auto& label : impl::get_labels(truth_dets, hits))
 		{
 			std::vector<full_object_detection> truth_boxes;
@@ -412,26 +427,44 @@ const matrix<double,1,3> my_test_object_detection_function (
 					boxes.push_back(std::make_pair(b.detection_confidence, b.rect));
 			}
 
-			correct_hits += impl::number_of_truth_hits(truth_boxes, ignore, boxes, overlap_tester, all_dets, missing_detections, overlaps_ignore_tester);
+			prev_missed = missing_detections;
+			correct = impl::number_of_truth_hits(truth_boxes, ignore, boxes, overlap_tester, all_dets, missing_detections, overlaps_ignore_tester);
+			correct_hits += correct;
+			if (boxes.size () > truth_boxes.size ()) // # detects more than # truths
+			{
+				if (correct < truth_boxes.size()) // # detects == # truths but some didn't match
+				{
+					cout << img_data.images[i].filename.c_str() << " has extra detections and " << truth_boxes.size () - correct << " erroneous detection" << endl;
+				}
+				else
+				{
+					cout << img_data.images[i].filename.c_str() << " has extra detections" << endl;
+				}
+			}
+			else if (boxes.size () < truth_boxes.size ()) // # detects less than # truths
+			{
+				if (correct < boxes.size ())
+					cout << img_data.images[i].filename.c_str() << " has missing detections and " << boxes.size () - correct << " erroneous detection" << endl;
+				else
+					cout << img_data.images[i].filename.c_str() << " has missing detections" << endl;
+			}
+			else if (correct < boxes.size()) // # detects == # truths but some didn't match
+			{
+        		cout << img_data.images[i].filename.c_str() << " has " << boxes.size () - correct << " erroneous detections" << endl;
+			}
 		}
 	}
-
 	std::sort(all_dets.rbegin(), all_dets.rend());
-
 	double precision, recall;
-
 	double total_hits = all_dets.size();
-
 	if (total_hits == 0)
 		precision = 1;
 	else
 		precision = correct_hits / total_hits;
-
 	if (total_true_targets == 0)
 		recall = 1;
 	else
 		recall = correct_hits / total_true_targets;
-
 	matrix<double, 1, 3> res;
 	res = precision, recall, average_precision(all_dets, missing_detections);
 	return res;
@@ -467,7 +500,7 @@ const matrix<double,1,3> my_test_object_detection_function (
 
 			float pxRatio = 1.0;
 			// --- scale image -----
-			img = downscale_large_image (img, pxRatio);
+			img = downscale_image (img, pxRatio);
 			// extract box rects from img_data
 			auto objects = img_data.images[i].boxes;
 
@@ -478,7 +511,7 @@ const matrix<double,1,3> my_test_object_detection_function (
 				if (pxRatio != 1.0)
 				{
 					scale_parts (objects[j].parts, pxRatio);
-					scale_rect (objects[j].rect, pxRatio);
+					scale_face_rect (objects[j].rect, pxRatio);
 				}
                 const double scale = length (objects[j].parts["leye"] - objects[j].parts["reye"]);
 
@@ -814,7 +847,7 @@ int main(int argc, char** argv)
 			bearID = fields[fields.size() - 2];
 		}
         std::vector<image_dataset_metadata::box> faces;
-        find_faces (net, sp, img, faces, bearID);
+        find_faces_and_landmarks (net, sp, img, faces, bearID);
         data.images[i].boxes = faces;
 
         cout << "faces found: " << to_string(faces.size()) << endl;
