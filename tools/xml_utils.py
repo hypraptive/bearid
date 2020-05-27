@@ -1555,9 +1555,10 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 	print('-----------------------------')
 	print('            total', filetype, ':', obj_count)
 	print('                # bears :', len (chips_count_list))
-	print(' average', filetype, 'per bear :', obj_count / len (chips_count_list))
+	if len (chips_count_list) > 0:
+		print(' average', filetype, 'per bear :', obj_count / len (chips_count_list))
+		print('  median', filetype, 'per bear :', np.median (img_cnt_per_label))
 	combos = sum ([(n*(n-1)/2) for n in img_cnt_per_label if n > 1])
-	print('  median', filetype, 'per bear :', np.median (img_cnt_per_label))
 	print('  possible matched sets :', combos)
 	print('possible unmatched sets :', u_combos)
 	# display_dist_hist (img_cnt_per_label, 2, 0, 'bear index', '# images')
