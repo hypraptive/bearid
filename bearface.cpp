@@ -25,7 +25,7 @@
 #include <dlib/dnn.h>
 #include <dlib/data_io.h>
 #include <dlib/image_processing.h>
-#include <dlib/gui_widgets.h>
+// #include <dlib/gui_widgets.h>
 #include <dlib/image_io.h>
 // #include <ctype.h>
 // #include <stdio.h>
@@ -122,12 +122,14 @@ matrix<rgb_pixel> downscale_image (
   if (img.size() > (MAX_SIZE))
   {
 	long orig_img_size = img.size ();
-	pxRatio = sqrt (img.size() / MAX_SIZE);
+	pxRatio = sqrt ( (float) MAX_SIZE / (float) img.size());
     // cout << "File TOO BIG" << " Ratio: " << pxRatio << endl;
     matrix<rgb_pixel> smimg((int)(img.nr() * pxRatio), (int)(img.nc() * pxRatio));
     resize_image(img, smimg);
-	long new_img_size = img.size ();
+	long new_img_size = smimg.size ();
 	float new_ratio = sqrt (orig_img_size / new_img_size);
+	cout << "old size: " << orig_img_size << endl;
+	cout << "new size: " << new_img_size << endl;
     return smimg;
   }
   return img;
