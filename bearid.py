@@ -111,7 +111,7 @@ def main (argv) :
 	if run == 'bearid' :
 		cmds.append (echo + imglab + " -c " + imgs_xml + " " + args)
 		outfiles.append ("imglab.out")
-		cmds.append (echo + bearface + " " + bearface_network + " " + imgs_xml)
+		cmds.append (echo + bearface + " --infer " + bearface_network + " " + imgs_xml)
 		outfiles.append ("bearface.out")
 		cmds.append (echo + bearchip + " " + faces_xml)
 		outfiles.append ("bearchip.out")
@@ -123,7 +123,7 @@ def main (argv) :
 	elif run == 'test' :
 		cmds.append (echo + imglab + " -c " + imgs_xml + " " + args)
 		outfiles.append ("imglab.out")
-		cmds.append (echo + bearface + " " + bearface_network + " " + imgs_xml)
+		cmds.append (echo + bearface + " --infer " + bearface_network + " " + imgs_xml)
 		outfiles.append ("bearface.out")
 		cmds.append (echo + bearchip + " " + faces_xml)
 		outfiles.append ("bearchip.out")
