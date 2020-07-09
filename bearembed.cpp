@@ -179,7 +179,7 @@ std::vector<std::vector<string>> load_pairs_map (
     std::vector<string> unmatched_labels;
     int count = 0;
 
-    BOOST_FOREACH(ptree::value_type& child, tree.get_child("dataset.chips"))
+    BOOST_FOREACH(ptree::value_type& child, tree.get_child("dataset.pairs"))
     {
       std::string child_name = child.first;
       std::vector<string> pairFiles;
@@ -269,9 +269,9 @@ std::vector<std::vector<string>> load_chips_map (
 			std::cout << "Error: ignoring chipfile " << chipfile << " wwith no bearID.\n" << endl;
 			continue;
         }
-		if (bearID.empty())
+		if (bearID.empty() || g_mode == "embed")
 		{
-			bearID = "  ";
+			bearID = " ";
 			// TODO:  need to support for unknown images
 		}
 		g_chips.push_back (chip);
@@ -457,6 +457,21 @@ std::vector<std::vector<string>> load_chips_xml (
   input_rgb_image_sized<150>
   >>>>>>>>>>>>;
 
+
+
+int find_chip_index (
+std::vector <ptree> chips, std::string chip_name)
+{
+	for (int i=0 ; i < chips.size (); ++i)
+	{
+        std::string chipfile = chips[i].get<std::string>("<xmlattr>.file");
+		if (chip_name == chipfile)
+			return i;
+	}
+	return -1;
+}
+
+
   // ----------------------------------------------------------------------------------------
 
   int main(int argc, char** argv)
@@ -479,8 +494,8 @@ std::vector<std::vector<string>> load_chips_xml (
       parser.add_option("pretrain","Specifies data to initialize the network.",1);
       // --output: <trained_network> with --train; <embed_directory> with --embed
       parser.add_option("output","Used with train, specifies trained weights file.  Use with -embed, specifies directory to put embeddings. Defaults to local.",1);
-      // --anet only used with --pretrain
-      parser.add_option("anet","Use affine net");
+      // --bn not used with --pretrain
+      parser.add_option("bn","Use batch norm, not affine net");
       // --network_steps  <num_iterations>.  defaults to 2000
       parser.add_option("network_steps","Steps before writing to new network file [default = 2000]",1);
       // --threshold <num_iterations>.  defaults to 10000
@@ -571,7 +586,64 @@ std::vector<std::vector<string>> load_chips_xml (
           cout << ".. using pretrain weights ..." << endl;
           std::string pretrained_file = parser.option("pretrain").argument();
           cout << "Load network: " << pretrained_file << endl;
-          if (parser.option("anet"))
+          if (parser.option("bn"))
+          {     // ------- BATCHNORM, NO -ANET ---------------
+            deserialize(pretrained_file) >> net_150;
+            dnn_trainer<net_type_150> trainer(net_150, sgd(0.0001, 0.9));
+            cout << "...... no anet ......." << endl;
+            trainer.set_learning_rate(0.001);
+            sync_file= "pretrained_no_anet_sync";
+            trainer.be_verbose();
+            trainer.set_synchronization_file(sync_file, std::chrono::minutes(5));
+            trainer.set_iterations_without_progress_threshold(threshold);
+            dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
+            dlib::pipe<std::vector<unsigned long>> qlabels(4);
+            auto data_loader = [&numid, &numface, &qimages, &qlabels, &objs](time_t seed)
+            {
+              dlib::rand rnd(time(0)+seed);
+              std::vector<matrix<rgb_pixel>> images;
+              std::vector<unsigned long> labels;
+              while(qimages.is_enabled())
+              {
+                try
+                {
+                  load_mini_batch(numid, numface, rnd, objs, images, labels);
+                  qimages.enqueue(images);
+                  qlabels.enqueue(labels);
+                }
+                catch(std::exception& e)
+                {
+                  cout << "EXCEPTION IN LOADING DATA" << endl;
+                  cout << e.what() << endl;
+                }
+              }
+            };
+            std::thread data_loader1([data_loader](){ data_loader(1); });
+            std::thread data_loader2([data_loader](){ data_loader(2); });
+            std::thread data_loader3([data_loader](){ data_loader(3); });
+            std::thread data_loader4([data_loader](){ data_loader(4); });
+            std::thread data_loader5([data_loader](){ data_loader(5); });
+            while(trainer.get_learning_rate() >= 1e-4)
+            {
+              qimages.dequeue(images);
+              qlabels.dequeue(labels);
+              trainer.train_one_step(images, labels);
+              cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
+            }
+            trainer.get_net();
+            cout << "done training" << endl;
+            net_150.clean();
+            anet_150 = net_150;
+            serialize(trained_network) << anet_150;
+            qimages.disable();
+            qlabels.disable();
+            data_loader1.join();
+            data_loader2.join();
+            data_loader3.join();
+            data_loader4.join();
+            data_loader5.join();
+          }   // ------- BATCHNORM, NO -ANET ---------------
+          else
           {     // ------- ANET ---------------
             cout << "...... using anet ......." << endl;
             deserialize(pretrained_file) >> anet_150;
@@ -646,63 +718,6 @@ std::vector<std::vector<string>> load_chips_xml (
             data_loader4.join();
             data_loader5.join();
           }     // ------- ANET ---------------
-          else
-          {     // ------- NO -ANET ---------------
-            deserialize(pretrained_file) >> net_150;
-            dnn_trainer<net_type_150> trainer(net_150, sgd(0.0001, 0.9));
-            cout << "...... no anet ......." << endl;
-            trainer.set_learning_rate(0.001);
-            sync_file= "pretrained_no_anet_sync";
-            trainer.be_verbose();
-            trainer.set_synchronization_file(sync_file, std::chrono::minutes(5));
-            trainer.set_iterations_without_progress_threshold(threshold);
-            dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
-            dlib::pipe<std::vector<unsigned long>> qlabels(4);
-            auto data_loader = [&numid, &numface, &qimages, &qlabels, &objs](time_t seed)
-            {
-              dlib::rand rnd(time(0)+seed);
-              std::vector<matrix<rgb_pixel>> images;
-              std::vector<unsigned long> labels;
-              while(qimages.is_enabled())
-              {
-                try
-                {
-                  load_mini_batch(numid, numface, rnd, objs, images, labels);
-                  qimages.enqueue(images);
-                  qlabels.enqueue(labels);
-                }
-                catch(std::exception& e)
-                {
-                  cout << "EXCEPTION IN LOADING DATA" << endl;
-                  cout << e.what() << endl;
-                }
-              }
-            };
-            std::thread data_loader1([data_loader](){ data_loader(1); });
-            std::thread data_loader2([data_loader](){ data_loader(2); });
-            std::thread data_loader3([data_loader](){ data_loader(3); });
-            std::thread data_loader4([data_loader](){ data_loader(4); });
-            std::thread data_loader5([data_loader](){ data_loader(5); });
-            while(trainer.get_learning_rate() >= 1e-4)
-            {
-              qimages.dequeue(images);
-              qlabels.dequeue(labels);
-              trainer.train_one_step(images, labels);
-              cout << "Step: " << trainer.get_train_one_step_calls() << " Loss: " << trainer.get_average_loss() << endl;
-            }
-            trainer.get_net();
-            cout << "done training" << endl;
-            net_150.clean();
-            anet_150 = net_150;
-            serialize(trained_network) << anet_150;
-            qimages.disable();
-            qlabels.disable();
-            data_loader1.join();
-            data_loader2.join();
-            data_loader3.join();
-            data_loader4.join();
-            data_loader5.join();
-          }   // ------- NO -ANET ---------------
         }
         else   //------------  NO PRETRAINED DATA ------
         {
@@ -863,17 +878,17 @@ else if (parser.option("test") && parser.option("pair"))
 
   // boost::filesystem::path test_network(parser.option("train").argument());
 
-  if (parser.option("anet"))
-  {
-    cout << "... using anet ..." << endl;
-    deserialize(test_network) >> testing_net;
-  }
-  else
-  {
+  if (parser.option("bn"))
+  {  // ------- BATCHNORM, NOT ANET ----------
     cout << "... not anet ..." << endl;
     deserialize(test_network) >> net;
     testing_net = net;
-  }
+  }  // ------- BATCHNORM, NOT ANET ----------
+  else
+  {  // ------- ANET ----------
+    cout << "... using anet ..." << endl;
+    deserialize(test_network) >> testing_net;
+  }  // ------- ANET ----------
 
   cout << "Start testing pairs..." << endl;
   std::vector<string> matchedPairs = objs[0];
@@ -1038,17 +1053,17 @@ else if (parser.option("test") && !parser.option("pair"))
 
   // boost::filesystem::path test_network(parser.option("train").argument());
 
-  if (parser.option("anet"))
-  {
-    cout << "... using anet ..." << endl;
-    deserialize(test_network) >> testing_net;
-  }
-  else
-  {
+  if (parser.option("bn"))
+  {  // ------- BATCHNORM, NOT ANET ----------
     cout << "... not anet ..." << endl;
     deserialize(test_network) >> net;
     testing_net = net;
-  }
+  }  // ------- BATCHNORM, NOT ANET ----------
+  else
+  {  // ------- ANET ----------
+    cout << "... using anet ..." << endl;
+    deserialize(test_network) >> testing_net;
+  }  // ------- ANET ----------
 
   cout << "Start testing..." << endl;
   // Normally you would use the non-batch-normalized version of the network to do
@@ -1243,16 +1258,16 @@ else if (parser.option("embed"))
   net_type net;
   anet_type embedding_anet;
   std::string embed_network = (parser.option("embed").argument());
-  if (parser.option("anet"))
-  {
-    deserialize(embed_network) >> anet_150;
-    embedding_anet_150 = anet_150;
-  }
-  else
-  {
+  if (parser.option("bn"))
+  {  // ------- BATCHNORM, NOT ANET ----------
     deserialize(embed_network) >> net;
     embedding_anet = net;
-  }
+  }  // ------- BATCHNORM, NOT ANET ----------
+  else
+  {  // ------- ANET ----------
+    deserialize(embed_network) >> anet_150;
+    embedding_anet_150 = anet_150;
+  }  // ------- ANET ----------
 
   // Normally you would use the non-batch-normalized version of the network to do
   // testing, which is what we do here.
@@ -1260,6 +1275,7 @@ else if (parser.option("embed"))
 
   int embeddings_count = 0;
   boost::filesystem::path emb_dir = boost::filesystem::canonical(dst_path);
+  // go through each chip
   for (size_t i = 0; i < objs.size(); ++i)
   {
     // cout << "ID: " << i << " - label: " << obj_labels[i] << " - Files: " << objs[i].size() << endl;
@@ -1274,14 +1290,14 @@ else if (parser.option("embed"))
       load_image(image, img_str);
       // get embedding
       // TODO add jitter (see dnn_face_recognition_ex.cpp)
-      if (parser.option("anet"))
-      {
-        embedded = embedding_anet_150(image);
-      }
-      else
-      {
+      if (parser.option("bn"))
+	  {  // ------- BATCHNORM, NOT ANET ----------
         embedded = embedding_anet(image);
-      }
+	  }  // ------- BATCHNORM, NOT ANET ----------
+	  else 
+	  {  // ------- ANET ----------
+        embedded = embedding_anet_150(image);
+	  }  // ------- ANET ----------
 	  // extract subdir path of file.  if nothing matched, the result
 	  //   is the orig path.
       std::string chip_subdir_file = erase_first_copy (emb_str, chip_root); // -> bf/fitz/bf480/IMG123.JPG
@@ -1302,7 +1318,7 @@ else if (parser.option("embed"))
 		float embed_val;
 		std::string s, embed_stdstr;
 
-
+		//  write embedding string to xml
 		for (long r = 0; r < embedded.nr(); ++r)
 		{
 			// loop over all the columns
@@ -1320,8 +1336,9 @@ else if (parser.option("embed"))
 		xml_embed.add ("<xmlattr>.file", emb_path.string());
 		xml_embed.add ("label", obj_labels[i]);
 		xml_embed.add ("chip_source", img_str);
-		xml_embed.add_child ("chip", g_chips[i]);
-		embeds.add_child ("embedding.chip", g_chips[i]);
+		int chip_index = find_chip_index (chips, img_str);
+		if (chip_index >= 0)
+			xml_embed.add_child ("chip", chips[chip_index]);
 
 		serialize(emb_path.string()) << embedded;
 		//cout << "Embedded: " << emb_path.string() << endl;
@@ -1346,7 +1363,11 @@ else if (parser.option("embed"))
   }
 
   boost::filesystem::path xml_file (parser[0]);
-  std::string embed_xml_file = xml_file.parent_path().string() + "/" + xml_file.filename().stem().string() + "_embeds.xml";
+  std::string embed_xml_file;
+  if (xml_file.has_parent_path ()) 
+	  embed_xml_file = xml_file.parent_path().string() + "/";
+  embed_xml_file += xml_file.filename().stem().string() + "_embeds.xml";
+
   xml_add_headers (); // put at end since writing reverse order added
   // boost::property_tree::xml_writer_settings<char> settings ('\t', 1);
   boost::property_tree::xml_writer_settings<std::string> settings (' ', 4);
