@@ -32,7 +32,7 @@ import subprocess
 # bearchip = bearchip also_faces.xml
 
 # create embeddings for the faces
-# bearembed = bearembed --embed ~/dev/bearid-models/bearembed_network.dat --anet also_faces_chips.xml
+# bearembed = bearembed --embed ~/dev/bearid-models/bearembed_network.dat also_faces_chips.xml
 
 # classify NOTE: input dat files are hard coded
 # bearsvm = bearsvm --infer also_faces_chips_embeds.xml
@@ -80,23 +80,28 @@ def main (argv) :
 	# validate that all those files exist
 	#--------------------------------------------------
 	print ('\n... validating files... ')
+	missing_count = 0
 	for f in files_dep :
 		if os.path.exists (f) :
 			print ('\tfile OK        : ', f )
 		else :
 			print ('\tfile NOT found : ', f )
+			missing_count += 1
 	if not os.path.exists (outdir) :
-		print ('... creating ', outdir)
+		print ('... creating ', outdir, ' directory.')
 		os.mkdir (outdir)
-	else :
-		print ('... ', outdir, ' already exists.')
+	if missing_count > 0 :
+		print ('\n\t----------------------------------------------------------')
+		print ('\t Unable to continue, above files are required to proceed.')
+		print ('\t----------------------------------------------------------\n')
+		return
 
 	#--------------------------------------------------
 	# commands should look something like:
 	# imglab -c imgs.xml <img/dir/file>
 	# bearface ~/dev/bearid-models/bearface_network.dat imgs.xml
 	# bearchip imgs_faces.xml
-	# bearembed --embed ~/dev/bearid-models/bearembed_network.dat --anet imgs_faces_chips_xml
+	# bearembed --embed ~/dev/bearid-models/bearembed_network.dat imgs_faces_chips_xml
 	# bearsvm --infer imgs_faces_chips_embed.xml
 	#--------------------------------------------------
 
@@ -115,7 +120,7 @@ def main (argv) :
 		outfiles.append ("bearface.out")
 		cmds.append (echo + bearchip + " " + faces_xml)
 		outfiles.append ("bearchip.out")
-		cmds.append (echo + bearembed + " --embed " + bearembed_network + " --anet " + chips_xml)
+		cmds.append (echo + bearembed + " --embed " + bearembed_network + " " + chips_xml)
 		outfiles.append ("bearembed.out")
 		cmds.append (echo + bearsvm + " --infer " + bearsvm_network + " " + embeds_xml)
 		outfiles.append ("bearsvm.out")
@@ -129,7 +134,7 @@ def main (argv) :
 		outfiles.append ("bearchip.out")
 		chips_xml = "test_output/chips_validate.xml"
 		embeds_xml = "test_output/chips_validate_embeds.xml"
-		cmds.append (echo + bearembed + " --test " + bearembed_network + " --anet " + chips_xml)
+		cmds.append (echo + bearembed + " --test " + bearembed_network + " " + chips_xml)
 		outfiles.append ("bearembed.out")
 		cmds.append (echo + bearsvm + " --test " + bearsvm_network + " " + embeds_xml)
 		outfiles.append ("bearsvm.out")
