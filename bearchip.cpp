@@ -142,7 +142,7 @@ std::vector<matrix<rgb_pixel>> find_chips (
   //---------------
   for (auto&& b : boxes)  // for each face
   {
-      part[0] = b.parts["top"];
+      part[0] = b.parts["head_top"];
       part[1] = b.parts["lear"];
       part[2] = b.parts["leye"];
       part[3] = b.parts["nose"];
@@ -237,14 +237,14 @@ int xml_add_part (ptree &part, std::string name, point pt)
 		<part name='nose' x='1933' y='1536'/>
 		<part name='rear' x='1776' y='1311'/>
 		<part name='reye' x='1814' y='1403'/>
-		<part name='top' x='1873' y='1276'/>
+		<part name='head_top' x='1873' y='1276'/>
 	  </box>
 	</source>
 	*/
 // -----------------------------------------------------------------------------
 int xml_populate_chip_source (ptree &xml_chip, image_dataset_metadata::box box, std::string src_file)
 {
-	point top = box.parts["top"];
+	point top = box.parts["head_top"];
 	point lear = box.parts["lear"];
 	point leye = box.parts["leye"];
 	point nose = box.parts["nose"];
@@ -274,7 +274,7 @@ int xml_populate_chip_source (ptree &xml_chip, image_dataset_metadata::box box, 
 	ptree &src_reye = xml_chip_source_box.add ("part", "");
 	xml_add_part (src_reye, "reye", reye);
 	ptree &src_top = xml_chip_source_box.add ("part", "");
-	xml_add_part (src_top, "top", top);
+	xml_add_part (src_top, "head_top", top);
 	return 0;
 }
 
@@ -308,11 +308,12 @@ int populate_chip (ptree &xml_chip, image_dataset_metadata::box box, dlib::vecto
 int main(int argc, char** argv) try
 {
     int total_faces = 0;
-	std::string img_root = "/home/data/bears/imageSource/";
+	std::string img_root = "/home/data/bears/imageSourceSmall/";
+	std::string face_file = argv[1];
 
 	if (argc == 4)
 	{
-		if (strcmp (argv[1], "-root") != 0)
+		if (strcmp (argv[1], "--root") != 0)
 		{
 			cout << "unrecognized argument: " << argv[1] << endl;
 			cout << "\nUsage:" << endl;
@@ -321,11 +322,13 @@ int main(int argc, char** argv) try
 			return 0;
 		}
 		img_root = argv[2];
+		face_file = argv[3];
+
 	}
     else if (argc != 2)
     {
 			cout << "\nUsage:" << endl;
-        cout << "./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
+        cout << "./bearchip [--root <img_root_dir>] <face_metadata_file>" << endl;
 				cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
         return 0;
     }
@@ -335,7 +338,7 @@ int main(int argc, char** argv) try
 	ptree &chips = g_xml_tree.add ("dataset.chips", "");
 
     dlib::image_dataset_metadata::dataset data;
-    load_image_dataset_metadata(data, argv[1]);
+    load_image_dataset_metadata(data, face_file);
 
 	// create image for composite of tranformations
     const rgb_pixel color_grey(50,50,50);
