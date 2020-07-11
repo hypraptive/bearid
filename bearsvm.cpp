@@ -23,7 +23,9 @@ using namespace std;
 using namespace dlib;
 using boost::property_tree::ptree;
 
+ptree g_xml_tree;
 std::string g_mode = "none";
+std::vector <ptree> g_chips;  // stores face boxes of embeddings
 
 // This function spiders the top level directory and obtains a list of all the
 // files.
@@ -52,7 +54,7 @@ std::vector<std::vector<string>> load_embeds_map (
   const std::string& xml_file, std::vector<std::string>& obj_labels)
 {
   std::map<string,std::vector<std::string>> embeds_map;
-  ptree tree;
+  ptree tree, empty_tree;
   boost::property_tree::read_xml (xml_file, tree);
 
   std::vector<std::vector<string>> objects;		// return object
@@ -72,6 +74,11 @@ std::vector<std::vector<string>> load_embeds_map (
         std::cout << "Error: embedfile " << embedfile << " has no bearID.\n" << endl;
         continue;
       }
+	  ptree chip = embedding.get_child ("chip", empty_tree);  // from bearface
+	  if (chip == empty_tree)
+        std::cout << "Warning: embedfile " << embedfile << " has no face information.\n" << endl;
+	  g_chips.push_back (chip);
+
       embeds_map[bearID].push_back (embedfile);
     }
   }
@@ -220,6 +227,17 @@ std::string get_network_id_name (std::string network_str)
 // However, any bears with less than folds number of embeddings will be skipped
 int folds = 3;
 
+
+//--------------------------------------------------
+// initialize xml
+//--------------------------------------------------
+int xml_add_headers ()
+{
+  g_xml_tree.add("dataset.name", "bearid dataset");
+  g_xml_tree.add("dataset.comment", "Created by bearsvm");
+  return 0;
+}
+
 //-----------------------------------------------------------------
 //   main function
 //-----------------------------------------------------------------
@@ -341,8 +359,14 @@ int main(int argc, char** argv)
 			cout << "correct: "  << sum(diag(cm)) << " : total : " << sum(cm) << endl;
 			cout << "accuracy: "  << sum(diag(cm))/sum(cm) << endl;
 		}
-		else if (parser.option("infer"))
+		else if (parser.option("infer"))  // doing inference ----------
 		{
+			boost::filesystem::path current_dir (boost::filesystem::current_path());
+		    g_xml_tree.add ("dataset.command", argv[0]);
+		    g_xml_tree.add ("dataset.cwd", current_dir.string());
+		    g_xml_tree.add ("dataset.filetype", "svm output");
+		    ptree images = g_xml_tree.add ("dataset.images", "");
+
 			svm_network_name = parser.option("infer").argument();
 			svm_network_ids_name = get_network_id_name (svm_network_name);
 			one_vs_one_decision_function<ovo_trainer,
@@ -354,12 +378,38 @@ int main(int argc, char** argv)
 			deserialize(svm_network_name) >> df3;
 		  cout << "\nInferring with embed file.... : " << embed_xml << endl;
 			extract_embeds (embed_xml, samples, label_indices, ids, embed_files, label_id_map);
+			ptree empty_tree;
+			ptree image;
 			for (int i = 0 ; i < samples.size (); ++i)
 			{
 				idx = df3 (samples[i]);
-				boost::filesystem::path path_emd_file (embed_files[i]);
-				cout << path_emd_file.stem().string() << " : " << ids2[idx] << endl;
+				boost::filesystem::path path_emb_file (embed_files[i]);
+				ptree chip_source = g_chips[i].get_child ("source", empty_tree);
+
+				if (chip_source != empty_tree)
+				{
+					// image = images.add_child ("image", chip_source);
+
+					ptree box = chip_source.get_child ("box", empty_tree);
+					ptree label = chip_source.get_child ("box.label");
+					chip_source.put ("box.label", ids2[idx]);
+					image = g_xml_tree.add_child ("dataset.images.image", chip_source);
+				}
+				else
+					cout << "missing image for embedding " << embed_files[i] << endl;
+				cout << ids2[idx] << " : " << path_emb_file.parent_path().stem().string() << "/" << path_emb_file.stem().string() << endl;
 			}
+			boost::filesystem::path xml_file (parser[0]);
+			std::string svm_xml_file;
+			if (xml_file.has_parent_path ()) 
+				svm_xml_file = xml_file.parent_path().string() + "/";
+			svm_xml_file += xml_file.filename().stem().string() + "_svm.xml";
+			xml_add_headers (); // put at end since writing reverse order added
+			// boost::property_tree::xml_writer_settings<char> settings ('\t', 1);
+			boost::property_tree::xml_writer_settings<std::string> settings('\t', 1, "utf-8\"?>\n<?xml-stylesheet type=\"text/xsl\" href=\"image_metadata_stylesheet.xsl");
+			// boost::property_tree::xml_writer_settings<std::string> settings (' ', 4);
+			write_xml(svm_xml_file, g_xml_tree,std::locale(),settings);
+			cout << "\ngenerated: \n\t-- " << svm_xml_file << endl;
 		}
 		else
 		{
