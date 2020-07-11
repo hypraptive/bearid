@@ -9,6 +9,7 @@ import xml.dom.minidom
 import argparse
 import os
 import datetime
+import requests
 import csv
 from xml.dom import minidom
 from copy import deepcopy
@@ -18,9 +19,11 @@ from os import walk
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.manifold import TSNE
 from PIL import Image
+from pathlib import Path
 
 
 g_x = 0
@@ -33,6 +36,9 @@ g_stats_few = []
 g_stats_many = []
 g_argv = ''
 g_exec_name = 'bearID v0.1'
+g_box_vals = {'height', 'left', 'head_top', 'width'} 
+g_shape_parts_find = {'lear', 'leye', 'nose', 'rear', 'reye', 'head_top', 'htop', 'head_top'}
+g_shape_parts = {'lear', 'leye', 'nose', 'rear', 'reye', 'head_top'}
 
 all_labels=[
 	'bc_adeane', 'bc_also', 'bc_amber', 'bc_aurora', 'bc_beatrice', 'bc_bella',
@@ -56,6 +62,25 @@ all_labels += [
 	'bf_720', 'bf_744', 'bf_747', 'bf_755', 'bf_775', 'bf_813', 'bf_814', 'bf_818',
 	'bf_854', 'bf_856', 'bf_868', 'bf_879'
 	]
+coco_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 
+	21, 22, 23, 24, 25, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 
+	43, 44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 
+	63, 64, 65, 67, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90]
+coco_classes = ["person", "bicycle", "car", "motorcycle", "airplane", "bus", 
+	"train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", 
+	"parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
+	"elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", 
+	"tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", 
+	"baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", 
+	"bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", 
+	"apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", 
+	"donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", 
+	"toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", 
+	"microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", 
+	"vase", "scissors", "teddy bear", "hair drier", "toothbrush"]
+md_ids = [1, 2, 3]
+md_classes = ['animal', 'person', 'vehicle']
+object_classes_d = defaultdict ()
 
 ##------------------------------------------------------------
 ##  add indentations to xml content for readability
@@ -217,7 +242,7 @@ def get_faces_boundary (image_tag) :
 	max_bottom = 0
 	for box in image_tag.findall ('box') :
 		left = int (box.attrib.get ('left'))
-		top = int (box.attrib.get ('top'))
+		top = int (box.attrib.get ('head_top'))
 		height = int (box.attrib.get ('height'))
 		width = int (box.attrib.get ('width'))
 		right = left + width
@@ -317,7 +342,7 @@ def get_min_img_face_size (image_tag) :
 ##    modifies: box (height, width, top, left), box.part (x, y)
 ##------------------------------------------------------------
 def scale_box (box, pxRatio) :
-	for attrib in ('height', 'width', 'top', 'left') :
+	for attrib in ('height', 'width', 'head_top', 'left') :
 		val = box.attrib.get (attrib)
 		# print ('attrib: ', attrib, ' val: ', val)
 		if val != None :
@@ -341,12 +366,12 @@ def scale_box (box, pxRatio) :
 def pan_boxes (image_tag, new_origin_left, new_origin_top) :
 
 	for box in image_tag.findall ('box') :
-		val = box.attrib.get ('top')
+		val = box.attrib.get ('head_top')
 		if val != None :
 			val = int (val)
-			box.set ('top', str (int (val - new_origin_top)))
+			box.set ('head_top', str (int (val - new_origin_top)))
 		else :
-			print ('attrib ', 'top', ' not found')
+			print ('attrib ', 'head_top', ' not found')
 		val = box.attrib.get ('left')
 		if val != None :
 			val = int (val)
@@ -372,7 +397,8 @@ def pan_boxes (image_tag, new_origin_left, new_origin_top) :
 #   for each image in file if larger than max_dimension
 #	  - downscale to max_dimension or min_face_size
 #	  - if downscale to min_face_size, crop to max_dimension 
-#	  - write image to parallel directory
+#	  - write image to parallel directory 
+#		(imageSource ->imageSourceSmall)
 #	  - write out xml with new info
 ##------------------------------------------------------------
 def resize_face_file (orig_file, max_x=1500, max_y=2000, min_face_size=180) :
@@ -467,6 +493,7 @@ def load_file (file):
 ##  load xml into dictionary of <string><element_list>
 ##  ex:  d["b-032"] = ["<Element 'chip' at 0x123,..,<Element 'chip' at 0x43]
 ##       d["b-747"] = ["<Element 'chip' at 0x987,..,<Element 'chip' at 0x65]
+##  returns list of images
 ##------------------------------------------------------------
 def load_objs (root, d_objs, filetype) :
 	## print "loading chips"
@@ -873,7 +900,7 @@ def create_new_tree_w_element (filetype="chips") :
 	return r, r_elem
 
 ##------------------------------------------------------------
-##   create copy of xml file of particular label
+##  
 ##------------------------------------------------------------
 def write_file_with_label (xml_file_in, xml_file_out, key):
 	tree_i = ET.parse (xml_file)
@@ -930,16 +957,32 @@ def generate_xml_file_list (inputfiles):
 	return f
 
 ##------------------------------------------------------------
+##   return flattened list of all image files (jpg, jpeg, png)
+##------------------------------------------------------------
+def generate_img_file_list (inputfiles):
+	# pdb.set_trace ()
+	imgs = []
+	for i in inputfiles :
+		jpgs = list (Path(i).rglob ("*.[jJ][pP][gG]"))
+		png = list (Path(i).rglob ("*.[pP][nN][gG]"))
+		imgs.extend (jpgs)
+		imgs.extend (png)
+	return imgs
+
+##------------------------------------------------------------
 ##  load objs from list of files into objs_d
 ##    if filename is directory, load all its xml files
-##  return list files in metadata
+##  objs_d is dictionary of <string><element_list>
+##  ex:  d["b-032"] = ["<Element 'chip' at 0x123,..,<Element 'chip' at 0x43]
+##       d["b-747"] = ["<Element 'chip' at 0x987,..,<Element 'chip' at 0x65]
+##  return list of files in metadata
 ##------------------------------------------------------------
 def load_objs_from_files (filenames, objs_d, filetype="chips"):
 	objfiles = []
 	# print "in load_objs_from_files"
 	# pdb.set_trace ()
 	## load all chips into objs_d
-	print("\nLoading", filetype, "for files: ")
+	# print("\nLoading", filetype, "for files: ")
 	for file in filenames:
 		print("\t", file)
 		# pdb.set_trace()
@@ -1042,6 +1085,17 @@ def write_chip_file (chips, outfile):
 	root, chips_elem = create_new_tree_w_element ()
 	for chip in chips:
 		chips_elem.append (chip)
+	indent (root)
+	tree = ET.ElementTree (root)
+	tree.write (outfile)
+
+##------------------------------------------------------------
+##  given list, write to xml file
+##------------------------------------------------------------
+def write_xml_file (outfile, tags, filetype):
+	root, tags_elem = create_new_tree_w_element (filetype)
+	for tag in tags :
+		tags_elem.append (tag)
 	indent (root)
 	tree = ET.ElementTree (root)
 	tree.write (outfile)
@@ -1648,11 +1702,67 @@ def get_xml_files (dir) :
 	return xml_files
 
 ##------------------------------------------------------------
-##   
+##  get box 
 ##------------------------------------------------------------
-def get_image_label_text (face) :
-	box = face.findall ('box')
-	label_list = box[0].findall ('label')
+def get_box (image_tag) :
+	box_d = defaultdict ()
+	for box in image_tag.findall ('box') : # TODO : multiple??
+		for part in g_box_vals :
+			box_d[part] = box.attrib.get (part)
+	return box_d
+
+##------------------------------------------------------------
+##  get shape parts 
+##------------------------------------------------------------
+def get_shape_parts (image_tag) :
+	parts_d = defaultdict ()
+	for box in image_tag.findall ('box') : # TODO : multiple??
+		parts = box.findall ('part')
+	# pdb.set_trace ()
+	for part in parts :
+		name = part.attrib.get ('name')
+		if name in g_shape_parts_find :
+			if name == 'head_top' or name == 'htop' :	## tmp fix for erroneous 'head_top'
+				name = 'head_top'
+			x = part.attrib.get ('x')
+			y = part.attrib.get ('y')
+			parts_d[name] = {x, y}
+	return parts_d
+
+##------------------------------------------------------------
+##  diff objs
+##------------------------------------------------------------
+def obj_equal (obj1, obj2, parts) :
+	for part in parts :
+		if obj1[part] != obj2[part] :
+			return False
+	return True
+		
+##------------------------------------------------------------
+##  returns true if box and parts of the two tags match
+##------------------------------------------------------------
+def diff_image_tags (image1, image2) :
+	box_1 = get_box (image1)
+	parts_1 = get_shape_parts (image1)
+	box_2 = get_box (image2)
+	parts_2 = get_shape_parts (image2)
+	filename1 = image_tag_file (image1)
+	filename2 = image_tag_file (image2)
+	# print ('\ncomparing content for : ')
+	# print ('\t', filename1)
+	# print ('\t', filename2)
+	if not obj_equal (box_1, box_2, g_box_vals) :
+		return False
+	if not obj_equal (parts_1, parts_2, g_shape_parts) :
+		return False
+	return True
+
+##------------------------------------------------------------
+##  returns name of label.  assumes 1 box, 1 label. does no err checks 
+##------------------------------------------------------------
+def get_image_label_text (image_tag) :
+	box_tag = image_tag.findall ('box')
+	label_list = box_tag[0].findall ('label')
 	label = label_list[0].text
 	return label
 
@@ -1672,7 +1782,6 @@ def get_new_face (face, faces_new_d) :
 			if imagefile_new == imagefile_old :
 				return face
 	return None
-
 
 ##------------------------------------------------------------
 ##  validate_file - create new file with only valid chip files
@@ -1699,6 +1808,84 @@ def validate_file (xml_file, output_file) :
 	indent (root)
 	tree = ET.ElementTree (root)
 	tree.write (output_file)
+
+##------------------------------------------------------------
+##  find matching image (face,faces_orig_d).
+##    returns matched image_tag
+##------------------------------------------------------------
+def get_matching_image (image_file, images_d) :
+	for l , image_tags in list(images_d.items ()) :
+		# ignores label, which is only accurate during testing
+		# look for file name
+		for image_tag in image_tags :
+			image_file_2 = image_tag.attrib.get ('file')
+			if image_file == image_file_2 :
+				return image_tag
+	return None
+
+##------------------------------------------------------------
+##  return file for image tag
+##------------------------------------------------------------
+def image_tag_file (image_tag) :
+	filename = image_tag.attrib.get ('file')
+	return filename
+
+##------------------------------------------------------------
+##  remove image_tag from dict
+##------------------------------------------------------------
+def remove_image_tag (image_file, images_d) :
+	for l , image_tags in list(images_d.items ()) :
+		# ignores label, which is only accurate during testing
+		# look for file name
+		for i in range (len (image_tags)) :
+			image_file_2 = image_tag_file (image_tags[i])
+			if image_file == image_file_2 :
+				del image_tags[i]
+				return True
+	return False
+
+##------------------------------------------------------------
+##  diff_face_files .  check for matching images, box, parts
+##------------------------------------------------------------
+def diff_face_files (xml1, xml2) :
+	images1_d = defaultdict(list)
+	images2_d = defaultdict(list)
+	filetype = "faces"
+	print ('\ncomparing files: ', xml1, ' ', xml2)
+	objfiles1 = load_objs_from_files ({xml1}, images1_d, filetype)
+	objfiles2 = load_objs_from_files ({xml2}, images2_d, filetype)
+	newfaces = []
+	images_one_only = []
+	images_mismatch = []
+	images_two_only = []
+	for label, images1 in list(images1_d.items ()) :  ## iterate through all images
+		for image1 in images1 :
+			# pdb.set_trace ()
+			image_filename = image_tag_file (image1)
+			image2 = get_matching_image (image_filename, images2_d)
+			if image2 is None :
+				print ("no image match for ", image_filename)
+				images_one_only.append (image1)
+				continue
+			match = diff_image_tags (image1, image2)
+			if not match :
+				print ("content mismatch for ", image_filename)
+				images_mismatch.append (image1)
+				remove_image_tag (image_filename, images2_d)
+				continue
+			# here only if found mathcing box and parts, remove match image2 from list
+			remove_image_tag (image_filename, images2_d)
+	for label, images2 in list(images2_d.items ()) : ## go through dict and make a list
+		for image2 in images2 :
+			images_two_only.append (image2)
+
+	write_xml_file ("images_two_only.xml", images_two_only, filetype)
+	write_xml_file ("images_one_only.xml", images_one_only, filetype)
+	write_xml_file ("images_mismatch.xml", images_mismatch, filetype)
+	print ("writing files:")
+	print ("\timages_mismatch.xml")
+	print ("\timages_one_only.xml")
+	print ("\timages_two_only.xml")
 
 ##------------------------------------------------------------
 ##  replicate_file - create file of same list of images with new data
@@ -1808,6 +1995,156 @@ def plot_embeddings (input_files) :
 		print ('\n\tUnable to plot, no display detected.\n')
 
 	# print ('\t'.join (str(x) for x in embeds_list[0]))
+
+
+##------------------------------------------------------------------------------
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+def get_bear_count (res, image_np, min_score, do_display=False) :
+	have_display = "DISPLAY" in os.environ
+	display = have_display and do_display
+	dim = image_np.shape
+	width = dim[1]
+	height = dim[0]
+	bear_cnt = 0
+	if display :
+		fig,ax = plt.subplots(1)
+		# Display the image
+		ax.imshow(image_np)
+	boxes = res.json()['predictions'][0]['detection_boxes']
+	scores = res.json()['predictions'][0]['detection_scores']
+	classes = res.json()['predictions'][0]['detection_classes']
+	detections = int(res.json()['predictions'][0]['num_detections'])
+	for i in range(detections):
+		label = coco_classes_d [int (classes[i])]
+		if (scores[i] < float (min_score)):
+			# print('Scores too low below ', i)
+			break
+		if label == 'bear' :
+			bear_cnt += 1
+		else :
+			continue
+		# print('  Class', label, 'Score', scores[i])
+		ymin = int(boxes[i][0] * height)
+		xmin = int(boxes[i][1] * width)
+		ymax = int(boxes[i][2] * height)
+		xmax = int(boxes[i][3] * width)
+		b_width = xmax-xmin
+		b_height = ymax-ymin
+		# print('\t', boxes[i], end='')
+		# print(xmin, ymin, b_width, b_height)
+		# Create a Rectangle patch
+		rect = patches.Rectangle((xmin,ymin),b_width,b_height,linewidth=1,edgecolor='r',facecolor='none')
+		# Add the patch to the Axes
+		if (display) :
+			ax.add_patch(rect)
+
+	if (display) :
+		plt.show()
+	return bear_cnt
+
+#-------------------------------------------------------------------------------
+def do_obj_count (result, image_np, min_score, objs, objs_d) :
+	obj_cnt = 0
+	boxes = result.json()['predictions'][0]['detection_boxes']
+	scores = result.json()['predictions'][0]['detection_scores']
+	classes = result.json()['predictions'][0]['detection_classes']
+	detections = int(result.json()['predictions'][0]['num_detections'])
+	for i in range(detections):
+		label = objs_d [int (classes[i])]
+		if (scores[i] < float (min_score)):  # scored are ordered
+			print('Scores too low below ', i)
+			break
+		if label in objs :
+			obj_cnt += 1
+	return obj_cnt
+
+#-------------------------------------------------------------------------------
+def get_rect (dim, box, color='r') :
+	width = dim[1]
+	height = dim[0]
+	ymin = int(box[0] * height)
+	xmin = int(box[1] * width)
+	ymax = int(box[2] * height)
+	xmax = int(box[3] * width)
+	b_width = xmax-xmin
+	b_height = ymax-ymin
+	# Create a Rectangle patch
+	rect = patches.Rectangle((xmin,ymin),b_width,b_height,linewidth=1,edgecolor=color,facecolor='none')
+	return rect
+
+#-------------------------------------------------------------------------------
+def get_obj_count (result, image_np, min_score, labels, do_display=False) :
+	have_display = "DISPLAY" in os.environ
+	display = have_display and do_display
+	dim = image_np.shape
+	if display :
+		fig,ax = plt.subplots(1)
+		ax.imshow(image_np)
+	boxes = result.json()['predictions'][0]['detection_boxes']
+	scores = result.json()['predictions'][0]['detection_scores']
+	classes = result.json()['predictions'][0]['detection_classes']
+	detections = int(result.json()['predictions'][0]['num_detections'])
+	obj_cnt = 0
+	for i in range(detections):
+		label = object_classes_d [int (classes[i])]
+		if (scores[i] < float (min_score)):
+			# print('Scores too low below ', i)
+			break
+		if label in labels :
+			obj_cnt += 1
+		print('  Class', label, 'Score', scores[i])
+		# pdb.set_trace ()
+		rect = get_rect (dim, boxes[i], 'r')
+		# Add the patch to the Axes
+		if (display) :
+			ax.add_patch(rect)
+	if (display) :
+		plt.show()
+	return obj_cnt
+
+#-------------------------------------------------------------------------------
+def img_find_bears (img_file, min_score, labels) :
+	image = Image.open(img_file)
+	image_np = np.array(image)
+	payload = {"instances": [image_np.tolist()]}
+	result = requests.post("http://localhost:8080/v1/models/default:predict", json=payload)
+	bear_cnt = get_obj_count (result, image_np, min_score, labels, True)
+	return bear_cnt
+
+#-------------------------------------------------------------------------------
+def do_find_bears (img_files, out_file, min_score, model) :
+	if model == 'tf-frcnn' :
+		ids = coco_ids
+		classes = coco_classes
+		labels = ['bear']
+	else : # megadetector
+		ids = md_ids
+		classes = md_classes
+		labels = ['animal']
+	for i in range (len (ids)) :
+		object_classes_d[ids[i]] = classes[i]
+	out_fp = open (out_file, "w")
+	expected_cnt = 1
+	for img_file in img_files :
+		bear_cnt = img_find_bears (img_file, min_score, labels)
+		# pdb.set_trace ()
+		# print ('counting bears for ', img_file)
+		# if bear_cnt > expected_cnt :
+		if bear_cnt > 0 :
+			out_fp.write (str (img_file))
+			out_fp.write ("\n")
+			print (bear_cnt, 'bears:', img_file)
+	print ('\n\tImages with more than', expected_cnt, 'bear(s) written to:', out_file)
+	print ('\n')
+	out_fp.close ()
+
+##------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+
+
 
 ##------------------------------------------------------------
 ##  extract embeddings
