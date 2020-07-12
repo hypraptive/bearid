@@ -17,23 +17,25 @@
                div#box{
                   position: absolute; 
                   border-style:solid; 
-                  border-width:1px; 
-                  border-color:red;
+                  border-width:5px; 
+                  border-color:#00FF00;
                }
 
                div#circle{
                   position: absolute; 
                   border-style:solid; 
                   border-width:1px; 
-                  border-color:red;
-                  border-radius:7px;
-                  width:1px; 
-                  height: 1px;
+                  border-color:#00FF00;
+                  border-radius:15px;
+                  width:10px; 
+                  height: 10px;
                }
 
                div#label{
                   position: absolute; 
-                  color: red;
+				  font-size: 40px;
+				  background-color: rgba(0, 0, 0, 0.3);
+                  color: #00FF00;
                }
 
                div#img{
@@ -83,7 +85,7 @@
 
                         <!-- If there is a label then display it in the lower right corner. -->
                         <xsl:if test="label">
-                           <div id="label" style="top: {@top+@height}px; left: {@left+@width}px;">
+                           <div id="label" style="top: {@top+@height}px; left: {@left}px;">
                               <xsl:value-of select="label"/>
                            </div>
                         </xsl:if>
