@@ -57,4 +57,5 @@ COPY --from=bearid-build /usr/local/bin/imglab /usr/local/bin/imglab
 COPY --from=bearid-build /bearid-models/*.dat /
 
 WORKDIR /
-CMD ["python","bearid.py","/home/data/bears/imageSource/images"]
+# CMD ["python","bearid.py","/home/data/bears/imageSourceSmall/images"]
+CMD python bearid.py /home/data/bears/imageSourceSmall/images && sed -i 's;/home/data/bears/imageSourceSmall/images/;;' ./result/imgs_faces_chips_embeds_svm.xml && mv ./result/imgs_faces_chips_embeds_svm.xml /home/data/bears/imageSourceSmall/images
