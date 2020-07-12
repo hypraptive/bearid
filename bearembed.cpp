@@ -269,7 +269,7 @@ std::vector<std::vector<string>> load_chips_map (
 			std::cout << "Error: ignoring chipfile " << chipfile << " wwith no bearID.\n" << endl;
 			continue;
         }
-		if (bearID.empty() || g_mode == "embed")
+		if (bearID.empty())
 		{
 			bearID = " ";
 			// TODO:  need to support for unknown images
