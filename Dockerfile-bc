@@ -41,10 +41,8 @@ RUN git clone https://github.com/hypraptive/bearid.git \
   && cmake --build . --config Release
 
 # bearid-models
-RUN cd / \
+RUN cd / && pwd \
   && git clone https://github.com/hypraptive/bearid-models.git
-#  && mv bearid-models/*.dat . \
-#  && cp ../bearid.py .
 
 # RUN
 FROM python:3.7-slim
@@ -54,7 +52,10 @@ RUN apt-get -y update && apt-get install -y libboost-filesystem1.67.0
 COPY --from=bearid-build /bearid/build/bear* /
 COPY --from=bearid-build /bearid/bearid.py /
 COPY --from=bearid-build /usr/local/bin/imglab /usr/local/bin/imglab
-COPY --from=bearid-build /bearid-models/*.dat /
+COPY --from=bearid-build /bearid-models/bearembed_network.dat /
+COPY --from=bearid-build /bearid-models/bearface_network.dat /
+COPY --from=bearid-build /bearid-models/bearsvm_bc.dat /bearsvm_network.dat
+COPY --from=bearid-build /bearid-models/bearsvm_bc_ids.dat /bearsvm_network_ids.dat
 
 WORKDIR /
 # CMD ["python","bearid.py","/home/data/bears/imageSourceSmall/images"]
