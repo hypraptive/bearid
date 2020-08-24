@@ -186,18 +186,21 @@ std::vector<matrix<rgb_pixel>> find_chips (
 	  // ---------------------------------------
 	  // get mapping for display
       point_transform_affine pta = get_mapping_to_chip(face_chip_details);
-      auto leye_new = pta(part[2])*chip_x;
-      auto nose_new = pta(part[3])*chip_x;
+      auto leye = pta(part[2]);
+      auto nose = pta(part[3]);
+      auto reye = pta(part[5]);
+      auto leye_new = leye*chip_x;
+      auto nose_new = nose*chip_x;
       nose_new.x() = std::min(nose_new.x(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
       nose_new.y() = std::min(nose_new.y(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
 	  if (nose_new.y() < 0)
 	  	nose_new.y() = g_feature_radius;
 	  if (nose_new.x() < 0)
 	  	nose_new.x() = g_feature_radius;
-      auto reye_new = pta(part[5])*chip_x;
-	  face_features.push_back (leye_new);
-	  face_features.push_back (nose_new);
-	  face_features.push_back (reye_new);
+      auto reye_new = reye*chip_x;
+	  face_features.push_back (leye);
+	  face_features.push_back (nose);
+	  face_features.push_back (reye);
 
       chip_circles.push_back(image_window::overlay_circle(reye_new, g_feature_radius, color_r));
 	  add_overlay_circle(reye_new, g_feature_radius, color_r);
@@ -309,13 +312,13 @@ int main(int argc, char** argv) try
 {
     int total_faces = 0;
 	std::string img_root = "/home/data/bears/imageSourceSmall/";
-	std::string face_file = argv[1];
+	std::string face_file;
 
 	if (argc == 4)
-	{
-		if (strcmp (argv[1], "--root") != 0)
 		{
-			cout << "unrecognized argument: " << argv[1] << endl;
+			if (strcmp (argv[1], "--root") != 0)
+		{
+			cout << "\nError: unrecognized argument: " << argv[1] << endl;
 			cout << "\nUsage:" << endl;
 			cout << "./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
 			cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
@@ -323,7 +326,6 @@ int main(int argc, char** argv) try
 		}
 		img_root = argv[2];
 		face_file = argv[3];
-
 	}
     else if (argc != 2)
     {
@@ -332,6 +334,25 @@ int main(int argc, char** argv) try
 				cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
         return 0;
     }
+	else
+	{
+		if (strcmp (argv[1], "--help") == 0)
+		{
+			cout << "\nAlign and crop bear faces in face.xml to produce bear chips and face_chips.xml." << endl;
+			cout << "\nUsage:" << endl;
+			cout << "\t./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
+			cout << "\nExample:" << endl;
+			cout << "\t./bearchip -root /home/bears/images faces.xml\n" << endl;
+			return 0;
+		}
+
+		face_file = argv[1];
+	}
+	if (!boost::filesystem::exists(face_file))
+	{
+		cout << "\nError opening file " << face_file << ": No such file or directory.\n" << endl;
+		return 0;
+	}
 
     // create XML content file
 	xml_add_headers (argc, argv);
@@ -408,7 +429,7 @@ int main(int argc, char** argv) try
           save_jpeg(faces[i], rel_pathed_chip_file, 95);
         }
     }
-	boost::filesystem::path xml_file (argv[1]);
+	boost::filesystem::path xml_file (face_file);
 	std::string chips_jpg_file, chips_xml_file;
 	if (xml_file.has_parent_path ()) 
 	{
