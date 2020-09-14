@@ -104,10 +104,10 @@ for i in train test; do
 done
 fi
 
-# generate sql to build svm,chips with uniq images  ----------------
+# generate sql to build uniq svm,chips ------------------------
 # i.e combine multiple faces of one image together
 # select e.col1, e.col2 from easdfdsf e
-if [ 1 == 1 ]; then
+if [ 1 == 0 ]; then
 gen_uniq_file="sql/gen_uniq_imgs.sql"
 rm -f $gen_uniq_file
 echo "generating $gen_uniq_file"
@@ -118,17 +118,19 @@ for i in test train; do
 	add_to_file $gen_uniq_file "drop table if exists t_${i}_svm_dups;"
 	add_to_file $gen_uniq_file "create table t_${i}_svm_dups (IMAGE TEXT, PREDICT TEXT, TRUTH_LABEL TEXT, MATCH TEXT, PREDICTS TEXT, MATCHES TEXT, DUP_COUNT INTEGER);"
 	add_to_file $gen_uniq_file "insert into t_${i}_svm_dups select *, group_concat (PREDICT, ' '), group_concat (MATCH, ' '), count(*) c from ${i}resize_svm group by IMAGE having c > 1;"
+	add_to_file $gen_uniq_file "drop table if exists t_${i}_svm_singles;"
 	add_to_file $gen_uniq_file "create table t_${i}_svm_singles as select *, count(*) c from ${i}resize_svm group by IMAGE having c == 1;"
+	add_to_file $gen_uniq_file "drop table if exists g_${i}_svm;"
 	add_to_file $gen_uniq_file "create table g_${i}_svm (IMAGE TEXT, PREDICT TEXT, TRUTH_LABEL TEXT, MATCH TEXT);"
 	add_to_file $gen_uniq_file "insert into g_${i}_svm select IMAGE, PREDICTS, TRUTH_LABEL, MATCHES from t_${i}_svm_dups;"
 	add_to_file $gen_uniq_file "insert into g_${i}_svm select IMAGE, PREDICT, TRUTH_LABEL, MATCH from t_${i}_svm_singles;"
 	add_to_file $gen_uniq_file "drop table t_${i}_svm_dups;"
 	add_to_file $gen_uniq_file "drop table t_${i}_svm_singles;"
-	add_to_file $gen_uniq_file ""
-	add_to_file $gen_uniq_file "drop table if exisst testresize_chips_orig;"
-	add_to_file $gen_uniq_file "alter table testresize_chips rename to testresize_chips_orig;"
-	add_to_file $gen_uniq_file 'create table testresize_chips as select * from testresize_chips_orig'
-	add_to_file $gen_uniq_file "where image like '%chip_0%';"
+	add_to_file $gen_uniq_file "drop table if exists ${i}resize_chips_orig;"
+	add_to_file $gen_uniq_file "alter table ${i}resize_chips rename to ${i}resize_chips_orig;"
+	# '*' surrounded by spaces expands to all files in dir.
+	add_to_file $gen_uniq_file "create table ${i}resize_chips as select ${i}resize_chips_orig.* from ${i}resize_chips_orig where image like '%chip_0%';"
+	# add_to_file $gen_uniq_file "where image like '%chip_0%';"
 
 done
 
@@ -136,7 +138,7 @@ fi
 
 # generate sql for final test,train tables --------------------------
 
-if [ 1 == 0 ]; then
+if [ 1 == 1 ]; then
 gen_db_file="sql/gen_db.sql"
 rm -f $gen_db_file
 touch $gen_db_file
@@ -146,27 +148,30 @@ for i in test train; do
 	add_to_file $gen_db_file "-- combine faceresize with chips to get:"
 	add_to_file $gen_db_file "-- IMAGE, LABEL, ORIG_IMAGE, SIZE_RESIZED, FACE_SIZE_RESIZED, "
 	add_to_file $gen_db_file "-- NOSE_X, NOSE_Y"
+	add_to_file $gen_db_file "DROP TABLE if exists t_${i}_faceresize_chips;"
 	add_to_file $gen_db_file "CREATE TABLE t_${i}_faceresize_chips AS "
 	add_to_file $gen_db_file "SELECT ${i}resize.IMAGE, ${i}resize.LABEL, ${i}resize.ORIG_IMAGE, ${i}resize.SIZE_RESIZED, face_size_resized, NOSE_X, NOSE_Y"
-	add_to_file $gen_db_file "FROM ${i}resize JOIN ${i}resize_chips"
+	add_to_file $gen_db_file "FROM ${i}resize LEFT JOIN ${i}resize_chips"
 	add_to_file $gen_db_file "ON ${i}resize.IMAGE = ${i}resize_chips.ORIG_IMAGE;"
 	# --- combine (faceresize & chips) with orig face
 	add_to_file $gen_db_file "-- combine (faceresize & chips) with orig face to get:"
 	add_to_file $gen_db_file "-- IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE, SIZE_RESIZED, "
 	add_to_file $gen_db_file "-- PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED"
+	add_to_file $gen_db_file "DROP TABLE if exists t_${i}_faces_chips;"
 	add_to_file $gen_db_file "CREATE TABLE t_${i}_faces_chips AS "
 	add_to_file $gen_db_file "SELECT t_${i}_faceresize_chips.IMAGE, t_${i}_faceresize_chips.LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, t_${i}_faceresize_chips.SIZE_RESIZED, ${i}.SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED"
-	add_to_file $gen_db_file "FROM t_${i}_faceresize_chips JOIN ${i}"
+	add_to_file $gen_db_file "FROM t_${i}_faceresize_chips LEFT JOIN ${i}"
 	add_to_file $gen_db_file "ON t_${i}_faceresize_chips.ORIG_IMAGE = ${i}.IMAGE;"
 	add_to_file $gen_db_file ""
 	# --- combine (face & faceresize & chips) with svm 
 	add_to_file $gen_db_file "-- combine (face & faceresize & chips) with svm to get:"
 	add_to_file $gen_db_file "-- IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE, SIZE_RESIZED, "
 	add_to_file $gen_db_file "-- PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED, LABEL_RESULT, MATCH"
+	add_to_file $gen_db_file "drop table if exists g_${i}_db;"
 	add_to_file $gen_db_file "create table g_${i}_db as"
-	add_to_file $gen_db_file "select IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE_RESIZED, SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED"
-	add_to_file $gen_db_file "g_${i}_svm.PREDICT g_${i}_svm.MATCH"
-	add_to_file $gen_db_file "from t_${i}_faces_chips join g_${i}_svm"
+	add_to_file $gen_db_file "select t_${i}_faces_chips.IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE_RESIZED, SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED,"
+	add_to_file $gen_db_file "g_${i}_svm.PREDICT, g_${i}_svm.MATCH"
+	add_to_file $gen_db_file "from t_${i}_faces_chips LEFT JOIN g_${i}_svm"
 	add_to_file $gen_db_file "on t_${i}_faces_chips.IMAGE = g_${i}_svm.IMAGE;"
 	add_to_file $gen_db_file ""
 	add_to_file $gen_db_file "-- drop  table t_${i}_faceresize_chips;"
