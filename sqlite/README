@@ -1,0 +1,67 @@
+To generate test_db and train_db:
+
+------------------------------------------------------------
+Generate xml's with bearID  :
+------------------------------------------------------------
+- testresize_faces.xml 
+% bearface --infer bearface.dat test_resize.xml
+- testresize_faces_chips.xml 
+% bearchip testresize_faces.xml
+- testresize_faces_chips_embeds.xml 
+% bearembed --infer bearembed.dat testresize_faces_chips.xml
+- testresize_faces_chips_embeds_svm.xml 
+% bearsvm --infer bearsvm.dat testresize_faces_chips_embeds.xml
+
+*** repeat for training set ***
+
+------------------------------------------------------------
+Generate csv with ~/tools/csv_fr_xml 
+------------------------------------------------------------
+generate files: 
+test.csv
+testresize_chips.csv
+testresize.csv
+testresize_svm.csv
+train.csv
+trainresize_chips.csv
+trainresize.csv
+trainresize_svm.csv
+
+./gen_csv.sh > gen_csv.out # uses csv_fr_xml
+
+------------------------------------------------------------
+import csv into sqlite
+------------------------------------------------------------
+% sqlite3 bearID ".read sql/import_csv.sql" ".tables"
+
+-- rebuild svm,chips with uniq images (i.e. merge results of multiple faces) 
+% sqlite3 bearID ".read sql/gen_uniq_imgs.sql"
+
+------------------------------------------------------------
+create tables
+------------------------------------------------------------
+% sqlite3 bearID ".read sql/gen_db.sql"
+
+------------------------------------------------------------
+export to csv
+------------------------------------------------------------
+sql> .headers on
+sql> .mode csv
+sql> .separator ';'
+sql> .once test_db.csv
+sql> select * from g_test_db;
+sql> .once train_db.csv
+sql> select * from g_ttraindb;
+
+------------------------------------------------------------
+import csv to google sheets
+------------------------------------------------------------
+create new  spreadsheet
+for each csv:
+  create new sheet
+  import file. upload.
+  select 'replace current sheet', 'custom delimiter' ';'. 
+  rename sheet
+
+
+
