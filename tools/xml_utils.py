@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import sys
+from lxml import etree as ET
 import xml.etree.cElementTree as ET
 import pdb
 import random
@@ -11,6 +12,7 @@ import os
 import datetime
 import requests
 import csv
+import sqlite3
 from xml.dom import minidom
 from copy import deepcopy
 from collections import namedtuple
@@ -36,32 +38,38 @@ g_stats_few = []
 g_stats_many = []
 g_argv = ''
 g_exec_name = 'bearID v0.1'
-g_box_vals = {'height', 'left', 'head_top', 'width'} 
-g_shape_parts_find = {'lear', 'leye', 'nose', 'rear', 'reye', 'head_top', 'htop', 'head_top'}
+g_box_attrs = {'height', 'left', 'top', 'width'} 
+g_shape_parts_head = {'htop', 'head_top', 'top'}
+g_shape_parts_face = {'lear', 'leye', 'nose', 'rear', 'reye'}
+g_shape_parts_find = {'lear', 'leye', 'nose', 'rear', 'reye', 'htop', 'head_top'}
 g_shape_parts = {'lear', 'leye', 'nose', 'rear', 'reye', 'head_top'}
-
-all_labels=[
+all_labels = []
+bc_labels=[
 	'bc_adeane', 'bc_also', 'bc_amber', 'bc_aurora', 'bc_beatrice', 'bc_bella',
-	'bc_bellanore', 'bc_bracket', 'bc_bruno', 'bc_caramel', 'bc_chestnut', 'bc_cleo',
-	'bc_clyde', 'bc_coco', 'bc_cross-paw', 'bc_dani-bear', 'bc_diablo', 'bc_fisher',
-	'bc_flora', 'bc_frank', 'bc_freckles', 'bc_freda', 'bc_freya', 'bc_gary', 'bc_gc',
-	'bc_glory', 'bc_hoeya', 'bc_jaque', 'bc_kiokh', 'bc_kwatse', 'bc_lenore', 'bc_lillian',
-	'bc_lil-willy', 'bc_lucky', 'bc_matsui', 'bc_millerd', 'bc_mouse', 'bc_neana',
-	'bc_no-tail', 'bc_old-girl', 'bc_oso', 'bc_peanut', 'bc_pete', 'bc_pirate',
-	'bc_pretty-boy', 'bc_river', 'bc_sallie', 'bc_santa', 'bc_shaniqua', 'bc_simoom',
-	'bc_stella', 'bc_steve', 'bc_teddy-blonde', 'bc_teddy-brown', 'bc_toffee', 'bc_topaz',
-	'bc_trouble', 'bc_tuna', 'bc_ursa', 'bf_032', 'bf_039', 'bf_045', 'bf_051', 'bf_068']
-all_labels += [
-	'bf_083', 'bf_089', 'bf_093', 'bf_094', 'bf_128', 'bf_130', 'bf_132', 'bf_151',
-	'bf_153', 'bf_171', 'bf_201', 'bf_218', 'bf_261', 'bf_263', 'bf_273', 'bf_274',
-	'bf_284', 'bf_289', 'bf_293', 'bf_294', 'bf_401', 'bf_402', 'bf_409', 'bf_410',
-	'bf_415', 'bf_425', 'bf_435', 'bf_451', 'bf_461', 'bf_469', 'bf_474', 'bf_477',
-	'bf_480', 'bf_482', 'bf_489', 'bf_500', 'bf_503', 'bf_504', 'bf_505', 'bf_510',
-	'bf_511', 'bf_600', 'bf_602', 'bf_603', 'bf_604', 'bf_610', 'bf_611', 'bf_613',
-	'bf_614', 'bf_615', 'bf_634', 'bf_700', 'bf_708', 'bf_717', 'bf_718',	 'bf_719',
-	'bf_720', 'bf_744', 'bf_747', 'bf_755', 'bf_775', 'bf_813', 'bf_814', 'bf_818',
-	'bf_854', 'bf_856', 'bf_868', 'bf_879'
+	'bc_bellanore', 'bc_bracket', 'bc_bruno', 'bc_caramel', 'bc_chestnut', 
+	'bc_cleo', 'bc_clyde', 'bc_coco', 'bc_cross-paw', 'bc_dani-bear', 
+	'bc_diablo', 'bc_fisher', 'bc_flora', 'bc_frank', 'bc_freckles', 'bc_freda', 
+	'bc_freya', 'bc_gary', 'bc_gc', 'bc_glory', 'bc_hoeya', 'bc_jaque', 
+	'bc_kiokh', 'bc_kwatse', 'bc_lenore', 'bc_lillian', 'bc_lil-willy', 
+	'bc_lucky', 'bc_matsui', 'bc_millerd', 'bc_mouse', 'bc_neana', 'bc_no-tail', 
+	'bc_old-girl', 'bc_oso', 'bc_peanut', 'bc_pete', 'bc_pirate', 
+	'bc_pretty-boy', 'bc_river', 'bc_sallie', 'bc_santa', 'bc_shaniqua', 
+	'bc_simoom', 'bc_stella', 'bc_steve', 'bc_teddy-blonde', 'bc_teddy-brown', 
+	'bc_toffee', 'bc_topaz', 'bc_trouble', 'bc_tuna', 'bc_ursa']
+bf_labels = [
+	'bf_032', 'bf_039', 'bf_045', 'bf_051', 'bf_068', 'bf_083', 'bf_089', 
+	'bf_093', 'bf_094', 'bf_128', 'bf_130', 'bf_132', 'bf_151', 'bf_153', 
+	'bf_171', 'bf_201', 'bf_218', 'bf_261', 'bf_263', 'bf_273', 'bf_274', 
+	'bf_284', 'bf_289', 'bf_293', 'bf_294', 'bf_401', 'bf_402', 'bf_409', 
+	'bf_410', 'bf_415', 'bf_425', 'bf_435', 'bf_451', 'bf_461', 'bf_469', 
+	'bf_474', 'bf_477', 'bf_480', 'bf_482', 'bf_489', 'bf_500', 'bf_503', 
+	'bf_504', 'bf_505', 'bf_510', 'bf_511', 'bf_600', 'bf_602', 'bf_603', 
+	'bf_604', 'bf_610', 'bf_611', 'bf_613', 'bf_614', 'bf_615', 'bf_634', 
+	'bf_700', 'bf_708', 'bf_717', 'bf_718',	'bf_719', 'bf_720', 'bf_744', 
+	'bf_747', 'bf_755', 'bf_775', 'bf_813', 'bf_814', 'bf_818', 'bf_854', 
+	'bf_856', 'bf_868', 'bf_879'
 	]
+all_labels = bc_labels + bf_labels
 coco_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 
 	21, 22, 23, 24, 25, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 
 	43, 44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 
@@ -229,7 +237,21 @@ def get_downscale_ratio (imgfile, max_long, max_short) :
 			ratio = max_long / h
 		else :
 			ratio = max_short / w
-	return ratio
+	return math.sqrt (ratio)
+
+##------------------------------------------------------------
+##  read in image and determine ratio to scale to max area.
+##  return ratio 
+##------------------------------------------------------------
+def get_downscale_ratio (imgfile, max_area) :
+	img = Image.open (imgfile)
+	w, h = img.size
+	img_size = w * h
+	ratio = max_area / img_size
+	# print ('orig size: ', img_size, ' ratio: ', ratio)
+	if ratio > 1 :
+		ratio = 1
+	return math.sqrt (ratio)
 
 ##------------------------------------------------------------
 ##  
@@ -342,9 +364,9 @@ def get_min_img_face_size (image_tag) :
 ##    modifies: box (height, width, top, left), box.part (x, y)
 ##------------------------------------------------------------
 def scale_box (box, pxRatio) :
-	for attrib in ('height', 'width', 'head_top', 'left') :
+	found_head = False
+	for attrib in g_box_attrs:
 		val = box.attrib.get (attrib)
-		# print ('attrib: ', attrib, ' val: ', val)
 		if val != None :
 			val = int (val)
 			box.set (attrib, str (int (val * pxRatio)))
@@ -452,29 +474,29 @@ def resize_face_file (orig_file, max_x=1500, max_y=2000, min_face_size=180) :
 #	  - write image to parallel directory
 #	  - write out xml with new info
 ##------------------------------------------------------------
-def downscale_face_file (orig_file, max_x=1500, max_y=2000) :
+def downscale_face_file (orig_file, max_size, path_replace) :
 
 	root, tree = load_file (orig_file)
-	print ('\n... downscaling : ', orig_file, '\n')
+	ET.SubElement (root, 'command').text = get_argv ()
+	print ('\n... downscaling : ', orig_file, ' to ', max_size, '\n')
 	for image_tag in root.findall ('./images/image'):
 		# get file and downscale
 		imgfile = image_tag.attrib.get ('file')
-		scaled_image, ratio  = downscale_image (imgfile, max_x, max_y)
-		new_imgfile = imgfile.replace ('imageSource', 'imageSourceSmall')
+		ratio = get_downscale_ratio (imgfile, max_size)
+		downscaled_image = downscale_image_and_boxes (imgfile, image_tag, ratio)
+		if path_replace[0] == '' :
+			new_imgfile = './' + imgfile
+		else :
+			new_imgfile = imgfile.replace (path_replace[0], path_replace[1])
 		new_imgfile_dir = os.path.dirname (new_imgfile)
 		if not os.path.isdir (new_imgfile_dir) :
 			os.makedirs (new_imgfile_dir)
-		# imgbase, imgext = os.path.splitext (os.path.basename (imgfile)) #-test
-		# new_imgfile = imgbase + '_small' + imgext #-test
-		# print ('\t... writing new image to: ', new_imgfile, '\n')
-		scaled_image.save (new_imgfile)
+		print ('\t... writing new image to: ', new_imgfile, '\n')
+		downscaled_image.save (new_imgfile)
 		image_tag.set ('file', new_imgfile) # fix xml image_tag
-		for box_tag in image_tag.findall ('box') :
-			# fix xml box_tag using ratio
-			scale_box (box_tag, ratio)
-			# pdb.set_trace ()
+
 	filebase, fileext = os.path.splitext (orig_file)
-	new_file = filebase + '_small' + fileext
+	new_file = filebase + '_tiny' + fileext
 	print("\n\t... writing new face xml : ", new_file, "\n\n")
 	indent (root)
 	# pdb.set_trace ()
@@ -523,27 +545,32 @@ def load_objs (root, d_objs, filetype) :
 			objects.append (facefile)
 	elif filetype == 'faces' :
 		# pdb.set_trace ()
+		multi_faces = defaultdict(lambda:0)
 		for image in root.findall ('./images/image'):
 			box = image.findall ('box')
 			facefile = image.attrib.get ('file')
+			multi_faces[len(box)] += 1
 			if len (box) == 0 :
 				g_stats_few.append (facefile)
 				continue
 			if len (box) > 1 :
 				g_stats_many.append (facefile)
-				print("too many boxes (faces) : ", len (box), " in file ", facefile)
+				print (len (box), " boxes (faces) in file ", facefile)
 				continue
 			label_list = box[0].findall ('label')
 			label = label_list[0].text
 			objects.append (facefile)
 			d_objs[label].append(image)
+		print ('\n    face count:')
+		for key,val in multi_faces.items():
+			print ('\t',key, ':', val)
 	elif filetype == 'pairs' :
 		matched = 0
 		unmatched = 1
 		matched_cnt = 0
 		unmatched_cnt = 0
 		# pdb.set_trace ()
-		for pair in root.findall ('./chips/pair_matched'):
+		for pair in root.findall ('./pairs/pair_matched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
 				print('error: expecting only 2 chips in pair, got: ', labels)
@@ -553,7 +580,7 @@ def load_objs (root, d_objs, filetype) :
 			matched_cnt += 1
 			d_objs[matched].append(labels[0])
 		objects.append (d_objs[matched])
-		for pair in root.findall ('./chips/pair_unmatched'):
+		for pair in root.findall ('./pairs/pair_unmatched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
 				print('error: expecting only 2 chips in pair, got: ', labels)
@@ -571,7 +598,7 @@ def load_objs (root, d_objs, filetype) :
 			embed_float = str_to_float (embed_val.text)
 			d_objs[label.text].append(embed_float)
 	else :
-		print('Error: unknown filetype.  Expected one of "faces" or "chips" or "pairs.')
+		print('Error: unknown filetype.  Expected one of "faces" or "chips" or "pairs".')
 	return objects
 
 
@@ -892,7 +919,7 @@ def create_new_tree_w_element (filetype="chips") :
 	ET.SubElement (r, 'date').text = filetype + ' file generated at ' + curtime
 	ET.SubElement (r, 'command').text = get_argv ()
 	ET.SubElement (r, 'filetype').text = get_filetype ()
-	if filetype == "faces" :
+	if filetype in ['faces', 'images'] :
 		elem_name = "images"
 	else :
 		elem_name = filetype
@@ -959,14 +986,19 @@ def generate_xml_file_list (inputfiles):
 ##------------------------------------------------------------
 ##   return flattened list of all image files (jpg, jpeg, png)
 ##------------------------------------------------------------
-def generate_img_file_list (inputfiles):
-	# pdb.set_trace ()
+def get_dirs_images (inputdirs):
 	imgs = []
-	for i in inputfiles :
-		jpgs = list (Path(i).rglob ("*.[jJ][pP][gG]"))
-		png = list (Path(i).rglob ("*.[pP][nN][gG]"))
+	print ('getting images for : ', inputdirs)
+	for inputdir in inputdirs :
+		jpgs = list (Path(inputdir).rglob ("*.[jJ][pP][gG]"))
+		jpegs = list (Path(inputdir).rglob ("*.[jJ][pP][eE][gG]"))
+		png = list (Path(inputdir).rglob ("*.[pP][nN][gG]"))
 		imgs.extend (jpgs)
+		imgs.extend (jpegs)
 		imgs.extend (png)
+		# print ('\t jpgs: ', jpgs)
+		# print ('\t jpegs: ', jpegs)
+		# print ('\t png: ', png)
 	return imgs
 
 ##------------------------------------------------------------
@@ -1202,6 +1234,7 @@ def gen_all_matched_obj_pairs  (chips_d):
 				matched_pairs.append (pairs)
 		# pdb.set_trace ()
 		matched_lists.append (matched_pairs)
+	# pdb.set_trace ()
 	return matched_lists
 
 ##------------------------------------------------------------
@@ -1259,6 +1292,7 @@ def generate_chip_pairs (input_files, matched_cnt, unmatched_cnt, triplets, outp
 		pair = ET.SubElement (chips, elem_name)
 		pair.append (matched_chips[i])
 		pair.append (matched_chips[i+1])
+		# pdb.set_trace ()
 	elem_name = "pair_unmatched"
 	for i in range (0, len (unmatched_chips), 2) :
 		# create new matched pair element, then put 2 chips under it
@@ -1508,13 +1542,13 @@ def print_pairs_stats (objs_d) :
 	unmatched = 1
 	matched_list = objs_d[matched]
 	unmatched_list = objs_d[unmatched]
+	# pdb.set_trace ()
 
 	# get unique list of entries, then show count
 	matched_labels = [label.text for label in matched_list]
 	unmatched_labels = [(label[0].text, label[1].text) for label in unmatched_list]
 
 	flatten_unmatched = [label for tupl in unmatched_labels for label in tupl]
-	# pdb.set_trace ()
 	print('------------------------')
 	print('--- matched stats:--- ')
 	print('------------------------')
@@ -1582,6 +1616,7 @@ def print_imgs_stats (img_files) :
 def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, write_stats=False):
 	objs_d = defaultdict(list)
 	objfiles = load_objs_from_files (filenames, objs_d, filetype)
+	# pdb.set_trace ()
 	if filetype == "images" :
 		print_imgs_stats (objfiles)
 		return
@@ -1589,7 +1624,6 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 		print_pairs_stats (objs_d)
 		return
 	print('')
-	# pdb.set_trace ()
 	all_objs = sorted(objs_d.items())
 	img_cnt_per_label = [len (objs) for key, objs in all_objs]
 	obj_count = sum (img_cnt_per_label)
@@ -1658,6 +1692,243 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 			print('\t', objfile)
 
 ##------------------------------------------------------------
+##------------------------------------------------------------
+##------------------------------------------------------------
+def is_png (image_file) :
+	imgfile_base, imgfile_ext = os.path.splitext (image_file)
+	if imgfile_ext.lower() == '.png' :
+		return True
+	else :
+		return False
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_YMD_from_date (image_date) :
+	# pdb.set_trace ()
+	if image_date is None:
+		return 0, 0, 0
+	image_year = image_date[:4]
+	image_month = image_date[5:7]
+	image_day = image_date[8:10]
+	return image_year, image_month, image_day
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_image_creation_date (image_file):
+	# pdb.set_trace ()
+	if is_png (image_file) :
+		return ''
+	print ('image: ', image_file)
+	img = Image.open (image_file)
+	exif_data = img._getexif ()
+	if exif_data != None :
+		date = exif_data.get (36867)
+		return date
+	else :
+		return ''
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_photo_source (image_file):
+	label_path = os.path.dirname (image_file)
+	source_path = os.path.dirname (label_path)
+	source_split = os.path.split (source_path)
+	return source_split [1]
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_image_size (image_file):
+	img = Image.open (image_file)
+	w,h = img.size
+	return w * h
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_orig_img_by_name (image_file, cur_str, orig_str):
+	str_index = image_file.find (cur_str)
+	if str_index > 0 :
+		orig_image_file = image_file.replace (cur_str, orig_str)
+		if not os.path.exists (orig_image_file) :
+			print ('   Warning: orig image ', orig_image_file, 'does not exist')
+		return orig_image_file
+	return ''
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def trim_path_start (pathname, dir_depth) :
+	path = pathname
+	for i in range (dir_depth) :
+		path = os.path.dirname (path)
+	# pdb.set_trace ()
+	path += '/'
+	rel_pathname = pathname.replace (path, '')
+	return rel_pathname
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_nose_xy (chip_tag):
+	for part in chip_tag.findall ('part'):
+		name = part.attrib.get ('name')
+		if name == "nose" :
+			nose_x = int (part.attrib.get ('x'))
+			nose_y = int (part.attrib.get ('y'))
+			return nose_x, nose_y
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_face_size (image_tag):
+	# pdb.set_trace ()
+	box = image_tag.find ('box')
+	if box is None:
+		return 0
+	height = box.attrib.get ('height')
+	width = box.attrib.get ('width')
+	if height and width :
+		face_size = int (height) * int (width)
+	else:
+		face_size = 0
+	return face_size
+
+##------------------------------------------------------------
+##  return string with content:
+##    	file, label, date, size, photo_source,
+##		nose_xy, nose_source_file, orig_image, permission?, age
+##------------------------------------------------------------
+def gen_image_csv_str (image_tag):
+	# pdb.set_trace () 
+	image_label = get_obj_label_text (image_tag)
+	image_file = image_tag.attrib.get ('file')
+	image_date = get_image_creation_date (image_file)
+	image_year, image_month, image_day = get_YMD_from_date (image_date)
+	photo_source = get_photo_source (image_file)
+	image_size = get_image_size (image_file)
+	face_size = get_face_size (image_tag)
+	if get_verbosity () > 1 :
+		print ('file   : ', image_file)
+		print ('label  : ', image_label)
+		print ('date   : ', image_date)
+		print ('source : ', photo_source)
+		print ('size   : ', image_size)
+		print('-----------------------------')
+	csv_str = trim_path_start (image_file, 5)
+	csv_str += ';' + image_label
+	csv_str += ';' + str (image_date)
+	csv_str += ';' + str (image_year)
+	csv_str += ';' + str (image_month)
+	csv_str += ';' + str (image_day)
+	csv_str += ';' + str (image_size)
+	csv_str += ';' + trim_path_start (photo_source, 5)
+	csv_str += ';' + str (face_size)
+	return csv_str
+
+##------------------------------------------------------------
+##  return string with content:
+##    	file, label
+##------------------------------------------------------------
+def gen_svm_csv_str (image_tag):
+	# pdb.set_trace () 
+	image_label = get_obj_label_text (image_tag)
+	image_file = image_tag.attrib.get ('file')
+	truth_label = get_truth_label (image_file)
+	if truth_label == image_label :
+		match = '1'
+	else :
+		match = '0'
+	if get_verbosity () > 1 :
+		print ('file   : ', image_file)
+		print ('label  : ', image_label)
+		print('-----------------------------')
+	csv_str = trim_path_start (image_file, 5)
+	csv_str += ';' + image_label
+	csv_str += ';' + truth_label
+	csv_str += ';' + match
+	return csv_str
+
+##------------------------------------------------------------
+##  return string with content:
+##    	file, label, size,
+##		nose_xy, orig_image
+##------------------------------------------------------------
+def gen_chip_csv_str (chip_tag):
+	image_file = chip_tag.attrib.get ('file')
+	image_label = get_obj_label_text (chip_tag)
+	image_size = get_image_size (image_file)
+	orig_file = get_chip_source (chip_tag)
+	nose_x, nose_y = get_nose_xy (chip_tag)
+	if get_verbosity () > 1 :
+		print ('file      : ', image_file)
+		print ('label     : ', image_label)
+		print ('size      : ', image_size)
+		print ('orig_file : ', orig_file)
+		print ('nose_xy   : ', nose_x, nose_y)
+		print('-----------------------------')
+	csv_str = trim_path_start (image_file, 5)
+	csv_str += ';' + image_label
+	csv_str += ';' + str (image_size)
+	csv_str += ';' + trim_path_start (orig_file, 5)
+	csv_str += ';' + str (nose_x) + ' ' + str (nose_y)
+	csv_str += ';' + str (nose_x)
+	csv_str += ';' + str (nose_y)
+	return csv_str
+
+##------------------------------------------------------------
+##  return string with content:
+##    	file, label, date, size
+##		nose_xy, nose_source_file, orig_image, permission?, age
+##------------------------------------------------------------
+def gen_derived_image_csv_str (image_tag):
+	image_label = get_obj_label_text (image_tag)
+	image_file = image_tag.attrib.get ('file')
+	image_size = get_image_size (image_file)
+	orig_image = get_orig_img_by_name (image_file, 'imageSourceSmall', 'imageSource')
+	permission = ''
+	face_size = get_face_size (image_tag)
+	age = ''
+	if get_verbosity () > 1 :
+		print ('file   : ', image_file)
+		print ('label  : ', image_label)
+		print ('size   : ', image_size)
+		print ('orig   : ', orig_image)
+		print('-----------------------------')
+	csv_str = trim_path_start (image_file, 5)
+	csv_str += ';' + image_label
+	csv_str += ';' + str (image_size)
+	csv_str += ';' + trim_path_start (orig_image, 5)
+	csv_str += ';' + str (face_size)
+	return csv_str
+
+##------------------------------------------------------------
+##  write csv file of image info containing:
+##    filename, label, date, location??, source (level above label)
+##------------------------------------------------------------
+def write_image_info_csv (filenames, outfile, filetype):
+	objs_d = defaultdict(list)
+	objtype = filetype
+	if objtype == 'derived_faces' or objtype == 'svm':
+		objtype = 'faces'
+	objfiles = load_objs_from_files (filenames, objs_d, objtype)
+
+	csv_fp = open (outfile, "w")
+
+	# images, derived_image: images/image
+	# chips: chips/chip
+	# pdb.set_trace ()
+	for label, tags in list(objs_d.items ()) :
+		for tag in tags:
+			# pdb.set_trace ()
+			if filetype == 'faces' :
+				image_csv = gen_image_csv_str (tag)
+			elif filetype == 'derived_faces' :
+				image_csv = gen_derived_image_csv_str (tag)
+			elif filetype == 'chips' :
+				image_csv = gen_chip_csv_str (tag)
+			elif filetype == 'svm' :
+				image_csv = gen_svm_csv_str (tag)
+			csv_fp.write (image_csv + '\n')
+	csv_fp.close ()
+	print("... generated file:", outfile)
+
+##------------------------------------------------------------
 ##
 ##------------------------------------------------------------
 
@@ -1702,12 +1973,42 @@ def get_xml_files (dir) :
 	return xml_files
 
 ##------------------------------------------------------------
+##  write list of images into output_file xml
+##------------------------------------------------------------
+def create_imgs_xml (img_list, output_file) :
+	img_files = get_img_files (img_list)
+	root, images_tag = create_new_tree_w_element ('images')
+	# pdb.set_trace ()
+	for img_file in img_files :
+		image_tag = ET.SubElement (images_tag, 'image')
+		image_tag.set ('file', str (img_file))
+	indent (root)
+	tree = ET.ElementTree (root)
+	tree.write (output_file)
+	print('\n\tGenerated images file: ', output_file)
+
+##------------------------------------------------------------
+##  return images files in (sub)directories
+##------------------------------------------------------------
+def get_img_files (filenames, abs_path=False) :
+	img_files = []
+	pathed_dirs = []
+	for filename in filenames :
+		if abs_path :
+			filename = os.path.abspath (filename)
+		if os.path.isdir (filename) :
+			img_files.extend (get_dirs_images ([filename]))
+		else :
+			img_files.append (filename)
+	return img_files
+
+##------------------------------------------------------------
 ##  get box 
 ##------------------------------------------------------------
 def get_box (image_tag) :
 	box_d = defaultdict ()
 	for box in image_tag.findall ('box') : # TODO : multiple??
-		for part in g_box_vals :
+		for part in g_box_attrs :
 			box_d[part] = box.attrib.get (part)
 	return box_d
 
@@ -1751,7 +2052,7 @@ def diff_image_tags (image1, image2) :
 	# print ('\ncomparing content for : ')
 	# print ('\t', filename1)
 	# print ('\t', filename2)
-	if not obj_equal (box_1, box_2, g_box_vals) :
+	if not obj_equal (box_1, box_2, g_box_attrs) :
 		return False
 	if not obj_equal (parts_1, parts_2, g_shape_parts) :
 		return False
@@ -1760,18 +2061,37 @@ def diff_image_tags (image1, image2) :
 ##------------------------------------------------------------
 ##  returns name of label.  assumes 1 box, 1 label. does no err checks 
 ##------------------------------------------------------------
-def get_image_label_text (image_tag) :
-	box_tag = image_tag.findall ('box')
-	label_list = box_tag[0].findall ('label')
-	label = label_list[0].text
+def get_obj_label_text (obj_tag) :
+	if obj_tag.tag == 'image' :
+		label_tag = obj_tag.find ('box/label')
+		# box_tag = obj_tag.find ('box')
+		# label_tag = box_tag.find ('label')
+	elif obj_tag.tag == 'chip' :
+		label_tag = obj_tag.find ('label')
+	return label_tag.text
+
+##------------------------------------------------------------
+##  returns golden label, parsed from directory path
+##------------------------------------------------------------
+def get_truth_label (filename) :
+	path = os.path.dirname (filename)
+	label = os.path.basename (path)
 	return label
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_chip_source (chip_tag) :
+	# pdb.set_trace ()
+	source_tag = chip_tag.find ('source')
+	source_file = source_tag.attrib.get ('file')
+	return source_file
 
 ##------------------------------------------------------------
 ##  get_new_face (face,faces_orig_d).  find matching file name
 ##------------------------------------------------------------
 def get_new_face (face, faces_new_d) :
 	imagefile_old = face.attrib.get ('file')
-	label_old = get_image_label_text (face)
+	label_old = get_obj_label_text (face)
 	pdb.set_trace ()
 	for label_new, faces in list(faces_new_d.items ()) :
 		if label_old != label_new :
@@ -2126,20 +2446,30 @@ def do_find_bears (img_files, out_file, min_score, model) :
 		labels = ['animal']
 	for i in range (len (ids)) :
 		object_classes_d[ids[i]] = classes[i]
-	out_fp = open (out_file, "w")
+	out_fp0 = open (out_file+'_0', "w")
+	out_fp1 = open (out_file+'_1', "w")
+	out_fpmulti = open (out_file+'_multi', "w")
 	expected_cnt = 1
 	for img_file in img_files :
 		bear_cnt = img_find_bears (img_file, min_score, labels)
 		# pdb.set_trace ()
 		# print ('counting bears for ', img_file)
 		# if bear_cnt > expected_cnt :
-		if bear_cnt > 0 :
-			out_fp.write (str (img_file))
-			out_fp.write ("\n")
-			print (bear_cnt, 'bears:', img_file)
-	print ('\n\tImages with more than', expected_cnt, 'bear(s) written to:', out_file)
+		if bear_cnt == 0 :
+			out_fp0.write (str (img_file))
+			out_fp0.write ("\n")
+		elif bear_cnt == 1 :
+			out_fp1.write (str (img_file))
+			out_fp1.write ("\n")
+		else :
+			out_fpmulti.write (str (img_file))
+			out_fpmulti.write ("\n")
+		print (bear_cnt, 'bears:', img_file)
+	print ('\n\tGenerated files: ', out_file, '_{0,1,multi}')
 	print ('\n')
-	out_fp.close ()
+	out_fp0.close ()
+	out_fp1.close ()
+	out_fpmulti.close ()
 
 ##------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
@@ -2185,6 +2515,66 @@ def extract_bc_embeddings (input_files) :
 	indent (t_root)
 	tree.write (t_name)
 	print ('wrote bc embeddings to ', t_name)
+
+##------------------------------------------------------------
+##  split bc bf objects
+##------------------------------------------------------------
+def split_objects_by_locales (input_files, obj_path='images/image', label_path='box/label') :
+	bc_objs = []
+	bf_objs = []
+	unknown_objs = []
+	xml_files = generate_xml_file_list (input_files)
+	print ('\nextracting faces from file: ')
+	for x_file in xml_files:
+		print("\t", x_file)
+		# pdb.set_trace()
+		root, tree = load_file (x_file)
+		# separate out bc & bf bears
+		for obj in root.findall (obj_path):
+			label = obj.find (label_path)
+			# pdb.set_trace ()
+			if label.text[:2] == 'bc' : # bc bear
+				bc_objs.append (obj)
+			elif label.text[:2] == 'bf' : # brooks bear
+				bf_objs.append (obj)
+			else :
+				unknown_objs.append (obj)
+	# write out bc bears
+	print ('\t... # bc bears: ', len (bc_objs))
+	print ('\t... # bf bears: ', len (bf_objs))
+	print ('\t... # unknown bears: ', len (unknown_objs))
+	# pdb.set_trace ()
+	# for locale in [] :
+	t_root, t_embeds = create_new_tree_w_element ("images")
+	for i in range (len (bc_objs)) :
+		embed = bc_objs[i]
+		t_embeds.append (embed)
+	tree = ET.ElementTree (t_root)
+	t_name = "bc1_faces.xml"
+	indent (t_root)
+	tree.write (t_name)
+	print ('wrote faces to ', t_name)
+
+	t_root, t_embeds = create_new_tree_w_element ("images")
+	for i in range (len (bc_objs)) :
+		embed = bc_objs[i]
+		t_embeds.append (embed)
+	tree = ET.ElementTree (t_root)
+	t_name = "bc_faces.xml"
+	indent (t_root)
+	tree.write (t_name)
+	print ('wrote faces to ', t_name)
+
+	t_root, t_embeds = create_new_tree_w_element ("images")
+	for i in range (len (bf_embeds)) :
+		embed = bf_embeds[i]
+		t_embeds.append (embed)
+	tree = ET.ElementTree (t_root)
+	t_name = "bf_faces.xml"
+	indent (t_root)
+	tree.write (t_name)
+	print ('wrote faces to ', t_name)
+
 
 ##------------------------------------------------------------
 ##   main code
