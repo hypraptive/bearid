@@ -2,6 +2,8 @@
 
 if [[ $# -ne 1 ]]; then
 	echo ""
+	echo "Look for images (jpg,jpeg,png), CR2 (raw) and mov files"
+	echo ""
 	echo "	Usage:"
 	echo "		$0 <dir>"
 	echo "	Example:"
@@ -36,52 +38,5 @@ if [ 1 == 1 ]; then
 fi
 
 exit
-
-
-if [ 1 == 0 ]; then
-cmd="grep $1 $2 | awk '{ print \$1 }' > $err_file"
-echo $cmd
-eval $cmd
-
-cmd="vi $err_file"
-echo $cmd
-eval $cmd
-# :call RmPath()
-
-cmd='grep -A 9 -f $err_file $3 > $4'
-echo $cmd
-eval $cmd
-
-cmd='vi $4'
-echo $cmd
-eval $cmd
-# == :call MakeXML()
-
-echo ""
-echo "	Generated $1 elements in $4 from source: $3"
-echo ""
-fi
-
-
-cmd="~/tools/xml_obj_stats.py -file faces $4 | grep \"total faces\" | awk {' print \$4 '}"
-# echo $cmd
-face_cnt=$(eval $cmd)
-# echo "	$4 has $face_cnt faces "
-
-cmd="wc -l < $err_file"
-# echo $cmd
-grep_cnt=$(eval $cmd)
-# echo "	grep has $grep_cnt faces"  
-echo ""
-
-if [ $face_cnt -ne $grep_cnt ]; then
-	echo ""
-	echo "	Warning: $1 count ($grep_cnt) and xml count ($face_cnt) do not match!"
-	echo ""
-else 
-	echo ""
-	echo "	Success! $1 count ($grep_cnt) and xml count ($face_cnt) matches!"
-	echo ""
-fi
 
 
