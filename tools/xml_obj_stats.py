@@ -5,6 +5,7 @@ import argparse
 import xml_utils as u
 import datetime
 import pdb
+from argparse import RawTextHelpFormatter
 from collections import defaultdict
 
 ##------------------------------------------------------------
@@ -12,12 +13,12 @@ from collections import defaultdict
 ##    xml_obj_stats -f *.xml dirs
 ##------------------------------------------------------------
 def main (argv) :
-	parser = argparse.ArgumentParser(description='\nPrint combined stats for all input files/directory.\n \t example: xml_obj_stats -l xxx_*_xml outputdir',
-		formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=50))
+	parser = argparse.ArgumentParser(description='\nPrint combined stats for all input files/directory.\n\texample: xml_obj_stats  xxx_*_xml outputdir',
+		formatter_class=RawTextHelpFormatter)
     # parser.formatter.max_help_position = 50
 	parser.add_argument ('files', nargs='+')
 	parser.add_argument ('-filetype', '--filetype', default="chips",
-		help='type of xml file: <imgs,chips,faces,pairs> .')
+		help='type of xml file: <images,chips,faces,pairs> .')
 	parser.add_argument ('-write', '--write', default="",
 		action="store_true",
 		help='write stats into file stats_*_<currentDate> .')
