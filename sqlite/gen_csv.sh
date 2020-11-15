@@ -1,12 +1,42 @@
 #! /bin/bash
 
+#---------------------------------------------------------------------------
+#  1. set run to echo to verify generated commands without executing
+#  2. enable validation of xml files
+#  3. ensure that extensions are correct
+#  4. set dataset values
+#
+#  -------------
+#  assumptions:
+#  -------------
+#   data_set : faceGold_train, faceGold_test
+#   faceGold_test.xml 
+#   faceGold_testresize.xml 
+#   faceGold_testresize_chips.xml 
+#   faceGold_testresize_svm.xml 
+#   faceGold_train.xml 
+#   faceGold_trainresize.xml 
+#   faceGold_trainresize_chips.xml 
+#   faceGold_trainresize_svm.xml 
+#
+#   chip file: ${base}resize_faces_chips.xml
+#   svm  file: ${base}resize_faces_chips_embeds_svm.xml
+#
+#  ex rename cmds  : rename -n 's/train_resize/trainresize/' *train_resize*.xml`
+#  ex rename cmds  : rename -n 's/chips_embeds_svm/svm/' *svm*xml
+#
+#   ??  how is xml_svm different from svm ??  
+#---------------------------------------------------------------------------
 conv=~/tools/csv_fr_xml.py
 run='echo'
 run=
-xml_gold=".xml"
+xml_gold=".xml"	# main ext
 xml_resize='resize.xml'
 xml_chips='resize_faces_chips.xml'
+xml_chips='resize_chips.xml'
 xml_svm='resize_faces_chips_embeds_svm.xml'
+xml_svm='resize_chips_embeds_svm.xml'
+xml_svm='resize_svm.xml'
 
 csv_gold=".csv"
 csv_resize='resize.csv'
@@ -18,18 +48,32 @@ resize='resize'
 chips='resize_chips'
 svm='resize_svm'
 
+dataset='test train'
+dataset='faceGold_test faceGold_train'
 
+#-----------------------------
 # check existence of xml file 
-if [ 1 == 0 ]; then
-for i in test train; do
+#-----------------------------
+if [ 1 == 1 ]; then
+for i in $dataset ; do
 	for j in "" $resize $chips $svm; do
 		xml=${i}${j}.xml
-		echo "checking for $xml ... "
+		echo -n "checking for $xml ... "
 		if [ ! -f $xml ]; then
+			echo "Failed."
 			echo "   Unable to locate $xml" 
+		else
+			echo "OK."
 		fi
 	done
 done
+fi
+
+if [ ! -d sql ]; then
+	mkdir sql
+fi
+if [ ! -d csv ]; then
+	mkdir csv
 fi
 
 prepend_file () {
@@ -50,35 +94,54 @@ db_label="IMAGE;LABEL;NOSE_X;NOSE_Y;DATE;SIZE_RESIZED;SIZE_ORIG;PHOTO_SOURCE"
 # test_resize_svm.csv
 svm_label="IMAGE;PREDICT;TRUTH_LABEL;MATCH"
 
+#----------------------------------------------------------------------
 # create csv from xml content, add headers  --------------------
-if [ 1 == 0 ]; then
-for i in test train; do
+#----------------------------------------------------------------------
+if [ 1 == 1 ]; then
+echo ""
+echo "--------------------------------------------------"
+echo "... Creating csv from xml content and add headers"
+echo "--------------------------------------------------"
+for i in $dataset; do
 <<COMMENT
 COMMENT
 	#------- {test,train}.xml -> {test,train}.csv
 	csv_file=csv/${i}${gold}.csv 
-	xml_file=xml/${i}${xml_gold} 
-	ls $xml_file
+	xml_file=${i}${xml_gold} 
+    dependendies='$csv_file $xml_file'
+	echo "... $conv -file faces -out ${csv_file} $xml_file > ${csv_file}.out"
 	$run $conv -file faces -out ${csv_file} $xml_file > ${csv_file}.out
-	prepend_file $csv_file $gold_label
+	$run prepend_file $csv_file $gold_label
 	#------- {test,train}resize.xml -> {test,train}resize.csv
 	csv_file=csv/${i}${resize}.csv 
-	xml_file=xml/${i}${xml_resize} 
-	ls $xml_file
+	xml_file=${i}${xml_resize} 
+	if [ ! -f $xml_file ]; then
+		echo "Error: file $xml_file missing."
+		exit
+	fi
+	echo "... $conv -file derived_faces -out ${csv_file} $xml_file > ${csv_file}.out"
 	$run $conv -file derived_faces -out ${csv_file} $xml_file > ${csv_file}.out
-	prepend_file $csv_file $resize_label
+	$run prepend_file $csv_file $resize_label
 	#------- {test,train}resize_chips.xml -> {test,train}resize_chips.csv
 	csv_file=csv/${i}${chips}.csv
-	xml_file=xml/${i}${xml_chips} 
-	ls $xml_file
+	xml_file=${i}${xml_chips} 
+	if [ ! -f $xml_file ]; then
+		echo "Error: file $xml_file missing."
+		exit
+	fi
+	echo "... $conv -file chips -out ${csv_file} $xml_file > ${csv_file}.out"
 	$run $conv -file chips -out ${csv_file} $xml_file > ${csv_file}.out
-	prepend_file $csv_file $chips_label
+	$run prepend_file $csv_file $chips_label
 	#------- {test,train}resize_svm.xml ->  {test,train}resize_svm.csv
 	csv_file=csv/${i}${svm}.csv 
-	xml_file=xml/${i}${xml_svm} 
-	ls $xml_file
+	xml_file=${i}${xml_svm} 
+	if [ ! -f $xml_file ]; then
+		echo "Error: file $xml_file missing."
+		exit
+	fi
+	echo "... $conv -file svm -out ${csv_file} $xml_file > ${csv_file}.out"
 	$run $conv -file svm -out ${csv_file} $xml_file > ${csv_file}.out
-	prepend_file $csv_file $svm_label
+	$run prepend_file $csv_file $svm_label
 <<COMMENT
 COMMENT
 done
@@ -89,31 +152,43 @@ add_to_file () {
 	# echo $2
 }
 
+#----------------------------------------------------------------------
 # generate import table commands ----------------
-if [ 1 == 0 ]; then
+#----------------------------------------------------------------------
+if [ 1 == 1 ]; then
+echo ""
+echo "-----------------------------------------------"
+echo "...Generating import table commands" 
+echo "-----------------------------------------------"
 import_file='sql/import_csv.sql'
-touch $import_file
+$run touch $import_file
 	# echo $1 > sql/import_csv.sql
-add_to_file $import_file '.mode csv'
-add_to_file $import_file ".separator ';'"
-for i in train test; do
+$run add_to_file $import_file '.mode csv'
+$run add_to_file $import_file ".separator ';'"
+for i in $dataset; do
 	for j in "" $resize $chips $svm; do
-		add_to_file $import_file "drop table if exists ${i}${j};"
-		add_to_file $import_file ".import csv/${i}${j}.csv ${i}${j}"
+		echo "... add_to_file $import_file \"drop table if exists ${i}${j};\""
+		$run add_to_file $import_file "drop table if exists ${i}${j};"
+		echo "... add_to_file $import_file \".import csv/${i}${j}.csv ${i}${j}\""
+		$run add_to_file $import_file ".import csv/${i}${j}.csv ${i}${j}"
 	done
 done
+echo ""
 fi
 
+#----------------------------------------------------------------------
 # generate sql to build uniq svm,chips ------------------------
 # i.e combine multiple faces of one image together
 # select e.col1, e.col2 from easdfdsf e
-if [ 1 == 0 ]; then
+#----------------------------------------------------------------------
+if [ 1 == 1 ]; then
+echo "...Generating sql commands to build uniq svm and chips"
 gen_uniq_file="sql/gen_uniq_imgs.sql"
 rm -f $gen_uniq_file
-echo "generating $gen_uniq_file"
+echo "...Generating $gen_uniq_file"
 touch $gen_uniq_file
 add_to_file $gen_uniq_file "-- This file is generated, any modifications will be overwritten"
-for i in test train; do 
+for i in $dataset; do 
 	add_to_file $gen_uniq_file "-- create table of combined duplicates"
 	add_to_file $gen_uniq_file "drop table if exists t_${i}_svm_dups;"
 	add_to_file $gen_uniq_file "create table t_${i}_svm_dups (IMAGE TEXT, PREDICT TEXT, TRUTH_LABEL TEXT, MATCH TEXT, PREDICTS TEXT, MATCHES TEXT, DUP_COUNT INTEGER);"
@@ -136,14 +211,16 @@ done
 
 fi
 
+#----------------------------------------------------------------------
 # generate sql for final test,train tables --------------------------
-
+#----------------------------------------------------------------------
 if [ 1 == 1 ]; then
+echo "Generating sql commands to build final test,train tables"
 gen_db_file="sql/gen_db.sql"
 rm -f $gen_db_file
 touch $gen_db_file
 add_to_file $gen_db_file "-- This file is generated, any modifications will be overwritten\n"
-for i in test train; do 
+for i in $dataset; do 
 	# --- combine faceresize with chips
 	add_to_file $gen_db_file "-- combine faceresize with chips to get:"
 	add_to_file $gen_db_file "-- IMAGE, LABEL, ORIG_IMAGE, SIZE_RESIZED, FACE_SIZE_RESIZED, "
