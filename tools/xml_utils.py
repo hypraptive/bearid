@@ -1702,19 +1702,22 @@ def is_png (image_file) :
 		return False
 
 ##------------------------------------------------------------
+#  get_YMDT_from_date - returns year, month, day and time from string
+#     like: "2014:10:13 13:57:50"
 ##------------------------------------------------------------
-def get_YMD_from_date (image_date) :
+def get_YMDT_from_date (image_datetime) :
 	# pdb.set_trace ()
-	if image_date is None:
-		return 0, 0, 0
-	image_year = image_date[:4]
-	image_month = image_date[5:7]
-	image_day = image_date[8:10]
-	return image_year, image_month, image_day
+	if image_datetime is None:
+		return 0, 0, 0, 0
+	image_year = image_datetime[:4]
+	image_month = image_datetime[5:7]
+	image_day = image_datetime[8:10]
+	image_time = image_datetime[11:13] + image_datetime[14:16] + image_datetime[17:19]
+	return image_year, image_month, image_day, image_time
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
-def get_image_creation_date (image_file):
+def get_image_creation_datetime (image_file):
 	# pdb.set_trace ()
 	if is_png (image_file) :
 		return ''
@@ -1798,15 +1801,16 @@ def gen_image_csv_str (image_tag):
 	# pdb.set_trace () 
 	image_label = get_obj_label_text (image_tag)
 	image_file = image_tag.attrib.get ('file')
-	image_date = get_image_creation_date (image_file)
-	image_year, image_month, image_day = get_YMD_from_date (image_date)
+	image_datetime = get_image_creation_datetime (image_file)
+	image_year, image_month, image_day, image_time = get_YMDT_from_date (image_datetime)
 	photo_source = get_photo_source (image_file)
 	image_size = get_image_size (image_file)
 	face_size = get_face_size (image_tag)
+	image_date = image_year + image_month + image_day
 	if get_verbosity () > 1 :
 		print ('file   : ', image_file)
 		print ('label  : ', image_label)
-		print ('date   : ', image_date)
+		print ('date   : ', image_datetime)
 		print ('source : ', photo_source)
 		print ('size   : ', image_size)
 		print('-----------------------------')
@@ -1816,6 +1820,7 @@ def gen_image_csv_str (image_tag):
 	csv_str += ';' + str (image_year)
 	csv_str += ';' + str (image_month)
 	csv_str += ';' + str (image_day)
+	csv_str += ';' + str (image_time)
 	csv_str += ';' + str (image_size)
 	csv_str += ';' + trim_path_start (photo_source, 5)
 	csv_str += ';' + str (face_size)
@@ -1929,10 +1934,40 @@ def write_image_info_csv (filenames, outfile, filetype):
 	print("... generated file:", outfile)
 
 ##------------------------------------------------------------
+## write html of images grouped by bear, grouped by date, 
+##	 color coded for train vs test
+##   expects 4 columns: image, label, date, dataset
 ##
+# breaks between dates and bears:
+#    <hr style="width:50%">beatrice 2020<br>
+# resulting string for each image:
+# <img src="/home/data/bears/imageSource/britishColumbia/melanie_20170828/bc_beatrice/IMG_5056.JPG"
+#    width"200" height="300" style="border:5px solid green;" alt="beatrice" >
 ##------------------------------------------------------------
-
-
+def html_same_date_from_csv (csv_file, html_outfile, delim=';') :
+	with open (csv_file) as csv_file:
+		csv_reader = csv.reader (csv_file, delimiter=delim)
+		##   expects 4 columns: image, label, date, dataset
+		# TODO: open file for writing
+		html_fp = open (html_outfile, "w")
+		label = ''
+		date = ''
+		for row in csv_reader:
+			# pdb.set_trace ()
+			new_label = row[1]
+			new_date = row[2]
+			border_color = 'green' if row[3] == 'train' else 'red'
+			if new_label != label or new_date != date :
+				label = new_label
+				date = new_date
+				html_fp.write ('<hr style="width:50%">' + new_label + ' ' + new_date + ' <br>\n')
+			img_tag = '<img src="/home/data/bears/' + row[0] + '" '
+			img_tag += 'style="border:5px solid ' + border_color + '; max-width:250px; max-height:250px;" alt="' + label + '" >\n'
+			html_fp.write (img_tag)
+		html_fp.close ()
+		print ("... wrote html to file: ", html_outfile)
+	
+		
 ##------------------------------------------------------------
 ##
 ##------------------------------------------------------------
@@ -2047,8 +2082,8 @@ def diff_image_tags (image1, image2) :
 	parts_1 = get_shape_parts (image1)
 	box_2 = get_box (image2)
 	parts_2 = get_shape_parts (image2)
-	filename1 = image_tag_file (image1)
-	filename2 = image_tag_file (image2)
+	filename1 = obj_get_filename (image1)
+	filename2 = obj_get_filename (image2)
 	# print ('\ncomparing content for : ')
 	# print ('\t', filename1)
 	# print ('\t', filename2)
@@ -2144,10 +2179,10 @@ def get_matching_image (image_file, images_d) :
 	return None
 
 ##------------------------------------------------------------
-##  return file for image tag
+##  return file for xml tag
 ##------------------------------------------------------------
-def image_tag_file (image_tag) :
-	filename = image_tag.attrib.get ('file')
+def obj_get_filename (xml_tag) :
+	filename = xml_tag.attrib.get ('file')
 	return filename
 
 ##------------------------------------------------------------
@@ -2158,7 +2193,7 @@ def remove_image_tag (image_file, images_d) :
 		# ignores label, which is only accurate during testing
 		# look for file name
 		for i in range (len (image_tags)) :
-			image_file_2 = image_tag_file (image_tags[i])
+			image_file_2 = obj_get_filename (image_tags[i])
 			if image_file == image_file_2 :
 				del image_tags[i]
 				return True
@@ -2181,7 +2216,7 @@ def diff_face_files (xml1, xml2) :
 	for label, images1 in list(images1_d.items ()) :  ## iterate through all images
 		for image1 in images1 :
 			# pdb.set_trace ()
-			image_filename = image_tag_file (image1)
+			image_filename = obj_get_filename (image1)
 			image2 = get_matching_image (image_filename, images2_d)
 			if image2 is None :
 				print ("no image match for ", image_filename)
@@ -2199,21 +2234,77 @@ def diff_face_files (xml1, xml2) :
 		for image2 in images2 :
 			images_two_only.append (image2)
 
-	write_xml_file ("images_two_only.xml", images_two_only, filetype)
-	write_xml_file ("images_one_only.xml", images_one_only, filetype)
-	write_xml_file ("images_mismatch.xml", images_mismatch, filetype)
+	one_only_filename = 'images_one_only.xml'
+	two_only_filename = 'images_two_only.xml'
+	mismatch_filename = 'images_mismatch.xml'
+
+	write_xml_file (one_only_filename, images_one_only, filetype)
+	write_xml_file (two_only_filename, images_two_only, filetype)
+	write_xml_file (mismatch_filename, images_mismatch, filetype)
 	print ("writing files:")
-	print ("\timages_mismatch.xml")
-	print ("\timages_one_only.xml")
-	print ("\timages_two_only.xml")
+	print ("\t", one_only_filename)
+	print ("\t", two_only_filename)
+	print ("\t", mismatch_filename)
 
 ##------------------------------------------------------------
-##  replicate_file - create file of same list of images with new data
+##  xml_to_list - return list of files from xml
 ##------------------------------------------------------------
-def replicate_file (orig_file, new_files, output_file) :
+def xml_to_list (xml_file, filetype='faces') :
+	xml_obj_d = default_dict (list)
+	img_files = load_objs_from_files (xml_file, xml_obj_d, filetype)
+	return img_files
+
+##------------------------------------------------------------
+##  find_files_from_list - return list of all matched files (not obj)
+##     using pattern from str_list.  TODO: can expand to use regex.
+##------------------------------------------------------------
+def find_files_from_list (filenames, string_list, filetype='faces') :
+	matched  = []
+	for filename in filenames :
+		for string in string_list:
+			# import re
+			# match = re.search (string, filename)
+			# if match :
+			if string.lower () in filename.lower () :
+				matched.append (string)
+	return matched
+
+##------------------------------------------------------------
+##  split_objs_by_files - return list of matched and unmatched
+##     objs given filename.
+##------------------------------------------------------------
+def split_objs_by_files (xml_file, string_list, output_filename, filetype='faces') :
+	objs_d = defaultdict(list)
+	filenames = load_objs_from_files (orig_file, objs_d, filetype)
+	matched_files = find_files_from_list (filenames, string_list)
+	matched_objs = []
+	unmatched_objs = []
+	matched_filename = 'matched_' + output_filename + '.xml'
+	unmatched_filename = 'unmatched_' + output_filename + '.xml'
+	# TODO: 
+	for label, objs in list(objs_d.items ()) :  ## iterate through all objs
+		for obj in objs :
+			# pdb.set_trace ()
+			obj_filename = obj_get_filename (obj)
+			if obj_filename in matched_files :
+				matched_objs.append (obj)
+			else :
+				unmatched_objs.append (obj)
+	write_xml_file (matched_filename, matched_objs, filetype)
+	write_xml_file (unmatched_filename, unmatched_objs, filetype)
+
+##------------------------------------------------------------
+##  xml_split_by_list update_path - create file of same list of images with new data
+##------------------------------------------------------------
+def xml_split_by_list (orig_file, new_files, output_file, filetype='faces') :
+	a = 5
+
+##------------------------------------------------------------
+##  update_path - create file of same list of images with new data
+##------------------------------------------------------------
+def update_path (orig_file, new_files, output_file, filetype='faces') :
 	faces_orig_d = defaultdict(list)
 	faces_new_d = defaultdict(list)
-	filetype = "faces"
 	objfiles1 = load_objs_from_files (orig_file, faces_orig_d, filetype)
 	objfiles2 = load_objs_from_files (new_files, faces_new_d, filetype)
 	newfaces = []
@@ -2575,6 +2666,63 @@ def split_objects_by_locales (input_files, obj_path='images/image', label_path='
 	tree.write (t_name)
 	print ('wrote faces to ', t_name)
 
+##------------------------------------------------------------
+##  split faces by count (0, 1, multi)
+##------------------------------------------------------------
+def split_faces_by_count (input_files, output_root) :
+	zeros = []
+	ones = []
+	multis = []
+	xml_files = generate_xml_file_list (input_files)
+	print ('\nextracting faces from file: ')
+	for x_file in xml_files:
+		print("\t", x_file)
+		# pdb.set_trace()
+		root, tree = load_file (x_file)
+		# separate out face(box) counts 
+		for image in root.findall ('images/image'):
+			boxes = image.findall ('box')
+			# pdb.set_trace ()
+			if len (boxes) == 0 :
+				zeros.append (image)
+			elif len (boxes) == 1 :
+				ones.append (image)
+			else :
+				multis.append (image)
+	# write out bc bears
+	print ('\t... # zero faces    : ', len (zeros))
+	print ('\t... # single face   : ', len (ones))
+	print ('\t... # multiple faces: ', len (multis))
+	# pdb.set_trace ()
+	t_root, t_images = create_new_tree_w_element ("images")
+	for i in range (len (zeros)) :
+		image = zeros[i]
+		t_images.append (image)
+	tree = ET.ElementTree (t_root)
+	t_name = output_root + '_0.xml'
+	indent (t_root)
+	tree.write (t_name)
+	print ('------- wrote zero detects to   :', t_name)
+
+	t_root, t_images = create_new_tree_w_element ("images")
+	for i in range (len (ones)) :
+		image = ones[i]
+		t_images.append (image)
+	tree = ET.ElementTree (t_root)
+	t_name = output_root + '_1.xml'
+	indent (t_root)
+	tree.write (t_name)
+	print ('------- wrote single detects to :', t_name)
+
+	t_root, t_images = create_new_tree_w_element ("images")
+	for i in range (len (multis)) :
+		image = multis[i]
+		t_images.append (image)
+	tree = ET.ElementTree (t_root)
+	t_name = output_root + '_multi.xml'
+	indent (t_root)
+	tree.write (t_name)
+	print ('------- wrote multi detects to  :', t_name)
 
 ##------------------------------------------------------------
 ##   main code
