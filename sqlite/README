@@ -8,7 +8,7 @@ Generate xml's with bearID  :
 - testresize_faces_chips.xml 
 % bearchip testresize_faces.xml
 - testresize_faces_chips_embeds.xml 
-% bearembed --infer bearembed.dat testresize_faces_chips.xml
+% bearembed --embed bearembed.dat testresize_faces_chips.xml
 - testresize_faces_chips_embeds_svm.xml 
 % bearsvm --infer bearsvm.dat testresize_faces_chips_embeds.xml
 
@@ -49,9 +49,9 @@ sql> .headers on
 sql> .mode csv
 sql> .separator ';'
 sql> .once test_db.csv
-sql> select * from g_test_db;
+sql> select * from g_$test_db;  # g_faceGold_test_db
 sql> .once train_db.csv
-sql> select * from g_ttraindb;
+sql> select * from g_$train_db; # g_faceGold_train_db
 
 ------------------------------------------------------------
 import csv to google sheets
@@ -59,9 +59,27 @@ import csv to google sheets
 create new  spreadsheet
 for each csv:
   create new sheet
-  import file. upload.
-  select 'replace current sheet', 'custom delimiter' ';'. 
+  import. upload.
+  select 'replace current SHEET', 'custom delimiter' ';'. 
   rename sheet
 
 
+============================================================
 
+     train_images.xml 
+  -> (bearface)  -> train_faces.xml 
+  -> (bearchip)  -> train_faces_chips.xml 
+  -> (bearembed) -> train_faces_chips_embed.xml
+  -> (bearsvm)   -> train_faces_chips_embed_svm.xml
+
+     (MANUAL)    -> train_images.xml 
+  -> (bearchip)  -> train_chips.xml 
+  -> (bearembed) -> train_chips_embed.xml
+  -> (bearsvm)   -> train_chips_embed_svm.xml
+
+============================================================
+
+
+
+
+============================================================

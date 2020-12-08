@@ -69,37 +69,53 @@ fi
 if [ 1 == 1 ]; then 	
 	common_table_all='g_common_all'
 	echo -n "drop table if exists $common_table_all ;"
-	echo "create table $common_table_all (IMAGE TEXT, LABEL TEXT, DATE TEXT, TEST_TRAIN TEXT);"
+	echo "create table $common_table_all (IMAGE TEXT, LABEL TEXT, DATE TEXT, TEST_TRAIN TEXT, DATE_TIME TEXT);"
 	# for bear in bc_beatrice bc_bella ; do
 	for bear in $all_labels ; do
 		main_table="g_faceGold_${data}_db"
-		common_table="t_${bear}_common"
-		common_table_test="t_${bear}_common_test"
-		common_table_train="t_${bear}_common_train"
-		common_table_sorted="t_${bear}_common_sorted"
-		train_db="t_${bear}_goldtrain"
-		test_db="t_${bear}_goldtest"
-		test_dates="t_test_dates_${bear}"
-		train_dates="t_train_dates_${bear}"
+		common_table="'t_${bear}_common'"
+		common_table_test="'t_${bear}_common_test'"
+		common_table_train="'t_${bear}_common_train'"
+		common_table_sorted="'t_${bear}_common_sorted'"
+		common_table_test_datetime="'t_${bear}_common_test_datetime'"
+		common_table_train_datetime="'t_${bear}_common_train_datetime'"
+		train_db="'t_${bear}_goldtrain'"
+		test_db="'t_${bear}_goldtest'"
+		train_db_datetime="'g_${bear}_goldtrain'"
+		test_db_datetime="'g_${bear}_goldtest'"
+		test_dates="'t_test_dates_${bear}'"
+		train_dates="'t_train_dates_${bear}'"
 
-		echo -n "drop table if exists \'$common_table\' ;"
-		echo "create table $common_table (IMAGE TEXT, LABEL TEXT, DATE TEXT, TEST_TRAIN TEXT);"
+		echo -n "drop table if exists $common_table ;"
+		echo "create table $common_table (IMAGE TEXT, LABEL TEXT, DATE TEXT, TEST_TRAIN TEXT, DATE_TIME TEXT);"
+
+		echo -n "drop table if exists $common_table_test ;"
+		echo "create table $common_table_test (IMAGE TEXT, LABEL TEXT, DATE TEXT, TEST_TRAIN TEXT);"
+		echo -n "drop table if exists $common_table_train ;"
+		echo "create table $common_table_train (IMAGE TEXT, LABEL TEXT, DATE TEXT, TEST_TRAIN TEXT);"
 		echo -n "drop table if exists $test_dates;"
+		# get test dates
 	    echo "create table $test_dates as select distinct date from $test_db;"
-		echo -n "drop table if exists $common_table_train;"
-	  	echo "create table $common_table_train as select train.image, train.label, train.date, 'train' from $train_db as train join $test_dates as test where train.date = test.date order by train.date;"
+		# get train images using test dates
+	  	echo "insert into $common_table_train select train.image, train.label, train.date, 'train' from $train_db as train join $test_dates as test where train.date = test.date;"
+		# get train dates (in case less than test dates)
 		echo -n "drop table if exists $train_dates;"
 		echo "create table $train_dates as select distinct date from $common_table_train;"
+		# get test images from train dates
+	  	echo "insert into $common_table_test select test.image, test.label, test.date, 'test' from $test_db as test join $train_dates as train where train.date = test.date;"
+		# create new table along with date_time string for finer ordering
+		echo -n "drop table if exists $common_table_test_datetime ;"
+		echo "create table $common_table_test_datetime as select test1.image, test1.label, test1.date, test1.test_train, test2.date from $common_table_test as test1 join $test_db_datetime as test2 where test1.image = test2.image;"
+		echo -n "drop table if exists $common_table_train_datetime ;"
+		echo "create table $common_table_train_datetime as select train1.image, train1.label, train1.date, train1.test_train, train2.date from $common_table_train as train1 join $train_db_datetime as train2 where train1.image = train2.image;"
 
-		echo -n "drop table if exists $common_table_test;"
-	  	echo "create table $common_table_test as select test.image, test.label, test.date, 'test' from $test_db as test join $train_dates as train where train.date = test.date order by train.date;"
-
-	    echo "insert into $common_table select * from $common_table_test ;"
-	    echo "insert into $common_table select * from $common_table_train ;"
-
-	    # echo "insert into $common_table select test.image, test.label, test.date, 'test' from $test_db as test join $train_db as train where test.date = train.date order by test.date;"
+		# drop table if exists t_bc_bella_common_test_datetime; create table t_bc_bella_common_test_datetime as select test1.image, test1.label, test1.date, test1.test_train, test2.date from t_bc_bella_common_test as test1 join g_bc_bella_goldtest as test2 where test1.image = test2.image;
+		# combine test and train images with common dates
+	    echo "insert into $common_table select * from $common_table_test_datetime ;"
+	    echo "insert into $common_table select * from $common_table_train_datetime ;"
+		# sort table and add to main table
 		echo -n "drop table if exists $common_table_sorted ;"
-	  	echo "create table $common_table_sorted as select * from $common_table order by date;"
+	  	echo "create table $common_table_sorted as select * from $common_table order by date_time;"
 	    echo "insert into $common_table_all select * from $common_table_sorted ;"
 		# clean up temp tables
 		echo -n "drop table if exists $common_table ;"

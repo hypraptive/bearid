@@ -51,6 +51,11 @@ svm='resize_svm'
 dataset='test train'
 dataset='faceGold_test faceGold_train'
 
+echo ""
+echo "================================================================================"
+echo -n "Running gen_csv at "
+date
+echo ""
 #-----------------------------
 # check existence of xml file 
 #-----------------------------
@@ -84,7 +89,7 @@ prepend_file () {
 }
 #-------- fields of csv tables -------------------
 # test.csv, train.csv
-gold_label="IMAGE;LABEL;DATE;YEAR;MONTH;DAY;SIZE;PHOTO_SOURCE;FACE_SIZE"
+gold_label="IMAGE;LABEL;DATE;YEAR;MONTH;DAY;TIME;SIZE;PHOTO_SOURCE;FACE_SIZE"
 # train_resize.csv
 resize_label="IMAGE;LABEL;SIZE_RESIZED;ORIG_IMAGE;FACE_SIZE_RESIZED"
 # test_resize_chips.csv
@@ -232,21 +237,21 @@ for i in $dataset; do
 	add_to_file $gen_db_file "ON ${i}resize.IMAGE = ${i}resize_chips.ORIG_IMAGE;"
 	# --- combine (faceresize & chips) with orig face
 	add_to_file $gen_db_file "-- combine (faceresize & chips) with orig face to get:"
-	add_to_file $gen_db_file "-- IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE, SIZE_RESIZED, "
+	add_to_file $gen_db_file "-- IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, DAY, TIME, SIZE, SIZE_RESIZED, "
 	add_to_file $gen_db_file "-- PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED"
 	add_to_file $gen_db_file "DROP TABLE if exists t_${i}_faces_chips;"
 	add_to_file $gen_db_file "CREATE TABLE t_${i}_faces_chips AS "
-	add_to_file $gen_db_file "SELECT t_${i}_faceresize_chips.IMAGE, t_${i}_faceresize_chips.LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, t_${i}_faceresize_chips.SIZE_RESIZED, ${i}.SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED"
+	add_to_file $gen_db_file "SELECT t_${i}_faceresize_chips.IMAGE, t_${i}_faceresize_chips.LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, DAY, TIME, t_${i}_faceresize_chips.SIZE_RESIZED, ${i}.SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED"
 	add_to_file $gen_db_file "FROM t_${i}_faceresize_chips LEFT JOIN ${i}"
 	add_to_file $gen_db_file "ON t_${i}_faceresize_chips.ORIG_IMAGE = ${i}.IMAGE;"
 	add_to_file $gen_db_file ""
 	# --- combine (face & faceresize & chips) with svm 
 	add_to_file $gen_db_file "-- combine (face & faceresize & chips) with svm to get:"
-	add_to_file $gen_db_file "-- IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE, SIZE_RESIZED, "
+	add_to_file $gen_db_file "-- IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, DAY, TIME, SIZE, SIZE_RESIZED, "
 	add_to_file $gen_db_file "-- PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED, LABEL_RESULT, MATCH"
 	add_to_file $gen_db_file "drop table if exists g_${i}_db;"
 	add_to_file $gen_db_file "create table g_${i}_db as"
-	add_to_file $gen_db_file "select t_${i}_faces_chips.IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, SIZE_RESIZED, SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED,"
+	add_to_file $gen_db_file "select t_${i}_faces_chips.IMAGE, LABEL, NOSE_X, NOSE_Y, DATE, YEAR, MONTH, DAY, TIME, SIZE_RESIZED, SIZE, PHOTO_SOURCE, FACE_SIZE, FACE_SIZE_RESIZED,"
 	add_to_file $gen_db_file "g_${i}_svm.PREDICT, g_${i}_svm.MATCH"
 	add_to_file $gen_db_file "from t_${i}_faces_chips LEFT JOIN g_${i}_svm"
 	add_to_file $gen_db_file "on t_${i}_faces_chips.IMAGE = g_${i}_svm.IMAGE;"
