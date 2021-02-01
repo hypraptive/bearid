@@ -2,7 +2,7 @@
 [BearID Project](http://bearresearch.org/) code repository. For more information, read the [hypraptive blog](https://hypraptive.github.io/).
 
 ## Pre-Requisites
-* [dlib](http://dlib.net/) (tested with version 19.7) - download and install somewhere. You should have OpenCV and CUDA and other packages which are helpful for dlib.
+* [dlib](http://dlib.net/) (tested with version 19.16) - download and install somewhere. You should have OpenCV and CUDA and other packages which are helpful for dlib.
 * [boost](http://www.boost.org/) (tested with version 1.58.0)
 
 ## Build
