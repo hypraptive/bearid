@@ -124,7 +124,7 @@ std::vector<std::vector<string>> load_objects_list (
 template <
     typename image_type
     >
-image_type jitter_image(
+image_type my_jitter_image(
     const image_type& img,
     dlib::rand& rnd
 )
@@ -362,7 +362,7 @@ std::vector<std::vector<string>> load_chips_xml (
         disturb_colors(crop,rnd);
         // Jitter most crops
         if (rnd.get_random_double() > 0.1)
-            crop = jitter_image(crop,rnd);
+            crop = my_jitter_image(crop,rnd);
     }
 
 
@@ -1294,7 +1294,7 @@ else if (parser.option("embed"))
 	  {  // ------- BATCHNORM, NOT ANET ----------
         embedded = embedding_anet(image);
 	  }  // ------- BATCHNORM, NOT ANET ----------
-	  else 
+	  else
 	  {  // ------- ANET ----------
         embedded = embedding_anet_150(image);
 	  }  // ------- ANET ----------
@@ -1364,7 +1364,7 @@ else if (parser.option("embed"))
 
   boost::filesystem::path xml_file (parser[0]);
   std::string embed_xml_file;
-  if (xml_file.has_parent_path ()) 
+  if (xml_file.has_parent_path ())
 	  embed_xml_file = xml_file.parent_path().string() + "/";
   embed_xml_file += xml_file.filename().stem().string() + "_embeds.xml";
 
