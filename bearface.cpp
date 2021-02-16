@@ -606,8 +606,8 @@ net_type_bn run_train_obj (std::string train_file)
   clear_box_labels (face_boxes_train);
 
   // mmod_options options(face_boxes_train, 40,40); // doghip
-  // mmod_options options(face_boxes_train, 80,80); // bearface_network
-  mmod_options options(face_boxes_train, 40,40);
+  mmod_options options(face_boxes_train, 80,80); // bearface_network
+  // mmod_options options(face_boxes_train, 40,40); // AnimalWeb
   // The detector will automatically decide to use multiple sliding windows if needed.
   // For the face data, only one is needed however.
   cout << "num detector windows: "<< options.detector_windows.size() << endl;
