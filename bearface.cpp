@@ -53,7 +53,7 @@ using net_type = loss_mmod<con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<input_rgb
 using net_type_bn = loss_mmod<con<1,9,9,1,1,rcon5_bn<rcon5_bn<rcon5_bn<downsampler_bn<input_rgb_image_pyramid<pyramid_down<6>>>>>>>>;
 
 // -----------------------------------------------------------------------------
-// Define the 8x downsampling block with conv5d blocks.  
+// Define the 8x downsampling block with conv5d blocks.
 // Use relu and batch normalization in the standard way.
 template <typename SUBNET> using downsampler_t  = relu<bn_con<con5d<32, relu<bn_con<con5d<32, relu<bn_con<con5d<32,SUBNET>>>>>>>>>;
 
@@ -110,9 +110,9 @@ matrix<rgb_pixel> downscale_large_image_old (
   return img;
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 //  scale image down to MAX_SIZE, fill in pxRatio
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 matrix<rgb_pixel> downscale_image (
   matrix<rgb_pixel>& img,
   float& pxRatio
@@ -135,9 +135,9 @@ matrix<rgb_pixel> downscale_image (
   return img;
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 //  scale parts by ratio
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void scale_parts (
 	std::map<std::string,point> &parts,
 	float pxRatio
@@ -151,9 +151,9 @@ void scale_parts (
 	}
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 //  set rect
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void set_face_rect (
 	rectangle &rect,
 	rectangle detect_rect
@@ -165,9 +165,9 @@ void set_face_rect (
 	rect.set_bottom (detect_rect.bottom());
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 //  scale the rect by the ratio
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void scale_face_rect (
 	rectangle &rect,
 	float pxRatio
@@ -181,9 +181,9 @@ void scale_face_rect (
 	// cout << "after scale: " << rect.left () << endl;
 }
 
-//------------------------------------------------------------------------------ 
-//  set face 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
+//  set face
+//------------------------------------------------------------------------------
 void set_face_parts (
 	image_dataset_metadata::box &face,
     full_object_detection shape
@@ -197,9 +197,9 @@ void set_face_parts (
 	}
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 //  scale face parts by ratio
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void scale_face_parts (
 	image_dataset_metadata::box &face,
 	float pxRatio
@@ -213,9 +213,9 @@ void scale_face_parts (
 	}
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 // clear labels from boxes so they won't be trained with images
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void clear_box_labels (std::vector<std::vector<mmod_rect>> &faces_list)
 {
 	for (unsigned long i=0; i < faces_list.size() ; ++i)
@@ -225,9 +225,9 @@ void clear_box_labels (std::vector<std::vector<mmod_rect>> &faces_list)
 	}
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 // downscale imgs and face boxes
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void downscale_imgs_and_faces (
 	std::vector<matrix<rgb_pixel>> &imgs,
 	std::vector<std::vector<mmod_rect>> &faces_list
@@ -249,13 +249,13 @@ void downscale_imgs_and_faces (
 	}
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 // upscale image if it will remain under MAX_SIZE
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 bool upscale_image (
   matrix<rgb_pixel>& img,
   float& pxRatio
-) 
+)
 {
   int upscaleRatio = 2;
 	long origImgSize = img.size ();
@@ -270,9 +270,9 @@ bool upscale_image (
 	return false;
 }
 
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 // Find Faces
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 std::vector<dlib::mmod_rect> find_faces (
   net_type& net,
   matrix<rgb_pixel>& img,
@@ -288,16 +288,16 @@ std::vector<dlib::mmod_rect> find_faces (
   dets = net(img);
 
   // if no faces, try with upscaling
-  if (dets.size() == 0) 
+  if (dets.size() == 0)
   {
 	if (upscale_image (img, sideRatio))
 	  dets = net(img);
   }
   return dets;
 }
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 // Find Faces and face landmarks
-//------------------------------------------------------------------------------ 
+//------------------------------------------------------------------------------
 void find_faces_and_landmarks (
   net_type& net,
   shape_predictor& sp,
@@ -333,9 +333,50 @@ void find_faces_and_landmarks (
   }
 }
 
+//------------------------------------------------------------------------------
+// load a batch of images and their corresponding boxes
+//------------------------------------------------------------------------------
+void get_image_batch (
+  size_t num_images,
+  dlib::image_dataset_metadata::dataset data,
+  std::vector<std::string>& files,
+  std::vector<matrix<rgb_pixel>>& images_batch,
+  std::vector<std::vector<mmod_rect>>& face_boxes_batch
+)
+{
+  random_cropper cropper;
+  std::mutex rnd_mutex;
+  images_batch.clear();
+  face_boxes_batch.clear();
+  files.clear();
+  for (size_t i = 0; i < num_images; ++i)
+  {
+    matrix<rgb_pixel> img;
+    size_t idx;
+    idx = std::rand() % data.images.size();
+    //{ std::lock_guard<std::mutex> lock(rnd_mutex);
+    //    idx = rnd.get_random_64bit_number()%data.images.size();
+    //}
+
+    //cout << idx << " : " << data.images[idx].filename.c_str() << "..." << endl;
+    load_image(img, data.images[idx].filename.c_str());
+    std::vector<mmod_rect> boxes;
+    for (unsigned long j = 0; j < data.images[idx].boxes.size(); ++j)
+    {
+      boxes.push_back(mmod_rect(data.images[idx].boxes[j].rect));
+    }
+    matrix<rgb_pixel> crop;
+    std::vector<mmod_rect> crop_rects;
+    cropper(img, boxes, crop, crop_rects);
+    face_boxes_batch.push_back(crop_rects);
+    images_batch.push_back(crop);
+    files.push_back(data.images[idx].filename.c_str());
+  }
+}
+
 // ----------------------------------------------------------------------------------------
 //   copy of test_object_detection_function from dlib/dnn/validation.h
-//		changes: 
+//		changes:
 //		- load only one image at time due to memory limitation
 //	  	- downscale image if beyond MAX_SIZE
 //    	- if detect no faces, upscale if doesn't violate MAX_SIZE
@@ -538,7 +579,150 @@ const matrix<double,1,3> my_test_object_detection_function (
     }
 
 //----------------------------------------------------------------
-//  train_sp 
+//  train_obj
+//----------------------------------------------------------------
+net_type_bn run_train_obj (std::string train_file)
+{
+  cout << "\n\tTraining with file: " << train_file << endl;
+  dlib::image_dataset_metadata::dataset data;
+  load_image_dataset_metadata(data, train_file);
+
+  std::vector<matrix<rgb_pixel>> images_train;
+  std::vector<std::vector<mmod_rect>> face_boxes_train;
+  //load_image_dataset(images_train, face_boxes_train, train_file);
+  cout << "num training images: " << data.images.size() << endl;
+  // --- scale images and face boxes ---
+  //downscale_imgs_and_faces (images_train, face_boxes_train);
+  for (unsigned long i = 0; i < data.images.size(); ++i)
+  {
+    std::vector<mmod_rect> boxes;
+    for (unsigned long j = 0; j < data.images[i].boxes.size(); ++j)
+    {
+      boxes.push_back(mmod_rect(data.images[i].boxes[j].rect));
+    }
+    face_boxes_train.push_back(boxes);
+  }
+
+  clear_box_labels (face_boxes_train);
+
+  // mmod_options options(face_boxes_train, 40,40); // doghip
+  mmod_options options(face_boxes_train, 80,80); // bearface_network
+  // mmod_options options(face_boxes_train, 40,40); // AnimalWeb
+  // The detector will automatically decide to use multiple sliding windows if needed.
+  // For the face data, only one is needed however.
+  cout << "num detector windows: "<< options.detector_windows.size() << endl;
+  for (auto& w : options.detector_windows)
+    cout << "detector window width by height: " << w.width << " x " << w.height << endl;
+  cout << "overlap NMS IOU thresh:             " << options.overlaps_nms.get_iou_thresh() << endl;
+  cout << "overlap NMS percent covered thresh: " << options.overlaps_nms.get_percent_covered_thresh() << endl;
+
+  // Now we are ready to create our network and trainer.
+  net_type_bn net(options);
+
+  // The MMOD loss requires that the number of filters in the final network layer equal
+  // options.detector_windows.size().  So we set that here as well.
+  net.subnet().layer_details().set_num_filters(options.detector_windows.size());
+  dnn_trainer<net_type_bn> trainer(net);
+  trainer.set_learning_rate(0.1);
+  trainer.be_verbose();
+  trainer.set_synchronization_file("mmod_sync", std::chrono::minutes(5));
+  // trainer.set_iterations_without_progress_threshold(300); // doghip
+  trainer.set_iterations_without_progress_threshold(8000);
+
+  // Now let's train the network.  We are going to use mini-batches of 150
+  // images.   The images are random crops from our training set (see
+  // random_cropper_ex.cpp for a discussion of the random_cropper).
+  std::vector<matrix<rgb_pixel>> mini_batch_samples;
+  std::vector<std::vector<mmod_rect>> mini_batch_labels;
+  std::vector<std::string> mini_batch_files;
+  //random_cropper cropper;
+  // cropper.set_chip_dims(200, 200);  // doghip
+  // cropper.set_min_object_size(0.2);  // doghip
+
+  // Run the trainer until the learning rate gets small.  This will probably take several
+  // hours.
+
+  // Set up data loaders
+  dlib::pipe<std::vector<std::string>> qfiles(4);
+  dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
+  dlib::pipe<std::vector<std::vector<mmod_rect>>> qlabels(4);
+  auto data_loader = [&data, &qfiles, &qimages, &qlabels](time_t seed)
+  {
+    dlib::rand rnd(time(0)+seed);
+    std::vector<matrix<rgb_pixel>> images;
+    std::vector<std::vector<mmod_rect>> labels;
+    std::vector<std::string> files;
+    dlib::rand rnd_color(time(0)+seed);
+    while(qimages.is_enabled())
+    {
+      try
+      {
+        get_image_batch(90, data, files, images, labels);
+        //get_image_batch(90, data, images, labels);
+        //load_mini_batch(numid, numface, rnd, objs, images, labels);
+        // We can also randomly jitter the colors and that often helps a detector
+        // generalize better to new images.
+        for (auto&& img : images)
+          disturb_colors(img, rnd_color);
+
+        //cout << "Queue batch" << endl;
+        //for (size_t i = 0; i < files.size(); ++i)
+        //{
+        //  cout << i << " queue : " << files[i] << "..." << endl;
+        //}
+
+        qfiles.enqueue(files);
+        qimages.enqueue(images);
+        qlabels.enqueue(labels);
+      }
+      catch(std::exception& e)
+      {
+        cout << "EXCEPTION IN LOADING DATA" << endl;
+        cout << e.what() << endl;
+      }
+    }
+  };
+  std::thread data_loader1([data_loader](){ data_loader(1); });
+  std::thread data_loader2([data_loader](){ data_loader(2); });
+  std::thread data_loader3([data_loader](){ data_loader(3); });
+  std::thread data_loader4([data_loader](){ data_loader(4); });
+  std::thread data_loader5([data_loader](){ data_loader(5); });
+
+  cout << "\tRunning training ... \n" << endl;
+  while(trainer.get_learning_rate() >= 1e-4)
+  {
+    // load a batch of images and their corresponding boxes from the queue
+    qimages.dequeue(mini_batch_samples);
+    qlabels.dequeue(mini_batch_labels);
+    qfiles.dequeue(mini_batch_files);
+    //cout << "Dequeue batch" << endl;
+    //for (size_t i = 0; i < mini_batch_files.size(); ++i)
+    //{
+      //cout << "dequeue : " << mini_batch_files[i] << "..." << endl;
+    //}
+    //get_image_batch(75, data, mini_batch_samples, mini_batch_labels);
+    // cropper(150, images_train, face_boxes_train, mini_batch_samples, mini_batch_labels);
+    // crop size of 10
+    //cropper(75, images_batch, face_boxes_batch, mini_batch_samples, mini_batch_labels);
+    trainer.train_one_step(mini_batch_samples, mini_batch_labels);
+  }
+  // wait for training threads to stop
+  trainer.get_net();
+  cout << "done training" << endl;
+  qimages.disable();
+  qlabels.disable();
+  qfiles.disable();
+  data_loader1.join();
+  data_loader2.join();
+  data_loader3.join();
+  data_loader4.join();
+  data_loader5.join();
+
+	return net;
+}
+
+//----------------------------------------------------------------
+//  train_sp
 //----------------------------------------------------------------
 shape_predictor run_train_sp (std::string train_file)
 {
@@ -571,11 +755,11 @@ shape_predictor run_train_sp (std::string train_file)
 	trainer.be_verbose();
 	cout << "\trunning shape predictor training ... \n";
 	shape_predictor sp = trainer.train(images_train, faces_train);
-	return sp; 
+	return sp;
 	/*
-	cout << "mean training error: "<< 
+	cout << "mean training error: "<<
 		test_shape_predictor(sp, images_train, faces_train, get_interocular_distances(faces_train)) << endl;
-	cout << "mean testing error:  "<< 
+	cout << "mean testing error:  "<<
 		test_shape_predictor(sp, images_test, faces_test, get_interocular_distances(faces_test)) << endl;
 	serialize("sp.dat") << sp;
 	*/
@@ -730,7 +914,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	//----------------------------------------------------------------------
-	// 
+	//
 	//----------------------------------------------------------------------
 	if (g_mode == "train_sp") {
 		std::string out_net = get_output_network_name (parser);
@@ -745,70 +929,9 @@ int main(int argc, char** argv)
 		return 0;
 	}
 	else if (g_mode == "train_obj") {
-		std::string out_network = "";
-		const std::string train_file = imgs_file;
-		cout << "\n\tTraining with file: " << train_file << endl;
-		dlib::image_dataset_metadata::dataset data;
-		load_image_dataset_metadata(data, imgs_file);
-
-		std::string out_net = get_output_network_name (parser);
-
-		std::vector<matrix<rgb_pixel>> images_train;
-		std::vector<std::vector<mmod_rect>> face_boxes_train;
-		load_image_dataset(images_train, face_boxes_train, train_file);
-		cout << "num training images: " << images_train.size() << endl;
-		// --- scale images and face boxes ---
-		downscale_imgs_and_faces (images_train, face_boxes_train);
-		clear_box_labels (face_boxes_train);
-
-		// mmod_options options(face_boxes_train, 40,40); // doghip
-		mmod_options options(face_boxes_train, 80,80);
-		// The detector will automatically decide to use multiple sliding windows if needed.
-		// For the face data, only one is needed however.
-		cout << "num detector windows: "<< options.detector_windows.size() << endl;
-		for (auto& w : options.detector_windows)
-			cout << "detector window width by height: " << w.width << " x " << w.height << endl;
-		cout << "overlap NMS IOU thresh:             " << options.overlaps_nms.get_iou_thresh() << endl;
-		cout << "overlap NMS percent covered thresh: " << options.overlaps_nms.get_percent_covered_thresh() << endl;
-
-		// Now we are ready to create our network and trainer.
-		net_type_bn net(options);
-		// The MMOD loss requires that the number of filters in the final network layer equal
-		// options.detector_windows.size().  So we set that here as well.
-		net.subnet().layer_details().set_num_filters(options.detector_windows.size());
-		dnn_trainer<net_type_bn> trainer(net);
-		trainer.set_learning_rate(0.1);
-		trainer.be_verbose();
-		trainer.set_synchronization_file("mmod_sync", std::chrono::minutes(5));
-		// trainer.set_iterations_without_progress_threshold(300); // doghip
-		trainer.set_iterations_without_progress_threshold(8000);
-
-		// Now let's train the network.  We are going to use mini-batches of 150
-		// images.   The images are random crops from our training set (see
-		// random_cropper_ex.cpp for a discussion of the random_cropper).
-		std::vector<matrix<rgb_pixel>> mini_batch_samples;
-		std::vector<std::vector<mmod_rect>> mini_batch_labels;
-		random_cropper cropper;
-		// cropper.set_chip_dims(200, 200);  // doghip
-		// cropper.set_min_object_size(0.2);  // doghip
-		dlib::rand rnd;
-		// Run the trainer until the learning rate gets small.  This will probably take several
-		// hours.
-		cout << "\tRunning training ... \n" << endl;
-		while(trainer.get_learning_rate() >= 1e-4)
-		{
-			// cropper(150, images_train, face_boxes_train, mini_batch_samples, mini_batch_labels);
-			// crop size of 10
-			cropper(75, images_train, face_boxes_train, mini_batch_samples, mini_batch_labels);
-			// We can also randomly jitter the colors and that often helps a detector
-			// generalize better to new images.
-			for (auto&& img : mini_batch_samples)
-				disturb_colors(img, rnd);
-			trainer.train_one_step(mini_batch_samples, mini_batch_labels);
-		}
-		// wait for training threads to stop
-		trainer.get_net();
-		cout << "done training" << endl;
+		//std::string out_network = "";
+    std::string out_net = get_output_network_name (parser);
+    net_type_bn net = run_train_obj (imgs_file);
 
 		// Save the network to disk
 		net.clean();
