@@ -349,6 +349,7 @@ void get_image_batch (
   images_batch.clear();
   face_boxes_batch.clear();
   files.clear();
+  cout << "num imagea per batch: " << num_images << endl;
   for (size_t i = 0; i < num_images; ++i)
   {
     matrix<rgb_pixel> img;
@@ -581,7 +582,7 @@ const matrix<double,1,3> my_test_object_detection_function (
 //----------------------------------------------------------------
 //  train_obj
 //----------------------------------------------------------------
-net_type_bn run_train_obj (std::string train_file)
+net_type_bn run_train_obj (std::string train_file, int batch_size)
 {
   cout << "\n\tTraining with file: " << train_file << endl;
   dlib::image_dataset_metadata::dataset data;
@@ -646,7 +647,7 @@ net_type_bn run_train_obj (std::string train_file)
   dlib::pipe<std::vector<std::string>> qfiles(4);
   dlib::pipe<std::vector<matrix<rgb_pixel>>> qimages(4);
   dlib::pipe<std::vector<std::vector<mmod_rect>>> qlabels(4);
-  auto data_loader = [&data, &qfiles, &qimages, &qlabels](time_t seed)
+  auto data_loader = [&batch_size, &data, &qfiles, &qimages, &qlabels](time_t seed)
   {
     dlib::rand rnd(time(0)+seed);
     std::vector<matrix<rgb_pixel>> images;
@@ -657,7 +658,7 @@ net_type_bn run_train_obj (std::string train_file)
     {
       try
       {
-        get_image_batch(90, data, files, images, labels);
+        get_image_batch(batch_size, data, files, images, labels);
         //get_image_batch(90, data, images, labels);
         //load_mini_batch(numid, numface, rnd, objs, images, labels);
         // We can also randomly jitter the colors and that often helps a detector
@@ -815,6 +816,8 @@ int main(int argc, char** argv)
 		parser.add_option("test_obj","Test object detector.", 1);
 		parser.add_option("test_sp","Test shape predictor.", 1);
 		parser.add_option("infer","Detect faces using network file.", 1);
+		parser.add_option("batch_size","Images to load into GPU for each train step. Defaults to 90.", 1);
+		parser.add_option("load_all","Load all images into memory. Not yet implemented.");
 		parser.parse(argc, argv);
 
 		const char* one_time_opts[] = {"h", "train_obj", "train_sp", "test_obj", "test_sp", "infer"};
@@ -868,10 +871,13 @@ int main(int argc, char** argv)
 	char *lvalue = NULL;
 	int index;
 	int c;
+	int batch_size = 90;
 	std::string bearID;
-  bool bLabelFixed = false;
+	bool bLabelFixed = false;
 
 	std::string imgs_file = parser[0];
+	if (parser.option("batch_size"))
+		batch_size = stoi (parser.option ("batch_size").argument());
 
     // load the models as well as glasses and mustache.
     net_type net;
@@ -931,7 +937,7 @@ int main(int argc, char** argv)
 	else if (g_mode == "train_obj") {
 		//std::string out_network = "";
     std::string out_net = get_output_network_name (parser);
-    net_type_bn net = run_train_obj (imgs_file);
+    net_type_bn net = run_train_obj (imgs_file, batch_size);
 
 		// Save the network to disk
 		net.clean();
