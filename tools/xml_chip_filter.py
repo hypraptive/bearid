@@ -29,6 +29,7 @@ def main (argv) :
 	parser.add_argument ('--verbosity', type=int, default=1,
 		choices=[0, 1, 2], help=argparse.SUPPRESS)
 		# help="increase output verbosity"
+	u.set_argv (argv)
 	args = parser.parse_args()
 
 	verbose = args.verbosity
