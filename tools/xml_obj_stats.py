@@ -22,6 +22,9 @@ def main (argv) :
 	parser.add_argument ('-write', '--write', default="",
 		action="store_true",
 		help='write stats into file stats_*_<currentDate> .')
+	parser.add_argument ('-p', '--print_all_labels', default=False,
+		action="store_true",
+		help='print ordered list of filenames.')
 	parser.add_argument ('-l', '--ls', default="",
 		action="store_true",
 		help='print ordered list of filenames.')
@@ -32,10 +35,15 @@ def main (argv) :
 	args = parser.parse_args()
 	# print "ls : ", args.ls
 	# print "files: ", args.files
+	filetypes = ['chips', 'faces', 'pairs', 'images']
+	filetype = args.filetype
+	if filetype not in filetypes :
+		print('unrecognized filetype :', filetype, 'should be one of:', filetypes)
+		return
 
 	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.files)
-	u.get_obj_stats (xml_files, args.ls, args.filetype, args.verbosity, args.write)
+	u.get_obj_stats (xml_files, args.ls, args.filetype, args.verbosity, args.write, args.print_all_labels)
 
 if __name__ == "__main__":
 	main (sys.argv)
