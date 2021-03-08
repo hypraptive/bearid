@@ -24,7 +24,7 @@ def main (argv) :
 	parser.add_argument ('-t', '--triplets', default=0,
 		help='Number of triplets of un/matched sets. Overides --unmatched and --matched.')
 	parser.add_argument ('chipfile', nargs='+')
-	parser.add_argument ('-o', '--output', default="",
+	parser.add_argument ('-out', '--output', default="",
 		help='Output file basename. Defaults to "part_<date><time>_"')
 	parser.add_argument ('-v', '--verbosity', type=int, default=1,
 		choices=[0, 1, 2, 3], help=argparse.SUPPRESS)
