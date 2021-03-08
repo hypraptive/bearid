@@ -4,6 +4,7 @@ import sys
 import argparse
 import xml_utils as u
 import datetime
+import pdb
 from collections import defaultdict
 
 ##------------------------------------------------------------
@@ -17,7 +18,7 @@ def main (argv) :
 	parser.add_argument ('n', default=5,
 		help='Number of paritions to create. ')
 	parser.add_argument ('files', nargs='+')
-	parser.add_argument ('-o', '--output', default="",
+	parser.add_argument ('-out', '--output', default="",
 		help='Output file basename.')
 	parser.add_argument ('-m', '--mode', type=int, default=0,
 		choices=[0, 1, 2], help='Mode for split chips.  0: shuffle all, then split. 1: split each label evenly. 2: split by label - i.e. each label is only in one fold.')
@@ -28,11 +29,18 @@ def main (argv) :
 	u.set_verbosity (args.verbosity)
 	u.set_argv (argv)
 	u.set_filetype ('chips')
-	verbose = 0
+	# pdb.set_trace ()
+	verbose = args.verbosity;
 	if verbose > 0:
 		print("n: ", args.n)
 		print("output: ", args.output)
 		print("files: ", args.files)
+		if args.mode == 0 :
+			print ("mode 0: splitting after shuffling all...")
+		elif args.mode == 1 :
+			print ("mode 1: splitting each label evenly...")
+		elif args.mode == 2 :
+			print ("mode 2: separting each into different fold ... ")
 
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("%Y%m%d_%H%M")
