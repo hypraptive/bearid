@@ -9,6 +9,7 @@
     - crop the faces to form face chips
 */
 
+#include <dlib/cmd_line_parser.h>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -105,6 +106,10 @@ void add_overlay_circle (
 	int i,j;
 	int y = p.x();
 	int x = p.y();
+	if (x < radius)
+		x = radius;
+	if (y < radius)
+		y = radius;
 	for (i=0; i <= radius; i++)
 	{
 		j = round (sqrt ((float) ((radius*radius) - (i*i))));
@@ -114,6 +119,23 @@ void add_overlay_circle (
 		g_composite_features (x-i,y-j) = color;
 	}
 }
+
+
+//------------------------------------------------------------------------
+//  set negative values to 0.
+//------------------------------------------------------------------------
+void clean_xy (dlib::vector<double, 2l>& part)
+{
+	if (part.x () < 0)
+	{
+		part.x () = 0;
+	}
+	if (part.y () < 0)
+	{
+		part.y () = 0;
+	}
+}
+
 
 //------------------------------------------------------------------------
 // Find Face Chips
@@ -127,6 +149,8 @@ void add_overlay_circle (
 std::vector<matrix<rgb_pixel>> find_chips (
   std::vector<image_dataset_metadata::box>& boxes,
   matrix<rgb_pixel>& img,
+  const float padding,
+std::vector<float> eyes_loc,
   std::string& transform_features,    // features used in transformation
   std::vector<dlib::vector<double,2> >& face_features // for all features
 )
@@ -138,6 +162,9 @@ std::vector<matrix<rgb_pixel>> find_chips (
   const rgb_pixel color_r(255,0,0);
   const rgb_pixel color_g(0,255,0);
   const rgb_pixel color_b(0,0,255);
+  float nose_x=.50, nose_y=.70;
+  float leye_x=eyes_loc[0], leye_y=eyes_loc[1];
+  float reye_x=eyes_loc[2], reye_y=eyes_loc[3];
   std::string bearID;
   //---------------
   for (auto&& b : boxes)  // for each face
@@ -150,14 +177,11 @@ std::vector<matrix<rgb_pixel>> find_chips (
       part[5] = b.parts["reye"];
 
       // chip_details based on get_face_chip_details
-      //const double mean_face_shape_x[] = { 0, 0, 0.65, 0.50, 0, 0.35 };
-      //const double mean_face_shape_y[] = { 0, 0, 0.50, 0.65, 0, 0.50 };
-      const double mean_face_shape_x[] = { 0, 0, 0.62, 0.50, 0, 0.38 };
-      const double mean_face_shape_y[] = { 0, 0, 0.48, 0.70, 0, 0.48 };
+      const double mean_face_shape_x[] = { 0, 0, leye_x, nose_x, 0, reye_x };
+      const double mean_face_shape_y[] = { 0, 0, leye_y, nose_y, 0, reye_y };
       //const double mean_face_shape_x[] = { 0, 0, 0.62, 0.54, 0, 0.38 }; // derrived from HOG image
       //const double mean_face_shape_y[] = { 0, 0, 0.45, 0.62, 0, 0.45 }; // derrived from HOG image
-      //const double padding = 0.0;
-      const double padding = -0.12; // using negative padding so we don't have to adjust mean face shape
+      // double padding = -0.12; // using negative padding so we don't have to adjust mean face shape
       chip_details face_chip_details;
 
       std::vector<dlib::vector<double,2> > from_points, to_points;
@@ -189,6 +213,9 @@ std::vector<matrix<rgb_pixel>> find_chips (
       auto leye = pta(part[2]);
       auto nose = pta(part[3]);
       auto reye = pta(part[5]);
+	  clean_xy (leye);
+	  clean_xy (reye);
+	  clean_xy (nose);
       auto leye_new = leye*chip_x;
       auto nose_new = nose*chip_x;
       nose_new.x() = std::min(nose_new.x(), (double)(g_chip_size*chip_x - g_feature_radius - 1));
@@ -313,41 +340,71 @@ int main(int argc, char** argv) try
     int total_faces = 0;
 	std::string img_root = "/home/data/bears/imageSourceSmall/";
 	std::string face_file;
+	std::string chip_xml;
+	std::string chip_dir;
+	std::vector<float> eyes_loc {.62, .48, .38, .48};
+	double user_padding = -.12;
+	double default_padding = -.12;
 
-	if (argc == 4)
-		{
-			if (strcmp (argv[1], "--root") != 0)
-		{
-			cout << "\nError: unrecognized argument: " << argv[1] << endl;
-			cout << "\nUsage:" << endl;
-			cout << "./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
-			cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
-			return 0;
-		}
-		img_root = argv[2];
-		face_file = argv[3];
-	}
-    else if (argc != 2)
-    {
-			cout << "\nUsage:" << endl;
-        cout << "./bearchip [--root <img_root_dir>] <face_metadata_file>" << endl;
-				cout << "\nAlign and crop bear faces and produce bear chips.\n" << endl;
-        return 0;
-    }
-	else
+	try
 	{
-		if (strcmp (argv[1], "--help") == 0)
-		{
-			cout << "\nAlign and crop bear faces in face.xml to produce bear chips and face_chips.xml." << endl;
-			cout << "\nUsage:" << endl;
-			cout << "\t./bearchip [-root <img_root_dir>] <face_metadata_file>" << endl;
-			cout << "\nExample:" << endl;
-			cout << "\t./bearchip -root /home/bears/images faces.xml\n" << endl;
-			return 0;
-		}
+		command_line_parser parser;
+		parser.add_option("h","Display this help message.");
+		// --root <img_root_path>
+		parser.add_option("root","Strips image root path from chip location.", 1);
+		parser.add_option("padding","Percent padding when generating chip", 1);
+		parser.add_option("output","Name of xml file.", 1);
+		parser.add_option("chipdir","Directory to write out chips", 1);
+		parser.add_option("eyes","eye locations by percents: <l_x> <l_y> <r_x> <r_y>. \ne.g. .62 .45 .38 .45", 4);
+		parser.parse(argc, argv);
+	if (parser.option("h") || (parser.number_of_arguments() == 0))
+	{
+		cout << "\nGenerate chips from face xml file.";
+        cout << "Usage: bearchip [options] <xml_file>\n";
+        parser.print_options();
 
-		face_file = argv[1];
+        return EXIT_SUCCESS;
+    }
+	if (parser.option("chipdir"))
+	{
+		chip_dir = parser.option ("chipdir").argument ();
+		cout << "chip dir set to : " << chip_dir << endl;
 	}
+	if (parser.option("output"))
+	{
+		chip_xml = parser.option ("output").argument ();
+	}
+	if (parser.option("root"))
+	{
+		img_root = get_option (parser, "root", img_root);
+	}
+	if (parser.option("eyes"))
+	{
+		cout << "new location of eyes: "; 
+    	for (unsigned long i : {0, 1, 2, 3})
+		{
+			eyes_loc[i] = atof (parser.option ("eyes").argument(i).c_str());
+			cout << eyes_loc[i] << " ";
+		}
+		cout << endl;
+	}
+	if (parser.option("padding"))
+	{
+		// user_padding = parser.option ("padding").argument();
+		user_padding = get_option (parser, "padding", default_padding);
+		cout << "new padding = " << get_option (parser, "padding", default_padding) << endl;
+	}
+
+	face_file = parser[0];
+	}
+    catch (exception& e)
+    {
+	  // Note that this will catch any cmd_line_parse_error exceptions and print
+	  // the default message.
+		cout << e.what() << endl;
+    }
+    cout << "\nXML face file.... : " << face_file << endl;
+
 	if (!boost::filesystem::exists(face_file))
 	{
 		cout << "\nError opening file " << face_file << ": No such file or directory.\n" << endl;
@@ -391,7 +448,7 @@ int main(int argc, char** argv) try
         std::vector<matrix<rgb_pixel>> faces;
 		std::string transform_features;    // features used in transformation
   		std::vector<image_dataset_metadata::box> boxes = data.images[i].boxes;
-        faces = find_chips (boxes, img, transform_features, face_features);
+        faces = find_chips (boxes, img, user_padding, eyes_loc, transform_features, face_features);
         // cout << "Faces found: " << to_string(faces.size()) << endl;
 		/*  check for more than one face.  shouldn't happen yet */
 		if (faces.size() > 1)
@@ -405,10 +462,13 @@ int main(int argc, char** argv) try
 		// iterate through each face in image
         for (size_t i = 0; i < faces.size(); ++i)
         {
-          std::string img_subdir_file = erase_first_copy (orig_path, img_root); // -> bf/fitz/bf480/IMG123.JPG
-
+		  // /data/bears/imageSource/bf/fitz/bf480/IMG123.JPG  -> bf/fitz/bf480/IMG123.JPG
+          std::string img_subdir_file = erase_first_copy (orig_path, img_root); 
+		  if (!chip_dir.empty ())
+		  {
+		      img_subdir_file = chip_dir + "/" + img_subdir_file;
+		  }
           boost::filesystem::path p_img_subdir_file (img_subdir_file); // bf/fitz/bf_480/IMG123.JPG
-
 		  boost::filesystem::path p_img_subdir = p_img_subdir_file.parent_path (); // bf/fitz/bf_480
 		  boost::filesystem::create_directories (p_img_subdir.string());
           std::string chip_file = p_img_subdir_file.stem().string() + "_chip_" + to_string(i) + ".jpg";
@@ -429,15 +489,24 @@ int main(int argc, char** argv) try
           save_jpeg(faces[i], rel_pathed_chip_file, 95);
         }
     }
-	boost::filesystem::path xml_file (face_file);
 	std::string chips_jpg_file, chips_xml_file;
-	if (xml_file.has_parent_path ()) 
+	if (chip_xml.empty ())
 	{
-		chips_jpg_file = xml_file.parent_path().string () + "/";
-		chips_xml_file = xml_file.parent_path().string () + "/";
+		boost::filesystem::path xml_file (face_file);
+		if (xml_file.has_parent_path ()) 
+		{
+			chips_jpg_file = xml_file.parent_path().string () + "/";
+			chips_xml_file = xml_file.parent_path().string () + "/";
+		}
+		chips_jpg_file += xml_file.stem().string() + "_chip_composite.jpg";
+		chips_xml_file += xml_file.stem().string() + "_chips.xml";
 	}
-	chips_jpg_file += xml_file.stem().string() + "_chip_composite.jpg";
-	chips_xml_file += xml_file.stem().string() + "_chips.xml";
+	else
+	{
+		boost::filesystem::path xml_file (chip_xml);
+		chips_jpg_file = xml_file.parent_path().string () + "/" + xml_file.stem().string() + "_composite.jpg";
+		chips_xml_file = chip_xml;
+	}
     save_jpeg(g_composite_features, chips_jpg_file, 95);
     cout << "Total faces found: " << total_faces << endl;
 
