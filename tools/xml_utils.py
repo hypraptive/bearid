@@ -22,6 +22,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import pandas
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.manifold import TSNE
 from PIL import Image
@@ -515,34 +516,41 @@ def load_file (file):
 ##  load xml into dictionary of <string><element_list>
 ##  ex:  d["b-032"] = ["<Element 'chip' at 0x123,..,<Element 'chip' at 0x43]
 ##       d["b-747"] = ["<Element 'chip' at 0x987,..,<Element 'chip' at 0x65]
-##  returns list of images
+##  returns list of filenames.  if filename_type == 'source', return 
+##     chip source filenames
 ##------------------------------------------------------------
-def load_objs (root, d_objs, filetype) :
+def load_objs (root, d_objs, filetype, filename_type='file') :
 	## print "loading chips"
 
-	objects = []
+	obj_filenames = []
 	global g_stats_few
 	global g_stats_many
 	if filetype == 'chips' :
 		for chip in root.findall ('./chips/chip'):
 			label_list = chip.findall ('label')
-			chipfile = chip.attrib.get ('file')
+			filename = chip.attrib.get ('file')
 			if len (label_list) < 1 :
-				g_stats_few.append (chipfile)
+				g_stats_few.append (filename)
 				print("no labels: ", label_list)
 				continue
 			if len (label_list) > 1 :
-				g_stats_many.append (chipfile)
+				g_stats_many.append (filename)
 				print("too many labels: ", label_list)
 				continue
 			label = label_list[0].text
-			objects.append (chipfile)
+			if filename_type == 'source' :
+				source_filename = get_chip_source_file (chip)
+				obj_filenames.append (source_filename)
+			else :
+				obj_filenames.append (filename)
 			d_objs[label].append(chip)
 	elif filetype == 'images' :
 		# pdb.set_trace ()
+		label = ''
 		for image in root.findall ('./images/image'):
 			facefile = image.attrib.get ('file')
-			objects.append (facefile)
+			obj_filenames.append (facefile)
+			d_objs[label].append(image)
 	elif filetype == 'faces' :
 		# pdb.set_trace ()
 		multi_faces = defaultdict(lambda:0)
@@ -555,13 +563,17 @@ def load_objs (root, d_objs, filetype) :
 				continue
 			if len (box) > 1 :
 				g_stats_many.append (facefile)
-				print (len (box), " boxes (faces) in file ", facefile)
+				print (len (box), "boxes (faces) in file ", facefile)
 				continue
 			label_list = box[0].findall ('label')
+			if len (label_list) == 0:
+				pdb.set_trace ()
+				print ('file', facefile, 'is missing image label')
+				continue
 			label = label_list[0].text
-			objects.append (facefile)
+			obj_filenames.append (facefile)
 			d_objs[label].append(image)
-		print ('\n    face count:')
+		print ('\tface count:')
 		for key,val in multi_faces.items():
 			print ('\t',key, ':', val)
 	elif filetype == 'pairs' :
@@ -579,7 +591,7 @@ def load_objs (root, d_objs, filetype) :
 				print('error: labels should match: ', labels)
 			matched_cnt += 1
 			d_objs[matched].append(labels[0])
-		objects.append (d_objs[matched])
+		obj_filenames.append (d_objs[matched])
 		for pair in root.findall ('./pairs/pair_unmatched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
@@ -589,7 +601,7 @@ def load_objs (root, d_objs, filetype) :
 				print('error: labels should not match: ', labels)
 			unmatched_cnt += 1
 			d_objs[unmatched].append(labels)
-		objects.append (d_objs[unmatched])
+		obj_filenames.append (d_objs[unmatched])
 	elif filetype == 'embeddings' :
 		for embedding in root.findall ('./embeddings/embedding'):    
 			embed_val = embedding.find ('./embed_val')
@@ -599,14 +611,59 @@ def load_objs (root, d_objs, filetype) :
 			d_objs[label.text].append(embed_float)
 	else :
 		print('Error: unknown filetype.  Expected one of "faces" or "chips" or "pairs".')
-	return objects
+	return obj_filenames
 
 
 ##------------------------------------------------------------
 ##
 ##------------------------------------------------------------
 
+##------------------------------------------------------------
+##  get_count_list
+##------------------------------------------------------------
+def get_count_list (counts_file) :
+	nums = []
+	with open (counts_file) as fp:
+		counts = fp.readlines ()
+		for count_str in counts:
+			if not count_str.strip() :
+				continue
+			count = int (count_str)
+			nums.append (count)
+	return nums
 
+##------------------------------------------------------------
+##  Generate a new xml file with matching count of labels as
+##    specified in count list.  Used to create new data set.
+##------------------------------------------------------------
+def xml_match_cnt (xml_files, counts_file, xml_out, filetype) :
+	objs_d = defaultdict(list)
+	obj_files = load_objs_from_files (xml_files, objs_d, filetype)
+	if len (objs_d) == 0 :
+		return
+	match = []
+	counts = get_count_list (counts_file)
+	counts.sort (reverse=True)
+	found = False
+	for count in counts:
+		print ("... looking for ", count, "images.")
+		random.shuffle (list(objs_d.items()))
+		for label, objs in list(objs_d.items()):
+			found = False
+			if len (objs) < count :
+				print ("...... label", label, "too few.")
+				continue
+			found = True
+			print ("...... label", label, "matches at ", len (objs), ", needed ", count)
+			random.shuffle (objs)
+			match.extend (objs[:count])
+			objs_d.pop(label)
+			break
+		# here if unable to find enough images for current count
+		if not found :
+			print ("*** Error: unable to find match for ", count, " images.")
+	write_xml_file (xml_out, match, filetype)
+	print ("... wrote xml to file: ", xml_out)
 
 ##------------------------------------------------------------
 ##  print dictionary
@@ -623,22 +680,25 @@ def print_dict (chips_d) :
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, filetype="chips") :
+def generate_partitions (files, x, y, output, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, filetype="chips", day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 	# detect if chips file or faces file
 
 	chips_d = defaultdict(list)
 	load_objs_from_files (files, chips_d, filetype)
-	chunks = partition_chips (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype)
+	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
+	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
 	# pdb.set_trace ()
 	file_x = output + "_" + str(x) + ".xml"
 	file_y = output + "_" + str(y) + ".xml"
 	file_small_img = file_unused = None
-	if len (chunks[g_unused]) > 0 :
-		file_unused = output + "_unused" + ".xml"
-	if len (chunks[g_small_img]) > 0 :
-		file_small_img = output + "_small_faceMeta" + ".xml"
+	if len (chunks) > g_unused :
+		if len (chunks[g_unused]) > 0 :
+			file_unused = output + "_unused" + ".xml"
+	if len (chunks) > g_small_img :
+		if len (chunks[g_small_img]) > 0 :
+			file_small_img = output + "_small_faceMeta" + ".xml"
 	filenames = [file_x, file_y, file_unused, file_small_img]
 	generate_partition_files (chunks, filenames, filetype)
 
@@ -664,16 +724,274 @@ def make_images_from_chips (chips) :
 	return faces
 
 ##------------------------------------------------------------
-##  partition chips into x and y percent
+##  returns true if includig new addition will get closer to nom_count
 ##------------------------------------------------------------
-def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, filetype="chips") :
-	# print "partitioning chips into: ", x, " ", y
+def new_row_closer_to_nom (nom_count, addition, cur_count, max_count) :
+	nom_diff = abs (nom_count - cur_count)
+	new_diff = abs (nom_count - (cur_count + addition))
+	if cur_count + addition > max_count :
+		return False
+	if new_diff < nom_diff :
+		return True
+
+##------------------------------------------------------------
+#  given group_by pandas series, return list of list
+##------------------------------------------------------------
+def	create_group_from_indices (groups, indices) :
 	# pdb.set_trace ()
+	subgroup_data = []
+	for i in indices : 
+		row_tuple = groups.index[i] 
+		row = [row_tuple[0], row_tuple[1]]
+		subgroup_data.append (row)
+	return subgroup_data
+
+##------------------------------------------------------------
+##  given panda series with label-date group counts, split rows to match
+##  x and y partitions. return list of df row indices 
+##------------------------------------------------------------
+def partition_df_rows (grouped, num_images, x, y) :
+	min_count, nom_count, max_count = get_min_nom_max (num_images, x, y, .5)
+	print ('min:', min_count, '\tnom:', nom_count, '\tmax:', max_count)
+	y_count = x_count = 0
+	x_done = False
+	group_x = []
+	group_y = []
+	# keep adding to x until above min count
+	for i in range (len (grouped)) :
+		row_count = grouped[i]
+		if x_done :
+			y_count += row_count
+			group_y.append (i)
+			continue
+		if new_row_closer_to_nom (nom_count, row_count, x_count, max_count) :
+			x_count += row_count
+			group_x.append (i)
+		else :
+			y_count += row_count
+			group_y.append (i)
+		if x_count >= nom_count :
+			x_done = True
+	print ('splitting', num_images, 'images into ratios of', x, 'and', y)
+	print ('partition x:', x_count, 'images in ', len (group_x), 'groups.')
+	print ('partition y:', y_count, 'images in ', len (group_y), 'groups.')
+	return group_x, group_y
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_min_nom_max (count, x, y, margin=.5) :
+	val_nom = int (count * x / 100)
+	val_min = int (count * (x-margin) / 100)
+	val_max = int (count * (x+margin) / 100)
+	return val_min, val_nom, val_max
+	
+##------------------------------------------------------------
+##  image = df.loc[i]['IMAGE']
+##  given grouped dataframe, extract image names
+##  e.g. 
+##               IMAGE     LABEL      DATE TEST_TRAIN            DATE_TIME
+## 637  imageSource...  bc_steve  20150824      train  2015:08:24 14:31:05
+## 638  imageSource...  bc_steve  20150824       test  2015:08:24 14:31:06
+## 639  imageSource...  bc_steve  20150824      train  2015:08:24 14:31:33
+##------------------------------------------------------------
+def	get_images_from_group (groups, selected_rows) :
+	images = []
+	pdb.set_trace ()
+	for label_date, group in groups:
+		for index, row in group.iterrows () :
+			image = row['IMAGE']
+			images.append (image)
+	return images
+
+	# label = label_date[0]
+	# date = label_date[1]
+	# groups.get_group ((label, date))
+
+
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def images_from_label_date (groups, label_dates) :
+	images = []
+	for label_date in label_dates :
+		label = label_date[0]
+		date = label_date[1]
+		# print ('label_date :', label_date)
+		# print ('label      :', label)
+		# print ('date       :', date)
+		# continue
+		group = groups.get_group ((label, date))
+		for index, row in group.iterrows () :
+			image = row['IMAGE']
+			images.append (image)
+	pdb.set_trace ()
+	return images
+
+##------------------------------------------------------------
+##  given indices into table of (label, date), count
+##    return list of (label, date) at indices
+##------------------------------------------------------------
+def get_label_date_from_indices (group_count, indices) :
+	label_dates = []
+	for group_index in indices :
+		label_date = group_count.index[group_index]
+		label_dates.append (label_date)
+	return label_dates
+
+##------------------------------------------------------------
+#  same?? as def xml_split_by_list (orig_file, new_files, output_file, filetype='faces') :
+##------------------------------------------------------------
+def split_chips_by_images (chips_d, images_x) :
+	return 5
+
+
+##------------------------------------------------------------
+# given dataframe with column IMAGE, return list of images
+##------------------------------------------------------------
+def	get_image_list_from_df (df, img_column) :
+	vals = []
+	for col_name, data in df.items () :
+		if col_name == img_column :
+			for i in range (len (data)) :
+				val = data[i] 
+				vals.append (val)
+				# pdb.set_trace ()
+			return vals
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def test_utils () :
+	pdb.set_trace ()
+	print ('hello world!')
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+
+##------------------------------------------------------------
+# partition by groups
+# if chips_d is None, then input was csv
+# 	1. Read CSV
+# 	2. Create grouping by label, date, image count
+# 	3. partition into x, y
+# 	4. generate list of label-dates for each group
+# 	5. use label-dates list of label-dates generate two new xml
+# 	6. IMAGE;LABEL;DATE;TEST_TRAIN;DATE_TIME
+# else 
+#	convert chips_d to chips_table
+#	read CVS to cvs_df
+#   select label, date from join chips with csv_df
+#   A2
+#	A3
+#	A4
+# 	use list of label-dates to generate two new xml
+#   
+##------------------------------------------------------------
+def partition_files_by_group (obj_filenames, x, y, csv_filename) :
+	# pdb.set_trace ()
+	local_path = '/home/data/bears/'
+	filenames = [f.replace (local_path, '') for f in obj_filenames]
+	df_all = pandas.read_csv (csv_filename, sep=';')
+	df_input = pandas.DataFrame (filenames, columns=['IMAGE'])
+	# num_input = df.shape[0]
+	num_input = len (obj_filenames)
+	# get table from list of images
+	df_input_table = pandas.merge (df_all, df_input, on=['IMAGE'], how='inner')
+	groups_label_date = df_input_table.groupby (['LABEL', 'DATE'])
+	# groups_label_date.get_group (('bc_kwatse', 20110830))
+
+	# instead of creating series and iterating though, randomize
+	#   group, then iterate through groups (and count, no need to
+	#   get size first), then do group partition
+	group_count = groups_label_date.size () 
+	group_count_rand = group_count.sample (frac=1) # randomize order
+	# partition - looking for something like [1,2,3,7 ] [4,5,6,8,9,10]
+	group_idx_x, group_idx_y = partition_df_rows (group_count_rand, num_input, 
+		int (x), int (y))
+	# create new series from indices
+	data_x = create_group_from_indices (group_count_rand, group_idx_x)
+	data_y = create_group_from_indices (group_count_rand, group_idx_y)
+	df_group_x = pandas.DataFrame (data_x, columns=['LABEL', 'DATE'])
+	df_group_y = pandas.DataFrame (data_y, columns=['LABEL', 'DATE'])
+
+	# create new dataframe via joins
+	group_x = pandas.merge (df_input_table, df_group_x, on=['LABEL', 'DATE'], how='inner')
+	group_y = pandas.merge (df_input_table, df_group_y, on=['LABEL', 'DATE'], how='inner')
+	# write dataframes images to list
+	images_x_list = get_image_list_from_df (group_x, 'IMAGE')
+	images_y_list = get_image_list_from_df (group_y, 'IMAGE')
+	localized_images_x_list = [local_path+s for s in images_x_list]
+	localized_images_y_list = [local_path+s for s in images_y_list]
+	return localized_images_x_list, localized_images_y_list
+
+#	matched_filename = 'matched_' + output_filename + '.xml'
+#	unmatched_filename = 'unmatched_' + output_filename + '.xml'
+#	write_xml_file (matched_filename, matched_objs, filetype)
+#	write_xml_file (unmatched_filename, unmatched_objs, filetype)
+
+## ?? 
+	# convert indices into list of label_date
+	# label_dates_x = get_label_date_from_indices (group_count_rand, group_idx_x)
+	# label_dates_y = get_label_date_from_indices (group_count_rand, group_idx_y)
+## ?? 
+
+	# convert label_date to list images
+	# images_x = images_from_label_date (groups_label_date, label_dates_x)
+	# images_y = images_from_label_date (groups_label_date, label_dates_y)
+
+	# pdb.set_trace ()
+	## TODO: extract chips by image name
+	# if objs_d != None :
+	# 	chunk_x, chunk_y = split_chips_by_images (objs_d images_x)
+	# return chunk_x, chunk_y
+
+##------------------------------------------------------------
+##  partition chips into x and y percent
+##  will do one of:
+##	- split by label, ignoring dates
+##	- split across label, ignoring dates
+##	- split by label afer grouping images by date for each label
+##	- split across all labels afer grouping images by date for each label
+##
+##------------------------------------------------------------
+def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, filetype="chips", day_grouping=False, csv_filename=None) :
+	# print "partitioning chips into: ", x, " ", y
 	chunks = []
+	objs_d = defaultdict(list)
+	if day_grouping : ##  
+		if shuffle == False :
+			print ("Warning: ignoring unsupported feature to split by label when grouped by day.")
+		# use filenames from chip source since only image names are in db
+		# get partitions by filenames
+		filename_type = 'file'
+		if filetype == 'chips' :
+			filename_type = 'source'
+		obj_filenames = load_objs_from_files (filenames, objs_d, filetype, filename_type)
+		files_x, files_y = partition_files_by_group (obj_filenames, x, y, csv_filename)
+		objs_x, objs_y = obj_split_by_files (objs_d, files_x, filename_type)
+		chunks.append (objs_x)
+		chunks.append (objs_y)
+		return chunks
+	# pdb.set_trace ()
+	chip_files = load_objs_from_files (filenames, objs_d, filetype)
+	chunks_few = []
+	labels_few = []
+	if img_cnt_min != 0 :
+		for label, chips in list(objs_d.items()):
+			# remove chips below size minimum
+			if len (chips) < img_cnt_min :
+				chunks_few.extend (chips)
+				labels_few.append (label)
+				objs_d[label] = []
+		if len (labels_few) > 0 :
+			print(len (labels_few), 'unused labels, each with less than ', img_cnt_min, 'images')
+			print ('labels:',labels_few)
+		else :
+			print('All labels used.')
+
 	if (shuffle == True) :  ## concat all labels, then split
 		## TODO check for image_size_min
 		all_chips=[]
-		for label, chips in list(chips_d.items()):
+		for label, chips in list(objs_d.items()):
 			all_chips.extend (chips)
 		if image_size_min != 0 :
 			small_chips = remove_tiny_chips (all_chips, image_size_min)
@@ -686,22 +1004,20 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		print("shuffled partition of ", y, ", len : ", len (chunks[1]))
 		print("shuffled total of ", len (chunks[0]) + len (chunks[1]))
 		# print "chips count: ", len (all_chips)
+		if len (labels_few) > 0 :
+			chunks.append (chunks_few)
+		else :
+			chunks.append ([])
 	else :				## split per label, then combine into chunks
 		# pdb.set_trace ()
 		chunks_x = []
 		chunks_y = []
-		chunks_few = []
-		labels_few = []
 		small_images_chips = []
 		chip_cnt = 0
-		for label, chips in list(chips_d.items()):
+		for label, chips in list(objs_d.items()):
 			# remove chips below size minimum
 			if image_size_min != 0 :
 				small_images_chips.extend (remove_tiny_chips (chips, image_size_min))
-			if len (chips) < img_cnt_min :
-				chunks_few.extend (chips)
-				labels_few.append (label)
-				continue
 			random.shuffle (chips)
 			chip_cnt += len (chips)
 			partition = int(round(len(chips) * float (x) / float (100)))
@@ -716,10 +1032,7 @@ def partition_chips (chips_d, x, y, shuffle=True, img_cnt_min=0, test_minimum=0,
 		print()
 		if len (labels_few) > 0 :
 			chunks.append (chunks_few)
-			print(len (labels_few), 'unused labels, each with less than ', img_cnt_min, 'images')
-			# print labels_few
 		else :
-			print('All labels used.')
 			chunks.append ([])
 		if len (small_images_chips) :
 			# files_small = [chip.attrib.get ('file') for chip in small_images_chips]
@@ -861,8 +1174,8 @@ def generate_partition_files (chunks, filenames, filetype="chips") :
 	indent (root_y)
 	tree_x = ET.ElementTree (root_x)
 	tree_y = ET.ElementTree (root_y)
-	tree_x.write (file_x)
-	tree_y.write (file_y)
+	tree_x.write (file_x, encoding='ISO-8859-1')
+	tree_y.write (file_y, encoding='ISO-8859-1')
 	print("\nGenerated partition files: \n\t", file_x, "\n\t", file_y)
 	print("")
 
@@ -917,6 +1230,7 @@ def create_new_tree_w_element (filetype="chips") :
 	r_c = ET.SubElement (r, 'comment').text = 'generated by ' + g_exec_name
 	curtime = datetime.datetime.now().strftime("%Y%m%d:%H%M")
 	ET.SubElement (r, 'date').text = filetype + ' file generated at ' + curtime
+	ET.SubElement (r, 'cwd').text = os.getcwd ()
 	ET.SubElement (r, 'command').text = get_argv ()
 	ET.SubElement (r, 'filetype').text = get_filetype ()
 	if filetype in ['faces', 'images'] :
@@ -986,19 +1300,16 @@ def generate_xml_file_list (inputfiles):
 ##------------------------------------------------------------
 ##   return flattened list of all image files (jpg, jpeg, png)
 ##------------------------------------------------------------
-def get_dirs_images (inputdirs):
+def get_dirs_images (filenames, exts=['.jpg', '.jpeg', '.png']):
 	imgs = []
-	print ('getting images for : ', inputdirs)
-	for inputdir in inputdirs :
-		jpgs = list (Path(inputdir).rglob ("*.[jJ][pP][gG]"))
-		jpegs = list (Path(inputdir).rglob ("*.[jJ][pP][eE][gG]"))
-		png = list (Path(inputdir).rglob ("*.[pP][nN][gG]"))
-		imgs.extend (jpgs)
-		imgs.extend (jpegs)
-		imgs.extend (png)
-		# print ('\t jpgs: ', jpgs)
-		# print ('\t jpegs: ', jpegs)
-		# print ('\t png: ', png)
+	# print ('getting images for : ', filenames)
+	for filename in filenames :
+		if filename[0]=='.' :
+			continue
+		for ext in exts:
+			if filename.lower().endswith (ext.lower()) :
+				imgs.append (filename)
+				break
 	return imgs
 
 ##------------------------------------------------------------
@@ -1009,17 +1320,17 @@ def get_dirs_images (inputdirs):
 ##       d["b-747"] = ["<Element 'chip' at 0x987,..,<Element 'chip' at 0x65]
 ##  return list of files in metadata
 ##------------------------------------------------------------
-def load_objs_from_files (filenames, objs_d, filetype="chips"):
+def load_objs_from_files (filenames, objs_d, filetype="chips", filename_type='file'):
 	objfiles = []
 	# print "in load_objs_from_files"
 	# pdb.set_trace ()
 	## load all chips into objs_d
 	# print("\nLoading", filetype, "for files: ")
 	for file in filenames:
-		print("\t", file)
+		print("\n", file)
 		# pdb.set_trace()
 		root, tree = load_file (file)
-		objfiles.extend (load_objs (root, objs_d, filetype))
+		objfiles.extend (load_objs (root, objs_d, filetype, filename_type))
 	# pdb.set_trace()
 	return objfiles
 
@@ -1497,6 +1808,7 @@ def get_dist_hist (noses, band_width=0):
 ##------------------------------------------------------------
 ##  given dict of chips, return eyes and list of noses
 ##------------------------------------------------------------
+# def get_face_stats (objs_d, verbose=1, filetype='chips'):
 def get_chip_face_stats (chips_d, verbose=1):
 	x_list = []
 	y_list = []
@@ -1537,7 +1849,7 @@ def get_chip_face_stats (chips_d, verbose=1):
 ##------------------------------------------------------------
 ##  print pairs stats
 ##------------------------------------------------------------
-def print_pairs_stats (objs_d) :
+def print_pairs_stats (objs_d, verbosity) :
 	matched = 0
 	unmatched = 1
 	matched_list = objs_d[matched]
@@ -1549,19 +1861,21 @@ def print_pairs_stats (objs_d) :
 	unmatched_labels = [(label[0].text, label[1].text) for label in unmatched_list]
 
 	flatten_unmatched = [label for tupl in unmatched_labels for label in tupl]
+	if verbosity > 1 :
+		print('------------------------')
+		print('--- matched stats:--- ')
+		print('------------------------')
+		for i in sorted (set (all_labels)):
+			print(i, '\t,\t', matched_labels.count (i))
 	print('------------------------')
-	print('--- matched stats:--- ')
-	print('------------------------')
-	for i in sorted (set (all_labels)):
-		print(i, '\t,\t', matched_labels.count (i))
-	print('------------------------')
-	print('total : ', len (matched_labels))
+	print('  matched pairs: ', len (matched_labels))
 
-	print('------------------------')
-	print('--- unmatched stats:--- ')
-	print('------------------------')
-	for i in sorted (set (all_labels)):
-		print(i, '\t,\t', flatten_unmatched.count (i))
+	if verbosity > 1 :
+		print('------------------------')
+		print('--- unmatched stats:--- ')
+		print('------------------------')
+		for i in sorted (set (all_labels)):
+			print(i, '\t,\t', flatten_unmatched.count (i))
 	print('unmatched pairs: ', len (unmatched_labels))
 
 ##------------------------------------------------------------
@@ -1613,7 +1927,7 @@ def print_imgs_stats (img_files) :
 ##------------------------------------------------------------
 ##  return label stats in file
 ##------------------------------------------------------------
-def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, write_stats=False):
+def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, write_stats=False, print_all=False):
 	objs_d = defaultdict(list)
 	objfiles = load_objs_from_files (filenames, objs_d, filetype)
 	# pdb.set_trace ()
@@ -1621,16 +1935,19 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 		print_imgs_stats (objfiles)
 		return
 	if filetype == "pairs" :
-		print_pairs_stats (objs_d)
+		print_pairs_stats (objs_d, verbosity)
 		return
 	print('')
 	all_objs = sorted(objs_d.items())
 	img_cnt_per_label = [len (objs) for key, objs in all_objs]
 	obj_count = sum (img_cnt_per_label)
-	if get_verbosity () > 1 :
+	if verbosity > 1:
+		for key, objs in all_objs :
+			print (key, ':', len (objs))
+	if print_all :
 		for label in sorted (set (all_labels)):
 			if get_verbosity () > 2 or len (objs_d[label]) > 0 :
-				print(label, '	,	', len (objs_d[label]))
+				print(label, '	:', len (objs_d[label]))
 	u_combos = 0
 	chips_count_list = img_cnt_per_label
 	diff_chip_count  = obj_count
@@ -1824,7 +2141,8 @@ def gen_image_csv_str (image_tag):
 	csv_str += ';' + str (image_size)
 	csv_str += ';' + trim_path_start (photo_source, 5)
 	csv_str += ';' + str (face_size)
-	return csv_str
+	csv_header = 'IMAGE;LABEL;DATE;YEAR;MONTH;DAY;TIME;SIZE;PHOTO_SOURCE;FACE_SIZE'
+	return csv_str, csv_header
 
 ##------------------------------------------------------------
 ##  return string with content:
@@ -1847,7 +2165,8 @@ def gen_svm_csv_str (image_tag):
 	csv_str += ';' + image_label
 	csv_str += ';' + truth_label
 	csv_str += ';' + match
-	return csv_str
+	csv_header = 'IMAGE;PREDICT;TRUTH_LABEL;MATCH'
+	return csv_str, csv_header
 
 ##------------------------------------------------------------
 ##  return string with content:
@@ -1858,7 +2177,7 @@ def gen_chip_csv_str (chip_tag):
 	image_file = chip_tag.attrib.get ('file')
 	image_label = get_obj_label_text (chip_tag)
 	image_size = get_image_size (image_file)
-	orig_file = get_chip_source (chip_tag)
+	orig_file = get_chip_source_file (chip_tag)
 	nose_x, nose_y = get_nose_xy (chip_tag)
 	if get_verbosity () > 1 :
 		print ('file      : ', image_file)
@@ -1874,7 +2193,8 @@ def gen_chip_csv_str (chip_tag):
 	csv_str += ';' + str (nose_x) + ' ' + str (nose_y)
 	csv_str += ';' + str (nose_x)
 	csv_str += ';' + str (nose_y)
-	return csv_str
+	csv_header = 'IMAGE;LABEL;SIZE;ORIG_IMAGE;NOSE_XY;NOSE_X;NOSE_Y'
+	return csv_str, csv_header
 
 ##------------------------------------------------------------
 ##  return string with content:
@@ -1900,7 +2220,8 @@ def gen_derived_image_csv_str (image_tag):
 	csv_str += ';' + str (image_size)
 	csv_str += ';' + trim_path_start (orig_image, 5)
 	csv_str += ';' + str (face_size)
-	return csv_str
+	csv_header = 'IMAGE;LABEL;SIZE_RESIZED;ORIG_IMAGE;FACE_SIZE_RESIZED'
+	return csv_str, csv_header
 
 ##------------------------------------------------------------
 ##  write csv file of image info containing:
@@ -1918,20 +2239,27 @@ def write_image_info_csv (filenames, outfile, filetype):
 	# images, derived_image: images/image
 	# chips: chips/chip
 	# pdb.set_trace ()
+	header = ''
+	first = True
 	for label, tags in list(objs_d.items ()) :
 		for tag in tags:
 			# pdb.set_trace ()
 			if filetype == 'faces' :
-				image_csv = gen_image_csv_str (tag)
+				image_csv, csv_header = gen_image_csv_str (tag)
 			elif filetype == 'derived_faces' :
-				image_csv = gen_derived_image_csv_str (tag)
+				image_csv, csv_header = gen_derived_image_csv_str (tag)
 			elif filetype == 'chips' :
-				image_csv = gen_chip_csv_str (tag)
+				image_csv, csv_header = gen_chip_csv_str (tag)
 			elif filetype == 'svm' :
-				image_csv = gen_svm_csv_str (tag)
+				image_csv, csv_header = gen_svm_csv_str (tag)
+			if first :
+				csv_fp.write (csv_header + '\n')
+				first = False
 			csv_fp.write (image_csv + '\n')
 	csv_fp.close ()
 	print("... generated file:", outfile)
+	if len (csv_header) :
+		print("... header: ", csv_header)
 
 ##------------------------------------------------------------
 ## write html of images grouped by bear, grouped by date, 
@@ -1967,14 +2295,34 @@ def html_same_date_from_csv (csv_file, html_outfile, delim=';') :
 		html_fp.close ()
 		print ("... wrote html to file: ", html_outfile)
 	
+##------------------------------------------------------------
+## write html of images in file
+##
+# resulting string for each image:
+# <img src="/home/data/bears/imageSource/britishColumbia/melanie_20170828/bc_beatrice/IMG_5056.JPG"
+#    width"200" height="300" style="border:5px solid green;" alt="beatrice" >
+##------------------------------------------------------------
+def html_images (text_file, html_outfile) :
+	html_fp = open (html_outfile, "w")
+	with open (text_file) as fp:
+		img_files = fp.readlines ()
+		border_color = 'green'
+		for img_file in img_files:
+			if not img_file.strip() :
+				continue
+			img_tag = '<img src="' + img_file.strip () + '" '
+			img_tag += 'style="border:5px solid ' + border_color + '; max-width:250px; max-height:250px;" >\n'
+			html_fp.write (img_tag)
+	html_fp.close ()
+	print ("... wrote html to file: ", html_outfile)
 		
 ##------------------------------------------------------------
 ##
 ##------------------------------------------------------------
 def print_faces_stats (write_unused_images) :
 	print("-----------------------------")
-	print("....files with no faces      : ", len (g_stats_few))
-	print("....files with multiple faces: ", len (g_stats_many))
+	print("....# files with no faces      : ", len (g_stats_few))
+	print("....# files with multiple faces: ", len (g_stats_many))
 	# pdb.set_trace ()
 	if write_unused_images:
 		if len (g_stats_few) :
@@ -2025,16 +2373,21 @@ def create_imgs_xml (img_list, output_file) :
 ##------------------------------------------------------------
 ##  return images files in (sub)directories
 ##------------------------------------------------------------
-def get_img_files (filenames, abs_path=False) :
+def get_img_files (filenames, abs_path=True) :
+	# pdb.set_trace ()
+	# print ('getting images for', filenames)
 	img_files = []
 	pathed_dirs = []
 	for filename in filenames :
 		if abs_path :
 			filename = os.path.abspath (filename)
-		if os.path.isdir (filename) :
-			img_files.extend (get_dirs_images ([filename]))
-		else :
-			img_files.append (filename)
+		for root, dirs, files in os.walk (filename) :
+			pathed_dirs = [os.path.join (root, dir) for dir in dirs]
+			get_img_files (pathed_dirs)
+			matched_imgs = get_dirs_images (files)
+			pathed_imgs = [os.path.join (root, img) for img in matched_imgs]
+			# pdb.set_trace ()
+			img_files.extend (pathed_imgs)
 	return img_files
 
 ##------------------------------------------------------------
@@ -2114,10 +2467,13 @@ def get_truth_label (filename) :
 	return label
 
 ##------------------------------------------------------------
+##  given chip tag, return name of source file. 
 ##------------------------------------------------------------
-def get_chip_source (chip_tag) :
+def get_chip_source_file (chip_tag) :
 	# pdb.set_trace ()
 	source_tag = chip_tag.find ('source')
+	if source_tag is None:
+		return ''
 	source_file = source_tag.attrib.get ('file')
 	return source_file
 
@@ -2255,13 +2611,16 @@ def xml_to_list (xml_file, filetype='faces') :
 	return img_files
 
 ##------------------------------------------------------------
-##  find_files_from_list - return list of all matched files (not obj)
-##     using pattern from str_list.  TODO: can expand to use regex.
+##  find_files_from_patterns - return list of all matched files (not obj)
+##     using pattern from str_list.  
+##	NOTE: pattern will match substring of filename, not only full strings
+##	   e.g.  pattern bc_n will match bc_neana and bc_no-tail
+##	   TODO: can expand to use regex.
 ##------------------------------------------------------------
-def find_files_from_list (filenames, string_list, filetype='faces') :
+def find_files_from_patterns (filenames, patterns, filetype='faces') :
 	matched  = []
 	for filename in filenames :
-		for string in string_list:
+		for string in patterns:
 			# import re
 			# match = re.search (string, filename)
 			# if match :
@@ -2270,28 +2629,80 @@ def find_files_from_list (filenames, string_list, filetype='faces') :
 	return matched
 
 ##------------------------------------------------------------
-##  split_objs_by_files - return list of matched and unmatched
-##     objs given filename.
+#	given xmls, write out filenames for all objects
 ##------------------------------------------------------------
-def split_objs_by_files (xml_file, string_list, output_filename, filetype='faces') :
+def xml_to_files (xml_files, outfile, filetype, filename_type='file') :
 	objs_d = defaultdict(list)
-	filenames = load_objs_from_files (orig_file, objs_d, filetype)
-	matched_files = find_files_from_list (filenames, string_list)
+	# pdb.set_trace ()
+	source_filenames = load_objs_from_files (xml_files, objs_d, filetype, filename_type)
+	outfile_fp = open (outfile, "w")
+	for filename in source_filenames :
+		outfile_fp.write (filename + '\n')
+	outfile_fp.close ()
+
+##------------------------------------------------------------
+##  xml_split_by_files - write matched and unmatched
+##     xml files given file of strings for matching 
+##------------------------------------------------------------
+def	xml_split_by_files (xml_files, split_file, outfile, filetype='faces') :
+	objs_d = defaultdict(list)
+	source_filenames = load_objs_from_files (xml_files, objs_d, filetype)
+	# pdb.set_trace ()
+	with open (split_file, 'r') as fp:
+		filenames_raw = fp.readlines ()
+	filenames = [filename.strip() for filename in filenames_raw]
+	filename_type = 'file'
+	if filetype == 'chips' :
+		filename_type = 'source'
+	matched_objs, unmatched_objs = obj_split_by_files (objs_d, filenames, filename_type)
+	matched_filename = outfile + '_matched' + '.xml'
+	unmatched_filename = outfile + '_unmatched' + '.xml'
+	write_xml_file (matched_filename, matched_objs, filetype)
+	write_xml_file (unmatched_filename, unmatched_objs, filetype)
+	print('unmatched', filetype, 'written to :', unmatched_filename)
+	print('  matched', filetype, 'written to :', matched_filename)
+
+##------------------------------------------------------------
+##  xml_split_by_xml - write matched and unmatched
+##     	xml given xml file for matching.  filetype of two
+##  	input xml must be the same.
+##------------------------------------------------------------
+def	xml_split_by_xml (xml_file, split_xml_file, outfile, filetype='faces') :
+	objs_d = defaultdict(list)
+	split_filenames = load_objs_from_files (split_xml_file, objs_d, filetype)
+	xml_split_by_files (xml_file, split_filenames, outfile, filetype)
+
+##------------------------------------------------------------
+##  obj_split_by_files - return list of matched and unmatched
+##     objs given filename.
+##  if filename_type == 'source', then get the source filename
+##		obj to compare against list
+##	only matches full strings, not substrings
+##------------------------------------------------------------
+def	obj_split_by_files (objs_d, filenames, filename_type='file') :
 	matched_objs = []
 	unmatched_objs = []
-	matched_filename = 'matched_' + output_filename + '.xml'
-	unmatched_filename = 'unmatched_' + output_filename + '.xml'
 	# TODO: 
+	# pdb.set_trace ()
 	for label, objs in list(objs_d.items ()) :  ## iterate through all objs
 		for obj in objs :
 			# pdb.set_trace ()
-			obj_filename = obj_get_filename (obj)
-			if obj_filename in matched_files :
+			if filename_type == 'source' :
+				obj_filename = get_chip_source_file (obj)
+			else :
+				obj_filename = obj_get_filename (obj)
+			if obj_filename in filenames :
 				matched_objs.append (obj)
 			else :
 				unmatched_objs.append (obj)
-	write_xml_file (matched_filename, matched_objs, filetype)
-	write_xml_file (unmatched_filename, unmatched_objs, filetype)
+	return matched_objs, unmatched_objs
+
+
+##------------------------------------------------------------
+##  
+##  
+##  
+##------------------------------------------------------------
 
 ##------------------------------------------------------------
 ##  xml_split_by_list update_path - create file of same list of images with new data
@@ -2487,6 +2898,9 @@ def get_rect (dim, box, color='r') :
 	return rect
 
 #-------------------------------------------------------------------------------
+#  given list of tf detections in result, extract count of labels for each detection
+#	return list of detection count
+#-------------------------------------------------------------------------------
 def get_obj_count (result, image_np, min_score, labels, do_display=False) :
 	have_display = "DISPLAY" in os.environ
 	display = have_display and do_display
@@ -2494,39 +2908,60 @@ def get_obj_count (result, image_np, min_score, labels, do_display=False) :
 	if display :
 		fig,ax = plt.subplots(1)
 		ax.imshow(image_np)
-	boxes = result.json()['predictions'][0]['detection_boxes']
-	scores = result.json()['predictions'][0]['detection_scores']
-	classes = result.json()['predictions'][0]['detection_classes']
-	detections = int(result.json()['predictions'][0]['num_detections'])
-	obj_cnt = 0
-	for i in range(detections):
-		label = object_classes_d [int (classes[i])]
-		if (scores[i] < float (min_score)):
-			# print('Scores too low below ', i)
-			break
-		if label in labels :
-			obj_cnt += 1
-		print('  Class', label, 'Score', scores[i])
+	result_cnt = len (result.json()['predictions'])
+	matched_detects = []
+	for j in range (result_cnt) :
+		boxes = result.json()['predictions'][j]['detection_boxes']
+		scores = result.json()['predictions'][j]['detection_scores']
+		classes = result.json()['predictions'][j]['detection_classes']
+		detections = int(result.json()['predictions'][j]['num_detections'])
+		obj_cnt = 0
 		# pdb.set_trace ()
-		rect = get_rect (dim, boxes[i], 'r')
-		# Add the patch to the Axes
+		for i in range(detections):
+			label = object_classes_d [int (classes[i])]
+			if (scores[i] < float (min_score)):
+				# print('Scores too low below ', i)
+				break
+			if label in labels :
+				obj_cnt += 1
+			print('  Class', label, 'Score', scores[i])
+			# pdb.set_trace ()
+			rect = get_rect (dim, boxes[i], 'r')
+			# Add the patch to the Axes
+			if (display) :
+				ax.add_patch(rect)
+		matched_detects.append (obj_cnt)
 		if (display) :
-			ax.add_patch(rect)
-	if (display) :
-		plt.show()
-	return obj_cnt
+			plt.show()
+	return matched_detects
 
+#-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
 def img_find_bears (img_file, min_score, labels) :
 	image = Image.open(img_file)
 	image_np = np.array(image)
 	payload = {"instances": [image_np.tolist()]}
 	result = requests.post("http://localhost:8080/v1/models/default:predict", json=payload)
-	bear_cnt = get_obj_count (result, image_np, min_score, labels, True)
-	return bear_cnt
+	bear_cnts = get_obj_count (result, image_np, min_score, labels, True)
+	return bear_cnts
 
 #-------------------------------------------------------------------------------
-def do_find_bears (img_files, out_file, min_score, model) :
+#-------------------------------------------------------------------------------
+def imgs_find_bears (img_files, min_score, labels) :
+	img_list = []
+	for img_file in img_files :
+		image = Image.open(img_file)
+		image_np = np.array(image)
+		img_list.append (image_np.tolist ())
+	payload = {"instances": img_list}
+	result = requests.post("http://localhost:8080/v1/models/default:predict", json=payload)
+	# pdb.set_trace ()
+	bear_cnts = get_obj_count (result, image_np, min_score, labels, True)
+	return bear_cnts
+
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+def do_find_bears (filename, out_file, min_score, model) :
 	if model == 'tf-frcnn' :
 		ids = coco_ids
 		classes = coco_classes
@@ -2541,21 +2976,70 @@ def do_find_bears (img_files, out_file, min_score, model) :
 	out_fp1 = open (out_file+'_1', "w")
 	out_fpmulti = open (out_file+'_multi', "w")
 	expected_cnt = 1
-	for img_file in img_files :
-		bear_cnt = img_find_bears (img_file, min_score, labels)
-		# pdb.set_trace ()
-		# print ('counting bears for ', img_file)
-		# if bear_cnt > expected_cnt :
-		if bear_cnt == 0 :
-			out_fp0.write (str (img_file))
-			out_fp0.write ("\n")
-		elif bear_cnt == 1 :
-			out_fp1.write (str (img_file))
-			out_fp1.write ("\n")
-		else :
-			out_fpmulti.write (str (img_file))
-			out_fpmulti.write ("\n")
-		print (bear_cnt, 'bears:', img_file)
+
+	with open (filename, 'r') as fp:
+		img_files = fp.readlines ()
+		for img_file in img_files :
+			print ('counting bears for ', img_file)
+			bear_cnts = img_find_bears (img_file.strip(), min_score, labels)
+			bear_cnt = bear_cnts[0]
+			# pdb.set_trace ()
+			# if bear_cnt > expected_cnt :
+			if bear_cnt == 0 :
+				out_fp0.write (str (img_file))
+				out_fp0.write ("\n")
+			elif bear_cnt == 1 :
+				out_fp1.write (str (img_file))
+				out_fp1.write ("\n")
+			else :
+				out_fpmulti.write (str (img_file))
+				out_fpmulti.write ("\n")
+			print (bear_cnt, 'bears:', img_file)
+	print ('\n\tGenerated files: ', out_file, '_{0,1,multi}')
+	print ('\n')
+	out_fp0.close ()
+	out_fp1.close ()
+	out_fpmulti.close ()
+
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+def do_find_bears_batch (filename, out_file, min_score, model) :
+	if model == 'tf-frcnn' :
+		ids = coco_ids
+		classes = coco_classes
+		labels = ['bear']
+	else : # megadetector
+		ids = md_ids
+		classes = md_classes
+		labels = ['animal']
+	for i in range (len (ids)) :
+		object_classes_d[ids[i]] = classes[i]
+	out_fp0 = open (out_file+'_b_0', "w")
+	out_fp1 = open (out_file+'_b_1', "w")
+	out_fpmulti = open (out_file+'_b_multi', "w")
+	expected_cnt = 1
+
+	with open (filename, 'r') as fp:
+		img_files_raw = fp.readlines ()
+		img_files = [filename.strip() for filename in img_files_raw]
+		bear_cnts = imgs_find_bears (img_files, min_score, labels)
+		i = 0
+		for img_file in img_files :
+			# bear_cnt = img_find_bears (img_file.strip(), min_score, labels)
+			# pdb.set_trace ()
+			print ('counting bears for ', img_file)
+			bear_cnt = bear_cnts[i]
+			if bear_cnt == 0 :
+				out_fp0.write (str (img_file))
+				out_fp0.write ("\n")
+			elif bear_cnt == 1 :
+				out_fp1.write (str (img_file))
+				out_fp1.write ("\n")
+			else :
+				out_fpmulti.write (str (img_file))
+				out_fpmulti.write ("\n")
+			print (bear_cnt, 'bears:', img_file)
+			i += 1
 	print ('\n\tGenerated files: ', out_file, '_{0,1,multi}')
 	print ('\n')
 	out_fp0.close ()
