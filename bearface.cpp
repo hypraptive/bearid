@@ -69,9 +69,9 @@ using net_type_t  = loss_mmod<con<1,6,6,1,1,rcon3<rcon3<rcon3<downsampler_t<inpu
 // -----------------------------------------------------------------------------
 
 std::string g_mode;  // one of train_obj, train_sp, test, infer
-const unsigned MAX_LONG_SIDE = 2000;
-const unsigned MAX_SHORT_SIDE = 1500;
-const unsigned MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
+unsigned MAX_LONG_SIDE = 2000;
+unsigned MAX_SHORT_SIDE = 1500;
+unsigned MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
 
 std::vector<std::vector<double> > get_interocular_distances (
     const std::vector<std::vector<full_object_detection> >& objects
@@ -811,6 +811,8 @@ int main(int argc, char** argv)
 
 		parser.add_option("h","Display this help message.");
 		parser.add_option("train_obj","Train object detector.", 1);
+		parser.add_option("size_max", "scale images to max size.", 1);
+		parser.add_option("xy_max", "scale images to max x and y.", 2);
 		parser.add_option("out_network","Newly trained network.", 1);
 		parser.add_option("train_sp","Train shape predictor.", 1);
 		parser.add_option("test_obj","Test object detector.", 1);
@@ -838,6 +840,16 @@ int main(int argc, char** argv)
 			return EXIT_SUCCESS;
 		}
 		std::string network;
+		if (parser.option ("size_max"))
+		{
+			MAX_SIZE = stoi (parser.option ("size_max").argument());
+		}
+		if (parser.option ("xy_max"))
+		{
+			MAX_LONG_SIDE = stoi (parser.option ("xy_max").argument(0));
+			MAX_SHORT_SIDE = stoi (parser.option ("xy_max").argument(1));
+			MAX_SIZE = MAX_LONG_SIDE*MAX_SHORT_SIDE;
+		}
 		if (parser.option("train_obj"))
 		{
 			g_mode = "train_obj";
