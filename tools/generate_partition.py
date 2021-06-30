@@ -2,6 +2,7 @@
 
 import sys
 import pdb
+import os
 import argparse
 import xml_utils as u
 import datetime
@@ -16,18 +17,24 @@ from argparse import RawTextHelpFormatter
 ##    generate_folds 5 -out yyy *.xml dirs
 ##------------------------------------------------------------
 def main (argv) :
-	parser = argparse.ArgumentParser(description='Partitions objects into x and y percents.\nIf shuffle is set to False, each label will be split as specified.\nIf -group is set, will use db argument to partition after grouped by date.\nx and y can be set to 100 and 0, respectively, for no partitioning (to combine multiple XMLs.)\n\nExample: generate_partition -shuffle False -file faces 80 20 images.xml\n\t generate_partition -group all.csv 75 25 chips.xml',
-		formatter_class=RawTextHelpFormatter)
+	prog_name = os.path.basename(__file__)
+	desc = 'Partitions objects into x and y percents.\nIf shuffle is set to False, each label will be split as specified.\nIf -group is set, will use db argument to partition after grouped by date.\nx and y can be set to 100 and 0, respectively, for no partitioning (to combine multiple XMLs.)\n\nExample: ' + prog_name + ' -shuffle False -file faces 80 20 images.xml\n\t ' + prog_name + ' -group faces.csv 75 25 chips.xml'
+	parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
     # parser.formatter.max_help_position = 50
 	parser.add_argument ('x', default=80,
 		help='Percent of first set.')
 	parser.add_argument ('y', default=20,
 		help='Percent of second set.')
 	parser.add_argument ('input', nargs='+')
+
+	parser.add_argument ('-by_label', '--by_label', default=False,
+		help='Put all images of each label in either of two groups. If set to true, all other partition options will be ignored.  Defaults to False.')
 	parser.add_argument ('-shuffle', '--shuffle', default=True,
 		help='Determines whether all objects are mixed before partition. If set to False, each label wil be split as specified.  Defaults to True.')
 	parser.add_argument ('--test_count_minimum', default=0,
 		help='Minimum test images per label, overrides partition percentage. Defaults to 0.')
+	parser.add_argument ('-label_group_minimum', '--label_group_minimum', default=0,
+		help='Minimum number of day groups per label. Defaults to 0.')
 	parser.add_argument ('-image_count_minimum', '--image_count_minimum', default=0,
 		help='Minimum number of images per label. Defaults to 0.')
 	parser.add_argument ('-image_size_minimum', '--image_size_minimum', default=0,
@@ -62,6 +69,8 @@ def main (argv) :
 	if x + y != 100 :
 		print("Error: (x + y) needs to be 100")
 		return
+	if args.by_label == True :
+		print ("splitting by label.")
 	filetypes = ['chips', 'faces']
 	filetype = args.filetype
 	if filetype not in filetypes :
@@ -84,8 +93,9 @@ def main (argv) :
 		print("output: ", args.output)
 		print("input: ", args.input)
 
+	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.input)
-	u.generate_partitions (xml_files, x, y, args.output, args.shuffle, int(args.image_count_minimum), int(args.test_count_minimum), int (args.image_size_minimum), filetype, do_grouping, args.group_date_db)
+	u.generate_partitions (xml_files, x, y, args.output, args.by_label, args.shuffle, int(args.image_count_minimum), int(args.test_count_minimum), int (args.image_size_minimum), int (args.label_group_minimum), filetype, do_grouping, args.group_date_db)
 
 
 if __name__ == "__main__":
