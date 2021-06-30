@@ -17,8 +17,11 @@ from xml.dom import minidom
 from copy import deepcopy
 from collections import namedtuple
 from collections import defaultdict
+from collections import OrderedDict
 from os import walk
 import numpy as np
+import scipy
+from scipy.spatial import distance
 import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -35,8 +38,11 @@ g_unused = 2
 g_small_img = 3
 g_verbosity = 0
 g_filetype = ''
-g_stats_few = []
+g_stats_zero = []
 g_stats_many = []
+g_objs_zero = []
+g_objs_many = []
+g_multi_ok = False
 g_argv = ''
 g_exec_name = 'bearID v0.1'
 g_box_attrs = {'height', 'left', 'top', 'width'} 
@@ -56,7 +62,9 @@ bc_labels=[
 	'bc_old-girl', 'bc_oso', 'bc_peanut', 'bc_pete', 'bc_pirate', 
 	'bc_pretty-boy', 'bc_river', 'bc_sallie', 'bc_santa', 'bc_shaniqua', 
 	'bc_simoom', 'bc_stella', 'bc_steve', 'bc_teddy-blonde', 'bc_teddy-brown', 
-	'bc_toffee', 'bc_topaz', 'bc_trouble', 'bc_tuna', 'bc_ursa']
+	'bc_toffee', 'bc_topaz', 'bc_trouble', 'bc_tuna', 'bc_ursa', 
+	'kb_bc_m034'
+	]
 bf_labels = [
 	'bf_032', 'bf_039', 'bf_045', 'bf_051', 'bf_068', 'bf_083', 'bf_089', 
 	'bf_093', 'bf_094', 'bf_128', 'bf_130', 'bf_132', 'bf_151', 'bf_153', 
@@ -124,6 +132,19 @@ def indent(elem, level=0):
     return elem
 
 ##------------------------------------------------------------
+##  set global multi faces per image state
+##------------------------------------------------------------
+def set_multi_ok  (state) :
+	global g_multi_ok
+	g_multi_ok = state
+
+##------------------------------------------------------------
+##  set global multi faces per image state
+##------------------------------------------------------------
+def get_multi_ok  () :
+	return g_multi_ok
+
+##------------------------------------------------------------
 ##  set global verbosity
 ##------------------------------------------------------------
 def set_verbosity  (verbosity) :
@@ -161,6 +182,34 @@ def set_exec_name  (exec_name) :
 ##------------------------------------------------------------
 def get_exec_name () :
 	return g_exec_name
+
+##------------------------------------------------------------
+##  append to g_stats_zero
+##------------------------------------------------------------
+def g_stats_zero_append (filename) :
+	global g_stats_zero
+	g_stats_zero.append (filename)
+
+##------------------------------------------------------------
+##  append to g_objs_zero
+##------------------------------------------------------------
+def g_objs_zero_append (filename) :
+	global g_objs_zero
+	g_objs_zero.append (filename)
+
+##------------------------------------------------------------
+##  append to  g_stats_many
+##------------------------------------------------------------
+def g_stats_many_append (filename) :
+	global g_stats_many
+	g_stats_many.append (filename)
+
+##------------------------------------------------------------
+##  append to  g_objs_many
+##------------------------------------------------------------
+def g_objs_many_append (obj) :
+	global g_objs_many
+	g_objs_many.append (obj)
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
@@ -523,18 +572,16 @@ def load_objs (root, d_objs, filetype, filename_type='file') :
 	## print "loading chips"
 
 	obj_filenames = []
-	global g_stats_few
-	global g_stats_many
 	if filetype == 'chips' :
 		for chip in root.findall ('./chips/chip'):
 			label_list = chip.findall ('label')
 			filename = chip.attrib.get ('file')
 			if len (label_list) < 1 :
-				g_stats_few.append (filename)
+				g_stats_zero_append (filename)
 				print("no labels: ", label_list)
 				continue
 			if len (label_list) > 1 :
-				g_stats_many.append (filename)
+				g_stats_many_append (filename)
 				print("too many labels: ", label_list)
 				continue
 			label = label_list[0].text
@@ -558,24 +605,28 @@ def load_objs (root, d_objs, filetype, filename_type='file') :
 			box = image.findall ('box')
 			facefile = image.attrib.get ('file')
 			multi_faces[len(box)] += 1
-			if len (box) == 0 :
-				g_stats_few.append (facefile)
-				continue
-			if len (box) > 1 :
-				g_stats_many.append (facefile)
-				print (len (box), "boxes (faces) in file ", facefile)
-				continue
+			if g_multi_ok is False :
+				if len (box) == 0 :
+					g_stats_zero_append (facefile)
+					g_objs_zero_append (image)
+					continue
+				if len (box) > 1 :
+					g_stats_many_append (facefile)
+					g_objs_many_append (image)
+					print ("Warning:", len (box), "boxes (faces) in file ", facefile)
+					continue
 			label_list = box[0].findall ('label')
 			if len (label_list) == 0:
 				pdb.set_trace ()
-				print ('file', facefile, 'is missing image label')
+				print ('Warning: file', facefile, 'is missing image label')
 				continue
 			label = label_list[0].text
 			obj_filenames.append (facefile)
 			d_objs[label].append(image)
-		print ('\tface count:')
-		for key,val in multi_faces.items():
-			print ('\t',key, ':', val)
+		if get_verbosity () > 1 :
+			print ('\nface count:')
+			for key,val in multi_faces.items():
+				print ('\t',key, ':', val)
 	elif filetype == 'pairs' :
 		matched = 0
 		unmatched = 1
@@ -585,7 +636,7 @@ def load_objs (root, d_objs, filetype, filename_type='file') :
 		for pair in root.findall ('./pairs/pair_matched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
-				print('error: expecting only 2 chips in pair, got: ', labels)
+				print('Error: expecting only 2 chips in pair, got: ', labels)
 				continue
 			if labels[0].text != labels[1].text :
 				print('error: labels should match: ', labels)
@@ -595,28 +646,310 @@ def load_objs (root, d_objs, filetype, filename_type='file') :
 		for pair in root.findall ('./pairs/pair_unmatched'):
 			labels = pair.findall ('./chip/label')
 			if len (labels) != 2 :
-				print('error: expecting only 2 chips in pair, got: ', labels)
+				print('Error: expecting only 2 chips in pair, got: ', labels)
 				continue
 			if labels[0].text == labels[1].text :
-				print('error: labels should not match: ', labels)
+				print('Error: labels should not match: ', labels)
 			unmatched_cnt += 1
 			d_objs[unmatched].append(labels)
 		obj_filenames.append (d_objs[unmatched])
 	elif filetype == 'embeddings' :
 		for embedding in root.findall ('./embeddings/embedding'):    
-			embed_val = embedding.find ('./embed_val')
 			label = embedding.find ('./label')
 			# pdb.set_trace ()
-			embed_float = str_to_float (embed_val.text)
-			d_objs[label.text].append(embed_float)
+			embed_val = embedding.find ('./embed_val')
+			vals_str = embed_val.text.split ()
+			embed_floats = [float (i) for i in vals_str]
+			d_objs[label.text].append(embed_floats)
+	elif  filetype == 'embeds' :
+		for embedding in root.findall ('./embeddings/embedding'):    
+			label = embedding.find ('./label')
+			# pdb.set_trace ()
+			d_objs[label.text].append(embedding)
 	else :
-		print('Error: unknown filetype.  Expected one of "faces" or "chips" or "pairs".')
+		print('Error: unknown filetype.  Expected one of "faces", "chips", "embeddings", "embeds" or "pairs".')
+	# pdb.set_trace ()
 	return obj_filenames
 
+##------------------------------------------------------------
+## print closest n labels from dict
+##  x = sorted(d.items(), key=lambda x: x[1])
+##  for dict of distances, return closest n labels
+##------------------------------------------------------------
+def print_nearest (e_dist_d, n) :
+	sorted_e = sorted(e_dist_d.items(), key=lambda x: x[1])
+	nearests = []
+	for i in range (n) : 
+		label = sorted_e[i][0]
+		nearests.append (label)
+		print (i, ': ', label, ' : distance : ', sorted_e[i][1])
+	return nearests
+		
+##------------------------------------------------------------
+## given an embedding and a list of embeddings
+##  e.g. [x,y], [[a1,b1], [a2,b2], [a3,b3]]
+##  return list of distances
+##  e.g. [.4312, .9136, .29462]
+##------------------------------------------------------------
+def get_embed_distances_e_elist (embed, embeds) :
+	e_array = np.array (embed)
+	e_distances = []
+	# pdb.set_trace ()
+	for e in embeds:
+		e1_array = np.array (e)
+		dist = distance.euclidean (e_array, e1_array)
+		e_distances.append (dist)
+	return e_distances
+		
+##------------------------------------------------------------
+## given probe embedding and list gallery embeddings
+##  e.g. [x,y], [['bc_amber/a.jpg',[a1,b1]],['bf_032/bcd.jpg',[a2,b2],
+##               ['bc_amber/b.jpg',[a3,b3]]
+##  return list of each distance between embedding and those in list
+##  e.g. ["bella": .4312, "otis": .9136, "amber": .29462]
+##------------------------------------------------------------
+def get_embed_distances (embed, embed_list) :
+	return 42
+		
+##------------------------------------------------------------
+## given an embedding and dict of label averages 
+##  e.g. [x,y], ["bella":[a1,b1], "otis":[a2,b2], "amber":[a3,b3]]
+##  return dict of each distance between embedding and averages
+##  e.g. ["bella": .4312, "otis": .9136, "amber": .29462]
+##------------------------------------------------------------
+def get_embed_distances (embeds_d, new_embed) :
+	e_dist_d = OrderedDict ()
+	new_e_array = np.array (new_embed)
+	for label, embed in list(embeds_d.items()):
+		e_array = np.array (embed)
+		e_dist_d [label] = distance.euclidean (e_array, new_e_array)
+	pdb.set_trace ()
+	return e_dist_d
 
 ##------------------------------------------------------------
-##
+##  returns dict of embedding average (cluster center)
 ##------------------------------------------------------------
+def get_embed_averages (embeds_d) :
+	e_averages_d = defaultdict ()
+	for label, embeds in list(embeds_d.items()):
+		e_array = np.array (embeds)
+		e_mean = np.mean (e_array, axis=0, dtype=np.float64)
+		e_averages_d [label] = e_mean.tolist ()
+		pdb.set_trace ()
+	pdb.set_trace ()
+	return e_averages_d
+
+##------------------------------------------------------------
+##  given embedding dict, print average, and distances
+##    from average
+##------------------------------------------------------------
+def print_e_stats (embeds_d) :
+	e_averages_d = create_embed_label_averages (embeds_d)
+	for label, embed_average in sorted(e_averages_d.items()): ##
+		embeds = embeds_d[label]
+		e_distances = get_embed_distances (embeds, embed_average)
+		e_dist_fr_mean = []
+		# for e in embeds
+		print ('do something')
+	sorted_e = sorted(e_dist_d.items(), key=lambda x: x[1])
+	# for label, dist :
+		# print (dist)
+	# print all to csv and stdout
+
+##------------------------------------------------------------
+##  find nearests labels
+##------------------------------------------------------------
+def get_closest_averages (embeds_d, e, n) :
+	e_averages_d = get_embed_averages (embeds_d)
+	e_dist_d = get_embed_distances (e_dist_d, e)
+	print_closest (e_dist_d, n)
+
+
+##------------------------------------------------------------
+##  find nearests embeddings
+##------------------------------------------------------------
+def get_closest_embeddings (embeds, e, n) :
+	e_distances = get_embed_distances (embeds, e)
+	e_distances_sorted = e_distances.sorted (e_distances, key = lambda x: x[1])
+	for i in range (n) :
+		print (e_distances_sorted [i])
+	# print_closest (e_dist_d, n)
+
+##------------------------------------------------------------
+##  generate distance matrix
+##------------------------------------------------------------
+def gen_embed_distance_matrix (embeds, e) :
+	e_dist_d = get_embed_distances (embeds, e)
+	for i in range (n) :
+		print_closest (e_dist_d, n)
+
+##------------------------------------------------------------
+##  flatten embed_d.  change dict to list of tuples (label, val)
+##------------------------------------------------------------
+def flatten_embedsdict (embeds_d) :
+	e_list = []
+	for label, embeds in embeds_d :
+		for embed in embeds :
+			filename = obj_get_filename (embed)
+			e = [label, filename, key, val]
+			e_list.append (e)
+	return e_list
+
+##------------------------------------------------------------
+##  get list of embedding values from embeds list
+##   given: [[label, filename, embedding], ... ]
+##------------------------------------------------------------
+def get_embed_vals_from_list (e_list) :
+	e_vals_list = []
+	for i in range (len (e_list)) :
+		e_vals_list.append (e_list[i][2])
+	return e_vals_list
+		
+
+##------------------------------------------------------------
+##  return subpath n dirs above file
+##------------------------------------------------------------
+def subpath (filename, n) :
+	fnames = os.path.split (filename)
+	img_name = fnames[1]
+	path = fnames[0]
+	if not path :
+		return filename
+	for i in range (n) :
+		fnames = os.path.split (path)
+		base = fnames[1]
+		path = fnames[0]
+		img_name = base + '/' + img_name
+		if not path :
+			return img_name
+	return img_name
+		
+##------------------------------------------------------------
+##  get_embeddings from obj - given dict of embedding tags,
+##   embed values and filename to create flattened list
+##   of [label, filename, embedding]
+##------------------------------------------------------------
+def get_embedding_list_from_objs (embeds_d) :
+	embedding_list = []
+	for label, embeds in list (embeds_d.items ()) :
+		for embed_tag in embeds :
+			embed_val = embed_tag.find ('./embed_val')
+			chipname = embed_tag.attrib.get ('file')
+			# pdb.set_trace ()
+			filename = subpath (chipname, 2)
+			vals_str = embed_val.text.split ()
+			embed_floats = [float (i) for i in vals_str]
+			embedding = [label, filename, embed_floats]
+			embedding_list.append (embedding)
+	return embedding_list
+
+##------------------------------------------------------------
+##  output csv of distances to each train embeddings
+##   given dist of test embeddings, dict of train embeddings
+##   and filename, write out matrix all train distances from
+##   each test embedding
+##------------------------------------------------------------
+def write_csv_embed_distances (probe_d, gallery_d, csv_file) :
+	e_probe_list = get_embedding_list_from_objs (probe_d)
+	e_gallery_list = get_embedding_list_from_objs (gallery_d)
+	e_val_probe_list = get_embed_vals_from_list (e_probe_list)
+	e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
+	# pdb.set_trace ()
+	fp = open (csv_file, "w")
+	closest_file = 'e_closests.csv'
+	fp_closest = open (closest_file, "w")
+	print ('\n... writing nearest matches to', closest_file)
+	fp_closest.write ('test; closest label; distance; match\n')
+	# write header
+	for i in range (len (e_gallery_list)) :
+		fp.write (';' + e_gallery_list[i][0])
+	# fp.write (';' matched)
+	fp.write ('\n')
+	# pdb.set_trace ()
+	# write distances
+	match_count = 0
+	for i in range (len (e_probe_list)) :
+		# write label
+		probe_label = e_probe_list[i][0]
+		probe_embedding = e_val_probe_list[i]
+		fp.write (probe_label)
+		# pdb.set_trace ()
+		min_indices, min_distances = write_dist_csv (probe_embedding,  e_val_gallery_list, fp)
+		match_count += write_closests (e_gallery_list, fp_closest, min_indices, min_distances, probe_label)
+	fp.close ()
+	fp_closest.close ()
+	print ('\n\ttest labels   :', str (len (e_probe_list)))
+	print ('\tmatched labels:', str (match_count))
+	print ('\taccuracy      :', str (match_count / len (e_probe_list)))
+	print ('\n')
+
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def write_closests (e_gallery_list, fp, min_indices, 
+		min_distances, probe_label) :
+	# pdb.set_trace ()
+	match = 0
+	fp.write (probe_label)
+	for i in range (len (min_indices)) :
+		index = min_indices[i]
+		dist = min_distances[i]
+		min_label = e_gallery_list[index][0]
+		# pdb.set_trace ()
+		if min_label == probe_label :
+			match = 1
+		fp.write ('; ' + str (i) + '; ' + min_label + '; ' + str (min_distances[i]))
+	fp.write ('; ' + str (match) + '\n')
+	return match
+##------------------------------------------------------------
+##  output csv of distances to each train embeddings
+##   given filename of test embeddings, filename of train embeddings
+##   and csv output filename, write out matrix all train distances from
+##   each test embedding
+##------------------------------------------------------------
+def gen_embed_dist_csv (test_files, train_files, csv_file, filetype="embeds") :
+	e_test_d = defaultdict (list)
+	e_train_d = defaultdict (list)
+	load_objs_from_files (test_files, e_test_d, filetype)
+	load_objs_from_files (train_files, e_train_d, filetype)
+	
+	# pdb.set_trace ()
+	# with open (csv_file, 'w') as fp:
+		# for i in range (len (e_test_list)) :
+			# write train label across top
+			# fp.printf (e_train_list)
+			# write_csv (e_test_list[i], e_train_list, fp)
+	write_csv_embed_distances (e_test_d, e_train_d, csv_file)
+
+##------------------------------------------------------------
+##  write_dist_csv - given emedding, list of embeddings,
+##     and file pointer, write out embedding distances into file
+##	   separated by ';'
+##     also include min distance and index to its label
+##	   returns index to closest distance
+##------------------------------------------------------------
+def write_dist_csv (e_test, e_train_list, fp) :
+	e_distance_list = get_embed_distances_e_elist (e_test, e_train_list)
+	for i in range (len (e_distance_list)) :
+		fp.write ('; ' + str (e_distance_list[i]))
+	index = range (len (e_distance_list))
+	index_list = [list(x) for x in zip(index, e_distance_list)]
+	index_list.sort(key=lambda x:x[1])
+	nearest_n = 1
+	n = 0
+	min_distances = []
+	min_indices = []
+	for index_dist in index_list :
+		if index_dist[1] == 0.0 :
+			continue
+		min_distances.append (index_dist[1])
+		min_indices.append (index_dist[0])
+		n += 1
+		if n == nearest_n :
+			break
+	fp.write ('; ' + str (min_distances) + '; ' + str (min_indices))
+	fp.write ('\n')
+	return min_indices, min_distances
 
 ##------------------------------------------------------------
 ##  get_count_list
@@ -651,7 +984,7 @@ def xml_match_cnt (xml_files, counts_file, xml_out, filetype) :
 		for label, objs in list(objs_d.items()):
 			found = False
 			if len (objs) < count :
-				print ("...... label", label, "too few.")
+				print ("...... label", label, "too few (0).")
 				continue
 			found = True
 			print ("...... label", label, "matches at ", len (objs), ", needed ", count)
@@ -680,14 +1013,20 @@ def print_dict (chips_d) :
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, filetype="chips", day_grouping=False, csv_filename=None) :
+def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 	# detect if chips file or faces file
 
 	chips_d = defaultdict(list)
-	load_objs_from_files (files, chips_d, filetype)
-	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
+
+
+	if split_by_label :
+		split_type = 'by_label'
+	elif split_by_day_grouping :
+		split_type = 'day_grouping'
+	# # load_objs_from_files (files, chips_d, filetype)
+	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
 	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
 	# pdb.set_trace ()
 	file_x = output + "_" + str(x) + ".xml"
@@ -735,9 +1074,10 @@ def new_row_closer_to_nom (nom_count, addition, cur_count, max_count) :
 		return True
 
 ##------------------------------------------------------------
-#  given group_by pandas series, return list of list
+##   given group_by pandas series index, return list of 
+##   [label date]
 ##------------------------------------------------------------
-def	create_group_from_indices (groups, indices) :
+def	create_label_date_list_from_indices (groups, indices) :
 	# pdb.set_trace ()
 	subgroup_data = []
 	for i in indices : 
@@ -749,9 +1089,12 @@ def	create_group_from_indices (groups, indices) :
 ##------------------------------------------------------------
 ##  given panda series with label-date group counts, split rows to match
 ##  x and y partitions. return list of df row indices 
+##  iterate through table, looking for common label, then split 
 ##------------------------------------------------------------
-def partition_df_rows (grouped, num_images, x, y) :
-	min_count, nom_count, max_count = get_min_nom_max (num_images, x, y, .5)
+def partition_df_rows_x  (grouped, num_images, x, y) :
+	pdb.set_trace ()
+	partition_margin = .5
+	min_count, nom_count, max_count = get_min_nom_max (num_images, x, y, partition_margin)
 	print ('min:', min_count, '\tnom:', nom_count, '\tmax:', max_count)
 	y_count = x_count = 0
 	x_done = False
@@ -772,10 +1115,176 @@ def partition_df_rows (grouped, num_images, x, y) :
 			group_y.append (i)
 		if x_count >= nom_count :
 			x_done = True
+	if x_count < min_count or x_count > max_count :
+		print ('\n\tWarning: x partition outside goal of ', min_count, 'and', max_count, '\n')
 	print ('splitting', num_images, 'images into ratios of', x, 'and', y)
 	print ('partition x:', x_count, 'images in ', len (group_x), 'groups.')
 	print ('partition y:', y_count, 'images in ', len (group_y), 'groups.')
 	return group_x, group_y
+
+##------------------------------------------------------------
+##  given panda series of label-date group counts, split rows to match
+##  x and y partitions. return list of df row indices 
+##  iterate through list of label-day table. for each newly encountered
+##    label, get all the counts of that label (e.g. bc_bella [2,4,1,5,6,3,2])
+##    split into x, y groups ([6,5,4,3],[2,2,1])
+
+##------------------------------------------------------------
+def partition_df_rows (grouped, num_images, x, y) :
+	# pdb.set_trace ()
+	v = grouped.values 
+	v_list = v.tolist ()
+	n_images = sum (v_list)
+	# end debug
+
+	partition_margin = .5
+	group_x = []
+	group_y = []
+	current_label = None
+	processed_labels = []
+	# pdb.set_trace ()
+	y_count = 0
+	x_count = 0
+	x_group_label = []
+	y_group_label = []
+	label_y_count = label_x_count = 0
+	group_sum_x = 0
+	group_sum_y = 0
+	for i in range (len (grouped)) :
+		label = grouped.index[i][0]
+		if label != current_label :
+			# pdb.set_trace ()
+			# ensure that x_group_label and y_group_label is empty
+			if len (x_group_label) > 0 :
+				print ('Error: switching labels but x group not empty')
+			if len (y_group_label) > 0 :
+				print ('Error: switching labels but y group not empty')
+			if label in processed_labels :
+				print ('Error: Already processed label', label)
+				continue  # maybe do something more?
+			if current_label is not None :
+				processed_labels.append (current_label)
+			# wrap up current label
+			if get_verbosity () > 1 :
+				print ('x_count2:', label_x_count, '\ty_count:', label_y_count)
+			if label_x_count != group_sum_x :
+				print ('Error: Partition for', label, 'expects x : ', group_sum_x, ', got', label_x_count)
+			if label_y_count != group_sum_y :
+				print ('Error: Partition for', label, 'expects y : ', group_sum_y, ', got', label_y_count)
+			x_count += label_x_count
+			y_count += label_y_count
+			label_y_count = label_x_count = 0
+			group_sum_x = group_sum_y = 0
+			# init new label
+			current_label = label
+			# get all groups of that label
+			label_groups = grouped [label]
+			# pdb.set_trace ()
+			if len (label_groups) < 3 and get_verbosity () > 1 :
+				print ('label[0]:', label, ':', label_groups.index[0], 
+						':', label_groups.iloc[0])
+				if len (label_groups) == 2 :
+					print ('label[1]:', label, ':', label_groups.index[1],
+						   ':', label_groups.iloc[1])
+			# get partitions
+			if get_verbosity () > 1 :
+				print (current_label, end=' ')
+			x_group_label, y_group_label = get_label_x_y_counts (label_groups, x, y, partition_margin)
+			group_sum_x = sum (x_group_label)
+			group_sum_y = sum (y_group_label)
+			# pdb.set_trace ()
+		row_count = grouped[i]
+		if row_count in x_group_label : 
+			label_x_count += row_count
+			group_x.append (i)
+			x_group_label.remove (row_count)
+		else :
+			if row_count not in y_group_label :
+				print ('Error: group count on found in x nor y')
+			label_y_count += row_count
+			group_y.append (i)
+			y_group_label.remove (row_count)
+	x_count += label_x_count
+	y_count += label_y_count
+	# pdb.set_trace ()
+	min_count, nom_count, max_count = get_min_nom_max (num_images, x, y, partition_margin)
+	if x_count < min_count or x_count > max_count :
+		print ('\n\tWarning: Unable to partition within ', partition_margin, '% of ', x, 'between', min_count, 'and', max_count, '\n')
+	print ('splitting', num_images, 'images into ratios of', x, 'and', y)
+	print ('partition x:', x_count, 'images in ', len (group_x), 'groups.')
+	print ('partition y:', y_count, 'images in ', len (group_y), 'groups.')
+	return group_x, group_y
+
+##------------------------------------------------------------
+##  given list of dates for a label and count of images
+##     for each date, return list of numbers that make
+##     up partitions x and y
+##  e.g. [5,3,6,1,2,1,2,2,1] -> [6,5,3,2,2,2,1,1,1]
+##     returns [6,5,3,2,2] [2,1,1,1]
+##------------------------------------------------------------
+def get_label_x_y_counts (label_groups, x, y, partition_margin) :
+	# get all values of the groups
+	group_values = label_groups.values 
+	vals_list = group_values.tolist ()
+	vals_list.sort (reverse=True)
+	num_label_images = sum (group_values)
+	min_count, nom_count, max_count = get_min_nom_max (num_label_images, x, y, partition_margin)
+	if get_verbosity () > 1 :
+		print ('total:', num_label_images, '\tmin:', min_count, '\tnom:', 
+			nom_count, '\tmax:', max_count)
+	label_y_count = label_x_count = 0
+	x_group = []
+	y_group = []
+	x_done = False
+	# pdb.set_trace ()
+	# handle special case of 1 and 2 vals
+	if len (vals_list) < 3 :  
+		x_group.append (vals_list[0])
+		label_x_count += vals_list[0]
+		if len (vals_list) == 2 :
+			label_y_count += vals_list[1]
+			y_group.append (vals_list[1])
+	else :
+		for i in range (len (vals_list)) :
+			row_count = vals_list[i]
+			# keep adding to group_x until above min count (x_done == True)
+			if not x_done and new_row_closer_to_nom (
+					nom_count, row_count, label_x_count, max_count) :
+				label_x_count += row_count
+				x_group.append (row_count)
+			else :
+				label_y_count += row_count
+				y_group.append (row_count)
+			if label_x_count >= nom_count :
+				x_done = True
+	if get_verbosity () > 1 :
+		print ('x_count1:', label_x_count, '\ty_count:', label_y_count)
+		if label_x_count > max_count :
+			print ('Warning: x_count above max. Values: ', vals_list)
+		if label_x_count < min_count :
+			print ('Warning: x_count below min. Values: ', vals_list)
+	return x_group, y_group 
+
+##------------------------------------------------------------
+##  don't need this
+##------------------------------------------------------------
+def get_num_label_images (grouped, idx, label) :
+	count = 0
+	for i in range (idx, len (grouped)) :
+		cur_label = grouped.index[i][0]
+		if label == cur_label :
+			count += grouped [i]
+		else :
+			return count
+
+##------------------------------------------------------------
+##  given groupings and label, extract group counts and indices
+##------------------------------------------------------------
+def get_label_db_info (grouped, label) :
+	print ('function get_label_count needs to be implemented ')
+	return 0, 0
+	# return label_count, groups, group_idxs
+
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
@@ -831,10 +1340,10 @@ def images_from_label_date (groups, label_dates) :
 ##  given indices into table of (label, date), count
 ##    return list of (label, date) at indices
 ##------------------------------------------------------------
-def get_label_date_from_indices (group_count, indices) :
+def get_label_date_from_indices (label_day_group_counts, indices) :
 	label_dates = []
 	for group_index in indices :
-		label_date = group_count.index[group_index]
+		label_date = label_day_group_counts.index[group_index]
 		label_dates.append (label_date)
 	return label_dates
 
@@ -846,7 +1355,7 @@ def split_chips_by_images (chips_d, images_x) :
 
 
 ##------------------------------------------------------------
-# given dataframe with column IMAGE, return list of images
+# given dataframe with column name, return list of images
 ##------------------------------------------------------------
 def	get_image_list_from_df (df, img_column) :
 	vals = []
@@ -858,6 +1367,7 @@ def	get_image_list_from_df (df, img_column) :
 				# pdb.set_trace ()
 			return vals
 
+
 ##------------------------------------------------------------
 ##------------------------------------------------------------
 def test_utils () :
@@ -865,7 +1375,87 @@ def test_utils () :
 	print ('hello world!')
 
 ##------------------------------------------------------------
+##  given list of images, return list of uniq label
 ##------------------------------------------------------------
+def get_all_labels (objs_d) :
+	labels = []
+	for label, objs in list(objs_d.items ()) :
+		labels.append (label)
+	return labels
+
+##------------------------------------------------------------
+##  given list of image filenames and csv of image info
+##  return dataframe of info for specified images
+##------------------------------------------------------------
+def get_files_info_df (obj_filenames, db_csv_filename, 
+	parent_path='/home/data/bears/') :
+	# pdb.set_trace ()
+	### fix path to ensure filename will match image field in csv
+	filenames = [f.replace (parent_path, '') for f in obj_filenames]
+	df_all = pandas.read_csv (db_csv_filename, sep=';')
+	df_images = pandas.DataFrame (filenames, columns=['IMAGE'])
+	num_input = len (obj_filenames)
+	# get table from list of images
+	df_images_info = pandas.merge (df_all, df_images, on=['IMAGE'], how='inner')
+	return df_images_info
+
+##------------------------------------------------------------
+##  given a list of images, and csv of image info, 
+##  return count of each label-day groups
+##------------------------------------------------------------
+def get_label_day_groups (obj_filenames, db_csv_filename) :
+	df_images_table = get_files_info_df (obj_filenames, db_csv_filename)
+	groups_label_date = df_images_table.groupby (['LABEL', 'DATE'])
+	# pdb.set_trace ()
+	# groups_label_date.get_group (('bc_kwatse', 20110830))
+	# create table of count of each label-date group
+	label_day_group_counts = groups_label_date.size () 
+	return label_day_group_counts
+
+##------------------------------------------------------------
+##  given label_date_groups, indices into group_list and image info
+##  return list of images from indices label_date_group_list
+##------------------------------------------------------------
+def get_images_from_indices (label_date_groups, group_indices, df_images_db) :
+	# get [label, date] lists of each group
+	#     e.g. [['bc_adeane', 20140905], ['bc_also', 20160810]... ]
+	label_date_list = create_label_date_list_from_indices (
+						label_date_groups, group_indices)
+	df_label_date = pandas.DataFrame (label_date_list, columns=['LABEL', 'DATE'])
+	# join label_date list with images db to get images info
+	df_label_date_info = pandas.merge (df_images_db, df_label_date, 
+						on=['LABEL', 'DATE'], how='inner')
+	# extract images to list
+	images_list = get_image_list_from_df (df_label_date_info, 'IMAGE')
+	return images_list
+
+
+##------------------------------------------------------------
+#  given obj dict, group into x and y with mutually exclusive
+#  labels in each group
+##------------------------------------------------------------
+def partition_files_by_label (objs_d, num_images, x, y) :
+	partition_margin = .5
+	objs_x = []
+	objs_y = []
+	min_count, nom_count, max_count = get_min_nom_max (num_images, x, y, partition_margin)
+	labels=list(objs_d.keys())
+	random.shuffle (labels)
+	x_count = 0
+	y_count = 0
+	label_x_cnt = 0
+	for label in labels :
+		new_count = len (objs_d[label])
+		if new_row_closer_to_nom (nom_count, new_count, x_count, max_count) :
+			x_count += new_count
+			objs_x.extend (objs_d[label])
+			label_x_cnt += 1
+		else :
+			y_count += new_count
+			objs_y.extend (objs_d[label])
+	if get_verbosity () > 0 :
+		print ('label split of', x, 'and', y, 'results in', str (x_count), 'and', str (y_count), 'images and label count of', str (label_x_cnt), 'and', str (len (labels)-label_x_cnt))
+	return objs_x, objs_y
 
 ##------------------------------------------------------------
 # partition by groups
@@ -886,63 +1476,58 @@ def test_utils () :
 # 	use list of label-dates to generate two new xml
 #   
 ##------------------------------------------------------------
-def partition_files_by_group (obj_filenames, x, y, csv_filename) :
-	# pdb.set_trace ()
-	local_path = '/home/data/bears/'
-	filenames = [f.replace (local_path, '') for f in obj_filenames]
-	df_all = pandas.read_csv (csv_filename, sep=';')
-	df_input = pandas.DataFrame (filenames, columns=['IMAGE'])
-	# num_input = df.shape[0]
-	num_input = len (obj_filenames)
-	# get table from list of images
-	df_input_table = pandas.merge (df_all, df_input, on=['IMAGE'], how='inner')
-	groups_label_date = df_input_table.groupby (['LABEL', 'DATE'])
-	# groups_label_date.get_group (('bc_kwatse', 20110830))
-
-	# instead of creating series and iterating though, randomize
-	#   group, then iterate through groups (and count, no need to
-	#   get size first), then do group partition
-	group_count = groups_label_date.size () 
-	group_count_rand = group_count.sample (frac=1) # randomize order
+def partition_files_by_group (obj_filenames, objs_d, x, y, csv_filename, label_group_minimum) :
+	parent_path='/home/data/bears/'
+	df_images_info = get_files_info_df (obj_filenames, csv_filename, parent_path)
+	groups_label_date = df_images_info.groupby (['LABEL', 'DATE'])
+	# [['bc_adeane', 20140905]:1,['bc_also', 20160810],5] .. []]
+	label_day_group_counts = groups_label_date.size () 
+	# group_count_rand = label_day_group_counts.sample (frac=1) # randomize order
 	# partition - looking for something like [1,2,3,7 ] [4,5,6,8,9,10]
-	group_idx_x, group_idx_y = partition_df_rows (group_count_rand, num_input, 
-		int (x), int (y))
-	# create new series from indices
-	data_x = create_group_from_indices (group_count_rand, group_idx_x)
-	data_y = create_group_from_indices (group_count_rand, group_idx_y)
-	df_group_x = pandas.DataFrame (data_x, columns=['LABEL', 'DATE'])
-	df_group_y = pandas.DataFrame (data_y, columns=['LABEL', 'DATE'])
 
-	# create new dataframe via joins
-	group_x = pandas.merge (df_input_table, df_group_x, on=['LABEL', 'DATE'], how='inner')
-	group_y = pandas.merge (df_input_table, df_group_y, on=['LABEL', 'DATE'], how='inner')
-	# write dataframes images to list
-	images_x_list = get_image_list_from_df (group_x, 'IMAGE')
-	images_y_list = get_image_list_from_df (group_y, 'IMAGE')
-	localized_images_x_list = [local_path+s for s in images_x_list]
-	localized_images_y_list = [local_path+s for s in images_y_list]
+	# pdb.set_trace ()
+	dropped_images_cnt = 0
+	labels = get_all_labels (objs_d)
+	if label_group_minimum > 0 :
+		label_day_group_counts, dropped_images_cnt = remove_labels_too_few (labels, 
+							label_day_group_counts, label_group_minimum);
+
+	group_idx_x, group_idx_y = partition_df_rows (label_day_group_counts, 
+		len (obj_filenames)-dropped_images_cnt, int (x), int (y))
+
+	x_images_list = get_images_from_indices (label_day_group_counts, 
+					group_idx_x, df_images_info)
+	y_images_list = get_images_from_indices (label_day_group_counts, 
+					group_idx_y, df_images_info)
+	
+	localized_images_x_list = [parent_path+s for s in x_images_list]
+	localized_images_y_list = [parent_path+s for s in y_images_list]
 	return localized_images_x_list, localized_images_y_list
 
-#	matched_filename = 'matched_' + output_filename + '.xml'
-#	unmatched_filename = 'unmatched_' + output_filename + '.xml'
-#	write_xml_file (matched_filename, matched_objs, filetype)
-#	write_xml_file (unmatched_filename, unmatched_objs, filetype)
-
-## ?? 
-	# convert indices into list of label_date
-	# label_dates_x = get_label_date_from_indices (group_count_rand, group_idx_x)
-	# label_dates_y = get_label_date_from_indices (group_count_rand, group_idx_y)
-## ?? 
-
-	# convert label_date to list images
-	# images_x = images_from_label_date (groups_label_date, label_dates_x)
-	# images_y = images_from_label_date (groups_label_date, label_dates_y)
-
+##------------------------------------------------------------
+##  remove labels that have fewer groups than min
+##------------------------------------------------------------
+def remove_labels_too_few (labels, label_day_group_counts, label_group_minimum) :
 	# pdb.set_trace ()
-	## TODO: extract chips by image name
-	# if objs_d != None :
-	# 	chunk_x, chunk_y = split_chips_by_images (objs_d images_x)
-	# return chunk_x, chunk_y
+	dropped_labels = []
+	dropped_count = []
+	for label in labels :
+		label_group_counts = label_day_group_counts [label]
+		label_group_count_values = label_group_counts.values 
+		if len (label_group_count_values) < label_group_minimum :
+			# pdb.set_trace ()
+			dropped_count.append (sum (label_group_count_values))
+			dropped_labels.append (label)
+			label_day_group_counts = label_day_group_counts.drop(labels=label)
+	print ('--------------------')
+	print (sum (dropped_count), 'images and', len (dropped_labels), 'labeld were dropped due to label-date group minimum of', label_group_minimum)
+	print ('--------------------')
+	if get_verbosity () > 0 and len (dropped_labels) > 0 :
+		print ('\nDropped labels and image counts:')
+		print ('--------------------')
+		for i in range (len (dropped_labels)) :
+			print (dropped_labels[i], '; ', dropped_count[i])
+	return label_day_group_counts, sum (dropped_count)
 
 ##------------------------------------------------------------
 ##  partition chips into x and y percent
@@ -951,13 +1536,22 @@ def partition_files_by_group (obj_filenames, x, y, csv_filename) :
 ##	- split across label, ignoring dates
 ##	- split by label afer grouping images by date for each label
 ##	- split across all labels afer grouping images by date for each label
-##
+##  returns two lists of
 ##------------------------------------------------------------
-def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, filetype="chips", day_grouping=False, csv_filename=None) :
-	# print "partitioning chips into: ", x, " ", y
+def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_type="by_chips", csv_filename=None) :
+	if get_verbosity () > 0 :
+		print ("partitioning chips into: ", x, " ", y)
+		print ('split type:', split_type)
 	chunks = []
 	objs_d = defaultdict(list)
-	if day_grouping : ##  
+	if split_type == 'by_label' :
+		filename_type = 'file'
+		obj_filenames = load_objs_from_files (filenames, objs_d, filetype, filename_type)
+		objs_x, objs_y = partition_files_by_label (objs_d, len (obj_filenames), x, y)
+		chunks.append (objs_x)
+		chunks.append (objs_y)
+		return chunks
+	if split_type == 'day_grouping' : ##  
 		if shuffle == False :
 			print ("Warning: ignoring unsupported feature to split by label when grouped by day.")
 		# use filenames from chip source since only image names are in db
@@ -966,8 +1560,9 @@ def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0
 		if filetype == 'chips' :
 			filename_type = 'source'
 		obj_filenames = load_objs_from_files (filenames, objs_d, filetype, filename_type)
-		files_x, files_y = partition_files_by_group (obj_filenames, x, y, csv_filename)
-		objs_x, objs_y = obj_split_by_files (objs_d, files_x, filename_type)
+		files_x, files_y = partition_files_by_group (obj_filenames, objs_d, x, y, csv_filename, label_group_minimum)
+		objs_x, objs_not_x = obj_split (objs_d, files_x, filename_type)
+		objs_y, objs_not_y = obj_split (objs_d, files_y, filename_type)
 		chunks.append (objs_x)
 		chunks.append (objs_y)
 		return chunks
@@ -1323,16 +1918,19 @@ def get_dirs_images (filenames, exts=['.jpg', '.jpeg', '.png']):
 def load_objs_from_files (filenames, objs_d, filetype="chips", filename_type='file'):
 	objfiles = []
 	# print "in load_objs_from_files"
-	# pdb.set_trace ()
 	## load all chips into objs_d
 	# print("\nLoading", filetype, "for files: ")
 	for file in filenames:
-		print("\n", file)
+		print("\nLoading ", file)
 		# pdb.set_trace()
 		root, tree = load_file (file)
 		objfiles.extend (load_objs (root, objs_d, filetype, filename_type))
 	# pdb.set_trace()
 	return objfiles
+
+##------------------------------------------------------------
+##  
+##------------------------------------------------------------
 
 ##------------------------------------------------------------
 ##  filter chips :
@@ -2317,18 +2915,24 @@ def html_images (text_file, html_outfile) :
 	print ("... wrote html to file: ", html_outfile)
 		
 ##------------------------------------------------------------
+##  cur_datetime - returns YYYYMMDDHHMM
+##------------------------------------------------------------
+def current_datetime () :
+	return datetime.datetime.now().strftime("%Y%m%d%H%M")
+
+##------------------------------------------------------------
 ##
 ##------------------------------------------------------------
 def print_faces_stats (write_unused_images) :
 	print("-----------------------------")
-	print("....# files with no faces      : ", len (g_stats_few))
+	print("....# files with no faces      : ", len (g_stats_zero))
 	print("....# files with multiple faces: ", len (g_stats_many))
 	# pdb.set_trace ()
 	if write_unused_images:
-		if len (g_stats_few) :
-			stats_name = datetime.datetime.now().strftime("stats_few_%Y%m%d_%H%M")
+		if len (g_stats_zero) :
+			stats_name = datetime.datetime.now().strftime("stats_zero_%Y%m%d_%H%M")
 			stats_fp = open (stats_name, "w")
-			for face in g_stats_few:
+			for face in g_stats_zero:
 				stats_fp.write (face + '\n')
 			stats_fp.close ()
 			print("... generated file:", stats_name)
@@ -2644,59 +3248,88 @@ def xml_to_files (xml_files, outfile, filetype, filename_type='file') :
 ##  xml_split_by_files - write matched and unmatched
 ##     xml files given file of strings for matching 
 ##------------------------------------------------------------
-def	xml_split_by_files (xml_files, split_file, outfile, filetype='faces') :
+def	xml_split_by_files (xml_files, split_file, outfile, filetype='faces', type_split='files', multi_ok=True) :
 	objs_d = defaultdict(list)
+	set_multi_ok (multi_ok)
 	source_filenames = load_objs_from_files (xml_files, objs_d, filetype)
-	# pdb.set_trace ()
+	pdb.set_trace ()
 	with open (split_file, 'r') as fp:
 		filenames_raw = fp.readlines ()
 	filenames = [filename.strip() for filename in filenames_raw]
 	filename_type = 'file'
-	if filetype == 'chips' :
-		filename_type = 'source'
-	matched_objs, unmatched_objs = obj_split_by_files (objs_d, filenames, filename_type)
+	# if filetype == 'chips' :
+		# filename_type = 'source'
+	matched_objs, unmatched_objs = obj_split (objs_d, filenames, filename_type, type_split)
 	matched_filename = outfile + '_matched' + '.xml'
 	unmatched_filename = outfile + '_unmatched' + '.xml'
+	many_filename = outfile + '_multi' + '.xml'
+	zero_filename = outfile + '_zero' + '.xml'
 	write_xml_file (matched_filename, matched_objs, filetype)
 	write_xml_file (unmatched_filename, unmatched_objs, filetype)
+	write_xml_file (many_filename, g_objs_many , filetype)
+	write_xml_file (zero_filename, g_objs_zero, filetype)
 	print('unmatched', filetype, 'written to :', unmatched_filename)
 	print('  matched', filetype, 'written to :', matched_filename)
+	print('     many', filetype, 'written to :', many_filename)
+	print('     zero', filetype, 'written to :', zero_filename)
 
 ##------------------------------------------------------------
 ##  xml_split_by_xml - write matched and unmatched
 ##     	xml given xml file for matching.  filetype of two
 ##  	input xml must be the same.
 ##------------------------------------------------------------
-def	xml_split_by_xml (xml_file, split_xml_file, outfile, filetype='faces') :
+def	xml_split_by_xml (xml_file, split_xml_file, outfile, filetype='faces', type_split='files') :
 	objs_d = defaultdict(list)
 	split_filenames = load_objs_from_files (split_xml_file, objs_d, filetype)
-	xml_split_by_files (xml_file, split_filenames, outfile, filetype)
+	xml_split_by_files (xml_file, split_filenames, outfile, filetype, type_split)
 
 ##------------------------------------------------------------
-##  obj_split_by_files - return list of matched and unmatched
-##     objs given filename.
-##  if filename_type == 'source', then get the source filename
+##  obj_split - return list of matched and unmatched
+##     objs given type_split.
+##  if filename_type == 'source', get the source filename
 ##		obj to compare against list
-##	only matches full strings, not substrings
+##	only matches full strings when spliting by files
+##    matches substring when split by pattern.  e.g. pattern '_chip_0'
+##    will matching all filenames that contains '_chip_0' like
+##    '/data/images/chips/IMG_0001_chip_0'
 ##------------------------------------------------------------
-def	obj_split_by_files (objs_d, filenames, filename_type='file') :
+def	obj_split (objs_d, filenames, filename_type='file', type_split='files') :
 	matched_objs = []
 	unmatched_objs = []
-	# TODO: 
 	# pdb.set_trace ()
-	for label, objs in list(objs_d.items ()) :  ## iterate through all objs
-		for obj in objs :
-			# pdb.set_trace ()
-			if filename_type == 'source' :
-				obj_filename = get_chip_source_file (obj)
-			else :
-				obj_filename = obj_get_filename (obj)
-			if obj_filename in filenames :
-				matched_objs.append (obj)
-			else :
-				unmatched_objs.append (obj)
-	return matched_objs, unmatched_objs
+	if type_split == 'files' :
+		for label, objs in list(objs_d.items ()) :  ## iterate through objs
+			for obj in objs :
+				# pdb.set_trace ()
+				if filename_type == 'source' :
+					obj_filename = get_chip_source_file (obj)
+				else :
+					obj_filename = obj_get_filename (obj)
+				if obj_filename in filenames :
+					matched_objs.append (obj)
+				else :
+					unmatched_objs.append (obj)
 
+	## ---------------  need to test ------------
+	## TODO: implement pattern match
+	elif type_split == 'patterns' :
+		split_patterns = filenames
+		for label, objs in list(objs_d.items ()) :  ## iterate through objs
+			for obj in objs :
+				# pdb.set_trace ()
+				if filename_type == 'source' :
+					obj_filename = get_chip_source_file (obj)
+				else :
+					obj_filename = obj_get_filename (obj)
+				for pattern in split_patterns :
+					if pattern in obj_filename :
+						matched_objs.append (obj)
+					else :
+						unmatched_objs.append (obj)
+	else:
+		print ('Error: Unimplemented split option:',  type_split)
+
+	return matched_objs, unmatched_objs
 
 ##------------------------------------------------------------
 ##  
@@ -3069,10 +3702,11 @@ def extract_bc_embeddings (input_files) :
 		for embedding in root.findall ('./embeddings/embedding'):    
 			label = embedding.find ('./label')
 			# pdb.set_trace ()
-			if label.text[:2] == 'bc' : # bc bear
-				if label.text == 'bc_also' or label.text == 'bc_amber' or label.text == 'bc_beatrice' or label.text == 'bc_bella' or label.text == 'bc_flora' or label.text == 'bc_frank' or label.text == 'bc_gc' or label.text == 'bc_hoeya' or label.text == 'bc_kwatse' or label.text == 'bc_lenore' or label.text == 'bc_lillian' or label.text == 'bc_lucky' or label.text == 'bc_river' or label.text == 'bc_steve' or label.text == 'bc_toffee' or label.text == 'bc_topaz' :
-					bc1_embeds.append (embedding)
-				else :
+			# 	if label.text == 'bc_also' or label.text == 'bc_amber' or label.text == 'bc_beatrice' or label.text == 'bc_bella' or label.text == 'bc_flora' or label.text == 'bc_frank' or label.text == 'bc_gc' or label.text == 'bc_hoeya' or label.text == 'bc_kwatse' or label.text == 'bc_lenore' or label.text == 'bc_lillian' or label.text == 'bc_lucky' or label.text == 'bc_river' or label.text == 'bc_steve' or label.text == 'bc_toffee' or label.text == 'bc_topaz' :
+			#		bc1_embeds.append (embedding)
+			#	else :
+			#		bc_embeds.append (embedding)
+			if label in bc_labels :
 					bc_embeds.append (embedding)
 			else : # brooks bear
 				bf_embeds.append (embedding)
