@@ -797,7 +797,7 @@ def flatten_embedsdict (embeds_d) :
 
 ##------------------------------------------------------------
 ##  get list of embedding values from embeds list
-##   given: [[label, filename, embedding], ... ]
+##   given: [[label, filename, embedding, img_filename], ... ]
 ##------------------------------------------------------------
 def get_embed_vals_from_list (e_list) :
 	e_vals_list = []
@@ -805,6 +805,15 @@ def get_embed_vals_from_list (e_list) :
 		e_vals_list.append (e_list[i][2])
 	return e_vals_list
 		
+##------------------------------------------------------------
+##  get list of image filenames from embeds list
+##   given: [[label, filename, embedding, img_filename], ... ]
+##------------------------------------------------------------
+def	get_img_files_from_list (e_list):
+	e_imgs_list = []
+	for i in range (len (e_list)) :
+		e_imgs_list.append (e_list[i][3])
+	return e_vals_list
 
 ##------------------------------------------------------------
 ##  return subpath n dirs above file
@@ -827,21 +836,37 @@ def subpath (filename, n) :
 ##------------------------------------------------------------
 ##  get_embeddings from obj - given dict of embedding tags,
 ##   embed values and filename to create flattened list
-##   of [label, filename, embedding]
+##   of [label, embed_file, embed_floats, img_file, chip_file]
 ##------------------------------------------------------------
 def get_embedding_list_from_objs (embeds_d) :
 	embedding_list = []
 	for label, embeds in list (embeds_d.items ()) :
 		for embed_tag in embeds :
 			embed_val = embed_tag.find ('./embed_val')
-			chipname = embed_tag.attrib.get ('file')
+			embed_filename = embed_tag.attrib.get ('file')
 			# pdb.set_trace ()
-			filename = subpath (chipname, 2)
+			embed_file = subpath (embed_filename, 2)
 			vals_str = embed_val.text.split ()
 			embed_floats = [float (i) for i in vals_str]
-			embedding = [label, filename, embed_floats]
+			img_file = get_embed_chip_source_file (embed_tag)
+			chip_file = get_embed_chip_file (embed_tag)
+			embedding = [label, embed_file, embed_floats, img_file, chip_file]
 			embedding_list.append (embedding)
 	return embedding_list
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_embed_chip_source_file (embed_tag) :
+	chip_tag = embed_tag.find ('./chip')
+	img_filename = get_chip_source_file (chip_tag)
+	return img_filename
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_embed_chip_file (embed_tag) :
+	chip_tag = embed_tag.find ('./chip')
+	img_filename = obj_get_filename (chip_tag)
+	return img_filename
 
 ##------------------------------------------------------------
 ##  output csv of distances to each train embeddings
@@ -849,17 +874,21 @@ def get_embedding_list_from_objs (embeds_d) :
 ##   and filename, write out matrix all train distances from
 ##   each test embedding
 ##------------------------------------------------------------
-def write_csv_embed_distances (probe_d, gallery_d, csv_file) :
+def write_csv_embed_distances (probe_d, gallery_d, csv_file, db) :
 	e_probe_list = get_embedding_list_from_objs (probe_d)
 	e_gallery_list = get_embedding_list_from_objs (gallery_d)
 	e_val_probe_list = get_embed_vals_from_list (e_probe_list)
 	e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
+
 	# pdb.set_trace ()
 	fp = open (csv_file, "w")
-	closest_file = 'e_closests.csv'
+	closest_file = 'closests_' + csv_file
+	matchinfo_file = 'matchinfo_' + current_datetime () + '.csv'
 	fp_closest = open (closest_file, "w")
+	fp_matchinfo = open (matchinfo_file, "w")
 	print ('\n... writing nearest matches to', closest_file)
-	fp_closest.write ('test; closest label; distance; match\n')
+	# fp_closest.write ('test; idx closest label; closest label; distance; match; test img date; test img time; matched img date; matched img time: same match \n')
+	fp_closest.write ('test; idx closest label; closest label; distance; match')
 	# write header
 	for i in range (len (e_gallery_list)) :
 		fp.write (';' + e_gallery_list[i][0])
@@ -871,13 +900,20 @@ def write_csv_embed_distances (probe_d, gallery_d, csv_file) :
 	for i in range (len (e_probe_list)) :
 		# write label
 		probe_label = e_probe_list[i][0]
+		probe_imgname = e_probe_list[i][3]
 		probe_embedding = e_val_probe_list[i]
 		fp.write (probe_label)
 		# pdb.set_trace ()
 		min_indices, min_distances = write_dist_csv (probe_embedding,  e_val_gallery_list, fp)
-		match_count += write_closests (e_gallery_list, fp_closest, min_indices, min_distances, probe_label)
+		probe_info = e_probe_list[i]
+		match_count += write_closests (e_gallery_list, fp_closest, min_indices, min_distances, probe_info, db, fp_matchinfo)
 	fp.close ()
 	fp_closest.close ()
+	fp_matchinfo.close ()
+	if db is None :
+		print ('\n... generated', closest_file)
+	else :
+		print ('\n... generated', closest_file, 'and', matchinfo_file)
 	print ('\n\ttest labels   :', str (len (e_probe_list)))
 	print ('\tmatched labels:', str (match_count))
 	print ('\taccuracy      :', str (match_count / len (e_probe_list)))
@@ -885,20 +921,64 @@ def write_csv_embed_distances (probe_d, gallery_d, csv_file) :
 
 
 ##------------------------------------------------------------
+##  write closest neighbors to file.  if match and has file info db,
+##    write data to file for viewing and checking for data bias (leak)
+##  format: label;distance; date1;time1,date2; time2; 
+##			image1, image2, chip1, chip2
+## 
+##  probe_info & e_gallery_list content:
+##       [label, embed_file, embed_floats, img_file, chip_file]
+##	  returned from get_embedding_list_from_objs
 ##------------------------------------------------------------
 def write_closests (e_gallery_list, fp, min_indices, 
-		min_distances, probe_label) :
+		min_distances, probe_info, db, fp_matchinfo) :
 	# pdb.set_trace ()
+	label_idx = 0
+	img_idx = 3
+	chip_idx = 4
 	match = 0
+	probe_label = probe_info[label_idx]
+	probe_image = probe_info[img_idx]
+	probe_chip = probe_info[chip_idx]
+	db_df = None
+	if db is not None :
+		db_df = pandas.read_csv (db, sep=';')
+		probe_datetime = get_file_datetime ([probe_image], db_df)
+		probe_date = probe_datetime [0]
+		probe_time = probe_datetime [1]
 	fp.write (probe_label)
 	for i in range (len (min_indices)) :
+		probe_min_date_match = 0
 		index = min_indices[i]
 		dist = min_distances[i]
-		min_label = e_gallery_list[index][0]
+		min_label = e_gallery_list[index][label_idx]
+		min_image = e_gallery_list[index][img_idx]
+		min_chip = e_gallery_list[index][chip_idx]
 		# pdb.set_trace ()
 		if min_label == probe_label :
 			match = 1
-		fp.write ('; ' + str (i) + '; ' + min_label + '; ' + str (min_distances[i]))
+			# write out info if labels match and dates match i.e. potential bias
+			if db is not None :
+				# pdb.set_trace ()
+				min_datetime = get_file_datetime ([min_image], db_df)
+				min_date = min_datetime [0]
+				min_time = min_datetime [1]
+				if min_date[0] == probe_date[0] :
+					probe_min_date_match = 1
+				fp_matchinfo.write (min_label + ';' + str (dist)
+					+ ';' + str (probe_date[0]) 
+					+ ';' + str (probe_time[0])
+					+ ';' + str (min_date[0])
+					+ ';' + str (min_time[0])
+					+ ';' + probe_image
+					+ ';' + min_image
+					+ ';' + probe_chip
+					+ ';' + min_chip
+					+ ';' + str (probe_min_date_match)
+					+ '\n')
+		fp.write ('; ' + str (i) + '; ' + min_label + '; ' + str (dist))
+		# fp.write (';' + min_image + ';' + str (min_date[0]) + ';' + str (min_time[0]))
+		# fp.write (';' + probe_image + ';' + str (probe_date[0]) + ';' + str (probe_time[0]))
 	fp.write ('; ' + str (match) + '\n')
 	return match
 ##------------------------------------------------------------
@@ -907,7 +987,7 @@ def write_closests (e_gallery_list, fp, min_indices,
 ##   and csv output filename, write out matrix all train distances from
 ##   each test embedding
 ##------------------------------------------------------------
-def gen_embed_dist_csv (test_files, train_files, csv_file, filetype="embeds") :
+def gen_embed_dist_csv (test_files, train_files, csv_file, db, filetype="embeds") :
 	e_test_d = defaultdict (list)
 	e_train_d = defaultdict (list)
 	load_objs_from_files (test_files, e_test_d, filetype)
@@ -919,14 +999,14 @@ def gen_embed_dist_csv (test_files, train_files, csv_file, filetype="embeds") :
 			# write train label across top
 			# fp.printf (e_train_list)
 			# write_csv (e_test_list[i], e_train_list, fp)
-	write_csv_embed_distances (e_test_d, e_train_d, csv_file)
+	write_csv_embed_distances (e_test_d, e_train_d, csv_file, db)
 
 ##------------------------------------------------------------
 ##  write_dist_csv - given emedding, list of embeddings,
 ##     and file pointer, write out embedding distances into file
 ##	   separated by ';'
 ##     also include min distance and index to its label
-##	   returns index to closest distance
+##	   returns index of nearest neighbor and distance to nearest neighbor
 ##------------------------------------------------------------
 def write_dist_csv (e_test, e_train_list, fp) :
 	e_distance_list = get_embed_distances_e_elist (e_test, e_train_list)
@@ -1016,11 +1096,8 @@ def print_dict (chips_d) :
 def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
-	# detect if chips file or faces file
 
 	chips_d = defaultdict(list)
-
-
 	if split_by_label :
 		split_type = 'by_label'
 	elif split_by_day_grouping :
@@ -1035,11 +1112,16 @@ def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True
 	if len (chunks) > g_unused :
 		if len (chunks[g_unused]) > 0 :
 			file_unused = output + "_unused" + ".xml"
+			generate_xml_from_objs (chunk[g_unused], file_unused, filetype)
+			print('\t', len (list_unused), 'labels unused, failing minimum # of images, written to file : \n\t', file_unused, '\n')
 	if len (chunks) > g_small_img :
 		if len (chunks[g_small_img]) > 0 :
 			file_small_img = output + "_small_faceMeta" + ".xml"
-	filenames = [file_x, file_y, file_unused, file_small_img]
-	generate_partition_files (chunks, filenames, filetype)
+			generate_xml_from_objs (chunk[g_small_img], file_small_img, filetype)
+			print(len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n')
+	# generate_partition_files (chunks, filenames, filetype)
+	generate_xml_from_objs (chunk[g_x], file_x, filetype)
+	generate_xml_from_objs (chunk[g_y], file_y, filetype)
 
 ##------------------------------------------------------------
 ##  remove chips with resolution below min
@@ -1367,7 +1449,6 @@ def	get_image_list_from_df (df, img_column) :
 				# pdb.set_trace ()
 			return vals
 
-
 ##------------------------------------------------------------
 ##------------------------------------------------------------
 def test_utils () :
@@ -1382,6 +1463,23 @@ def get_all_labels (objs_d) :
 	for label, objs in list(objs_d.items ()) :
 		labels.append (label)
 	return labels
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_file_datetime (obj_filenames, df_all) :
+	parent_path='/home/data/bears/'
+	# pdb.set_trace ()
+	### fix path to ensure filename will match image field in csv
+	filenames = [f.replace (parent_path, '') for f in obj_filenames]
+	df_images = pandas.DataFrame (filenames, columns=['IMAGE'])
+	# get table from list of images
+	df_images_info = pandas.merge (df_all, df_images, on=['IMAGE'], how='inner')
+	# get date and time from result
+	dates = get_image_list_from_df (df_images_info, 'DATE')
+	times = get_image_list_from_df (df_images_info, 'TIME')
+	# datetime = [dates, times]
+	return [dates, times]
+
 
 ##------------------------------------------------------------
 ##  given list of image filenames and csv of image info
@@ -1421,14 +1519,20 @@ def get_images_from_indices (label_date_groups, group_indices, df_images_db) :
 	#     e.g. [['bc_adeane', 20140905], ['bc_also', 20160810]... ]
 	label_date_list = create_label_date_list_from_indices (
 						label_date_groups, group_indices)
+	images = get_images_for_label_dates (label_date_list, df_images_db)
+	return images
+
+##------------------------------------------------------------
+##  given list of [label date], return images matching those labels and dates
+##------------------------------------------------------------
+def get_images_for_label_dates (label_date_list, df_images_db) :
 	df_label_date = pandas.DataFrame (label_date_list, columns=['LABEL', 'DATE'])
 	# join label_date list with images db to get images info
 	df_label_date_info = pandas.merge (df_images_db, df_label_date, 
 						on=['LABEL', 'DATE'], how='inner')
 	# extract images to list
-	images_list = get_image_list_from_df (df_label_date_info, 'IMAGE')
-	return images_list
-
+	images = get_image_list_from_df (df_label_date_info, 'IMAGE')
+	return images
 
 ##------------------------------------------------------------
 #  given obj dict, group into x and y with mutually exclusive
@@ -1458,6 +1562,40 @@ def partition_files_by_label (objs_d, num_images, x, y) :
 	return objs_x, objs_y
 
 ##------------------------------------------------------------
+##  given list of images, return list of only one image per day per label
+##------------------------------------------------------------
+def extract_single_label_group_image (chip_file, csv_filename, output_file) :
+	objs_d = defaultdict(list)
+	obj_filenames = load_objs_from_files ([chip_file], objs_d, 'chips', 'source')
+	if get_verbosity () > 0 :
+		print ('input number of images:', len (obj_filenames))
+	parent_path='/home/data/bears/'
+	df_images_info = get_files_info_df (obj_filenames, csv_filename, parent_path)
+	groups_label_date = df_images_info.groupby (['LABEL', 'DATE'])
+	# [['bc_adeane', 20140905]:1,['bc_also', 20160810],5] .. []]
+	# pdb.set_trace ()
+	label_day_group_counts = groups_label_date.size () 
+	if get_verbosity () > 0 :
+		print ('number of label-day groups:', len (label_day_group_counts))
+	# get list of label-date 
+	# [['bc_adeane', 20140905],['bc_also', 20160810] .. []]
+	label_date_list = create_label_date_list_from_indices (
+				label_day_group_counts, range (len (label_day_group_counts)))
+	# for each label-day group, select random image to include
+	singles = []
+	for label_date in label_date_list :
+		images = get_images_for_label_dates ([label_date], df_images_info)
+		image = random.choice (images)
+		singles.append (image)
+	localized_singles = [parent_path+s for s in singles]
+	objs_singles, objs_not_singles = obj_split (objs_d, localized_singles, 'source', 'files')
+	if get_verbosity () > 0 :
+		print ('count of singles images :', len (objs_singles))
+		print ('count of extr    images :', len (objs_not_singles))
+	generate_xml_from_objs (objs_singles, output_file)
+	return
+
+##------------------------------------------------------------
 # partition by groups
 # if chips_d is None, then input was csv
 # 	1. Read CSV
@@ -1474,10 +1612,14 @@ def partition_files_by_label (objs_d, num_images, x, y) :
 #	A3
 #	A4
 # 	use list of label-dates to generate two new xml
+#
+# 
+#
 #   
 ##------------------------------------------------------------
 def partition_files_by_group (obj_filenames, objs_d, x, y, csv_filename, label_group_minimum) :
 	parent_path='/home/data/bears/'
+	pdb.set_trace ()
 	df_images_info = get_files_info_df (obj_filenames, csv_filename, parent_path)
 	groups_label_date = df_images_info.groupby (['LABEL', 'DATE'])
 	# [['bc_adeane', 20140905]:1,['bc_also', 20160810],5] .. []]
@@ -1485,7 +1627,6 @@ def partition_files_by_group (obj_filenames, objs_d, x, y, csv_filename, label_g
 	# group_count_rand = label_day_group_counts.sample (frac=1) # randomize order
 	# partition - looking for something like [1,2,3,7 ] [4,5,6,8,9,10]
 
-	# pdb.set_trace ()
 	dropped_images_cnt = 0
 	labels = get_all_labels (objs_d)
 	if label_group_minimum > 0 :
@@ -1750,50 +1891,15 @@ def generate_folds_files (train_list, validate_list, filename) :
 ##  create each xml tree for x and y partition
 ##  then write xml files
 ##------------------------------------------------------------
-def generate_partition_files (chunks, filenames, filetype="chips") :
-	list_x = chunks[g_x]
-	list_y = chunks[g_y]
-	file_x = filenames[g_x]
-	file_y = filenames[g_y]
-	file_unused = filenames[g_unused]
-	file_small_img = filenames[g_small_img]
+def generate_xml_from_objs (obj_list, filename, filetype="chips") :
+	root, objs = create_new_tree_w_element (filetype)
+	for obj in obj_list :
+		objs.append (obj)
 
-	root_x, chips_x = create_new_tree_w_element (filetype)
-	for i in range(len(list_x)):
-		chips_x.append (list_x[i])
-	root_y, chips_y = create_new_tree_w_element (filetype)
-	for i in range(len(list_y)):
-		chips_y.append (list_y[i])
-
-	indent (root_x)
-	indent (root_y)
-	tree_x = ET.ElementTree (root_x)
-	tree_y = ET.ElementTree (root_y)
-	tree_x.write (file_x, encoding='ISO-8859-1')
-	tree_y.write (file_y, encoding='ISO-8859-1')
-	print("\nGenerated partition files: \n\t", file_x, "\n\t", file_y)
-	print("")
-
-	if file_unused :
-		list_unused = chunks[g_unused]
-		root_unused, chips_unused = create_new_tree_w_element (filetype)
-		for chip in list_unused :
-			chips_unused.append (chip)
-		indent (root_unused)
-		tree_unused = ET.ElementTree (root_unused)
-		tree_unused.write (file_unused)
-		print('\t', len (list_unused), 'labels unused due to less than minimum # of images, written to file : \n\t', file_unused, '\n')
-		print()
-	if file_small_img :
-		list_small_img = chunks[g_small_img]
-		root_small, chips_small = create_new_tree_w_element ('faces')
-		for i in range(len(list_small_img)):
-			chips_small.append (list_small_img[i])
-		indent (root_small)
-		tree_small = ET.ElementTree (root_small)
-		tree_small.write (file_small_img)
-		print(len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n')
-	print()
+	indent (root)
+	tree_x = ET.ElementTree (root)
+	tree_x.write (filename, encoding='ISO-8859-1')
+	print("\nGenerated xml file: \n\t", filename, "\n")
 
 ##------------------------------------------------------------
 ##  create n sets of train & validate files
@@ -2672,6 +2778,8 @@ def get_orig_img_by_name (image_file, cur_str, orig_str):
 	return ''
 
 ##------------------------------------------------------------
+##  trim path n directories from top level
+##  e.g.   /a/b/c/d/e/f/g.ext, 4 -> e/f/g.ext
 ##------------------------------------------------------------
 def trim_path_start (pathname, dir_depth) :
 	path = pathname
@@ -2681,6 +2789,20 @@ def trim_path_start (pathname, dir_depth) :
 	path += '/'
 	rel_pathname = pathname.replace (path, '')
 	return rel_pathname
+
+##------------------------------------------------------------
+##  leave path with n directories from basename
+##  e.g.   /a/b/c/d/e/f/g.ext, 1 -> f/g.ext
+##------------------------------------------------------------
+def trim_path_end (pathname, dir_depth) :
+	path = pathname
+	newpath = os.path.basename (path)
+	for i in range (dir_depth) :
+		path = os.path.dirname (path)
+		cur_dir = os.path.basename (path)
+		newpath = cur_dir + '/' + newpath
+	# pdb.set_trace ()
+	return newpath
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
@@ -2860,17 +2982,16 @@ def write_image_info_csv (filenames, outfile, filetype):
 		print("... header: ", csv_header)
 
 ##------------------------------------------------------------
-## write html of images grouped by bear, grouped by date, 
-##	 color coded for train vs test
+## write html of bear info: image, label/name, date, and dataset
+##	 color coded for train (green) vs test (red)
 ##   expects 4 columns: image, label, date, dataset
 ##
-# breaks between dates and bears:
 #    <hr style="width:50%">beatrice 2020<br>
 # resulting string for each image:
 # <img src="/home/data/bears/imageSource/britishColumbia/melanie_20170828/bc_beatrice/IMG_5056.JPG"
 #    width"200" height="300" style="border:5px solid green;" alt="beatrice" >
 ##------------------------------------------------------------
-def html_same_date_from_csv (csv_file, html_outfile, delim=';') :
+def html_image_info_from_csv (csv_file, html_outfile, delim=';') :
 	with open (csv_file) as csv_file:
 		csv_reader = csv.reader (csv_file, delimiter=delim)
 		##   expects 4 columns: image, label, date, dataset
@@ -2889,6 +3010,57 @@ def html_same_date_from_csv (csv_file, html_outfile, delim=';') :
 				html_fp.write ('<hr style="width:50%">' + new_label + ' ' + new_date + ' <br>\n')
 			img_tag = '<img src="/home/data/bears/' + row[0] + '" '
 			img_tag += 'style="border:5px solid ' + border_color + '; max-width:250px; max-height:250px;" alt="' + label + '" >\n'
+			html_fp.write (img_tag)
+		html_fp.close ()
+		print ("... wrote html to file: ", html_outfile)
+	
+##------------------------------------------------------------
+## write html of embedding and its correct matched 
+##	 color coded for train vs test
+##  format: label;distance; 
+##			date1;time1; date2;time2; 
+##			image1;image2; chip1;chip2;
+##			match
+##
+# breaks between matches: 
+#    <hr style="width:50%">beatrice 2020<br>
+# resulting string for each image:
+# <img src="/home/data/bears/imageSource/britishColumbia/melanie_20170828/bc_beatrice/IMG_5056.JPG"
+#    width"200" height="300" style="border:5px solid green;" alt="beatrice" >
+##------------------------------------------------------------
+def html_matched_image_info_from_csv (csv_file, html_outfile, delim=';') :
+	with open (csv_file) as csv_file:
+		csv_reader = csv.reader (csv_file, delimiter=delim)
+		##  format: label;distance; 
+		##			date1;time1; date2;time2; 
+		##			image1;image2; chip1;chip2
+		html_fp = open (html_outfile, "w")
+		for row in csv_reader:
+			# pdb.set_trace ()
+			label = row[0]
+			distance = row[1]
+			date1 = row[2]
+			time1 = row[3]
+			date2 = row[4]
+			time2 = row[5]
+			image1 = row[6]
+			image2 = row[7]
+			chip1 = row[8]
+			chip2 = row[9]
+			datematch = row[10]
+			border_color = 'green'
+			if int (datematch) == 1 :
+				border_color = 'red'
+			img_close = 'style="border:5px solid ' + border_color + '; max-width:250px; max-height:250px;" alt="' + label + '" >\n'
+
+			html_fp.write ('<hr style="width:50%">' + label + '&emsp; &emsp;' + distance + ' <br>\n')
+			html_fp.write ('<hr style="width:50%">' 
+				+ date1 + ':' + time1 + '&emsp; &emsp;'
+				+ date2 + ':' + time2 + ' <br>\n')
+			img_tag = '<img src="' + image1 + '" ' + img_close
+			img_tag += '<img src="' + image2 + '" ' + img_close
+			img_tag += '<img src="' + chip1 + '" ' + img_close
+			img_tag += '<img src="' + chip2 + '" ' + img_close
 			html_fp.write (img_tag)
 		html_fp.close ()
 		print ("... wrote html to file: ", html_outfile)
@@ -3252,7 +3424,7 @@ def	xml_split_by_files (xml_files, split_file, outfile, filetype='faces', type_s
 	objs_d = defaultdict(list)
 	set_multi_ok (multi_ok)
 	source_filenames = load_objs_from_files (xml_files, objs_d, filetype)
-	pdb.set_trace ()
+	# pdb.set_trace ()
 	with open (split_file, 'r') as fp:
 		filenames_raw = fp.readlines ()
 	filenames = [filename.strip() for filename in filenames_raw]
