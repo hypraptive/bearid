@@ -18,7 +18,7 @@ def main (argv) :
     # parser.formatter.max_help_position = 50
 	parser.add_argument ('files', nargs='+')
 	parser.add_argument ('-filetype', '--filetype', default="chips",
-		help='type of xml file: <images,chips,faces,pairs> .')
+		help='type of xml file: <images,chips,faces,pairs,embeds> .')
 	parser.add_argument ('-write', '--write', default="",
 		action="store_true",
 		help='write stats into file stats_*_<currentDate> .')
@@ -35,7 +35,7 @@ def main (argv) :
 	args = parser.parse_args()
 	# print "ls : ", args.ls
 	# print "files: ", args.files
-	filetypes = ['chips', 'faces', 'pairs', 'images']
+	filetypes = ['chips', 'faces', 'pairs', 'images', 'embeds']
 	filetype = args.filetype
 	if filetype not in filetypes :
 		print('unrecognized filetype :', filetype, 'should be one of:', filetypes)

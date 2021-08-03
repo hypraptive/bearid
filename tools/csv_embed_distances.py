@@ -20,6 +20,8 @@ def main (argv) :
 		formatter_class=RawTextHelpFormatter)
 	parser.add_argument ('embed1')
 	parser.add_argument ('embed2')
+	parser.add_argument ('-db', '--db',
+		help='db of images info.')
 	parser.add_argument ('-out', '--output', default="e_dist.csv",
 		help='specify csv output file.')
 	parser.add_argument ('-v', '--verbosity', type=int, default=1,
@@ -38,7 +40,7 @@ def main (argv) :
 		csv_filename = 'e_dist_' + u.current_datetime () + '.csv'
 		print ('CSV file exists, writing to ' +  csv_filename)
 		args.output = csv_filename
-	u.gen_embed_dist_csv ([args.embed1], [args.embed2], args.output)
+	u.gen_embed_dist_csv ([args.embed1], [args.embed2], args.output, args.db)
 
 if __name__ == "__main__":
 	main (sys.argv)
