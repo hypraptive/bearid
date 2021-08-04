@@ -14,7 +14,7 @@ from collections import defaultdict
 ##    find_bears *.xml intputfile
 ##------------------------------------------------------------
 def main (argv) :
-	parser = argparse.ArgumentParser(description='\nRun tensorflow model via docker to find bears in images. Takes file which lists all images (e.g. from create_imgs_file) \n \t example: ' + argv[0] + ' -mod tf-md -min 0.9 images.txt',
+	parser = argparse.ArgumentParser(description='\nRun tensorflow model via docker to find bears in images. Takes file which lists all images (e.g. create_imgs_file->xml_to_files.py) \n \t example: ' + argv[0] + ' -mod tf-md -min 0.9 images.txt',
 		formatter_class=RawTextHelpFormatter)
     # parser.formatter.max_help_position = 50
 	parser.add_argument ('inputfile')
