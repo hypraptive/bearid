@@ -18,6 +18,7 @@ from copy import deepcopy
 from collections import namedtuple
 from collections import defaultdict
 from collections import OrderedDict
+from collections import Counter
 from os import walk
 import numpy as np
 import scipy
@@ -31,7 +32,11 @@ from sklearn.manifold import TSNE
 from PIL import Image
 from pathlib import Path
 
-
+g_e_label_idx = 0
+g_e_file_idx = 1
+g_e_vals_idx = 2
+g_e_img_idx = 3
+g_e_chip_idx = 4
 g_x = 0
 g_y = 1
 g_unused = 2
@@ -667,7 +672,7 @@ def load_objs (root, d_objs, filetype, filename_type='file') :
 			# pdb.set_trace ()
 			d_objs[label.text].append(embedding)
 	else :
-		print('Error: unknown filetype.  Expected one of "faces", "chips", "embeddings", "embeds" or "pairs".')
+		print('Error: unknown filetype: ', filetype, '  Expected one of "faces", "chips", "embeddings", "embeds" or "pairs".')
 	# pdb.set_trace ()
 	return obj_filenames
 
@@ -732,6 +737,7 @@ def get_embed_distances (embeds_d, new_embed) :
 def get_embed_averages (embeds_d) :
 	e_averages_d = defaultdict ()
 	for label, embeds in list(embeds_d.items()):
+		pdb.set_trace ()
 		e_array = np.array (embeds)
 		e_mean = np.mean (e_array, axis=0, dtype=np.float64)
 		e_averages_d [label] = e_mean.tolist ()
@@ -757,12 +763,63 @@ def print_e_stats (embeds_d) :
 	# print all to csv and stdout
 
 ##------------------------------------------------------------
-##  find nearests labels
+##  write 2 rows: 
+##     value of average embed of each label 
+##     name of each label
 ##------------------------------------------------------------
-def get_closest_averages (embeds_d, e, n) :
-	e_averages_d = get_embed_averages (embeds_d)
-	e_dist_d = get_embed_distances (e_dist_d, e)
+def	write_embed_averages_hdr (av_train_e_d, av_fp) :
+	# write av embed for each label.  
+	# av_fp.write (';')
+	# for label, embeds in av_train_e_d:
+		# av_fp.write (';' + embed[0])
+	# av_fp.write ('\n')
+	av_fp.write (';')
+	for label, embeds in av_train_e_d:
+		av_fp.write (';' + label)
+	av_fp.write ('\n')
+
+##------------------------------------------------------------
+##  write distance to label average
+##------------------------------------------------------------
+def write_dist_to_averages (e_distances, av_fp):
+	av_fp.write (';')
+	for e_dist in e_distances:
+		av_fp.write (';' + str (e_dist))
+
+##------------------------------------------------------------
+##  write n sets of label and dist
+##------------------------------------------------------------
+def write_n_closest (e_distances, n, av_fp) :
+	av_fp.write (';')
+	for e_dist in e_distances:
+		av_fp.write (';' + str (e_dist))
+		# write label
+		av_fp.write (';' + str (e_dist))
+
+##------------------------------------------------------------
+##  find nearests labels
+##  given embedding, enbed_dict, write n nearest labels
+##------------------------------------------------------------
+def get_closest_averages (train_e_d, test_e_d, n) :
+	av_dist_file = 'av_distance_' + current_datetime () + '.csv'
+	av_fp = open (av_dist_file, "w")
+
+	e_val_probe_list = get_embed_vals_from_list (e_probe_list)
+	e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
+
+
+
+	av_train_e_d = get_embed_averages (train_e_d)
+	write_embed_averages_hdr (av_train_e_d, av_fp)
+	for label, embeds in test_e_d :
+		for t_embed in embeds :
+			e_distances = get_embed_distances (av_train_e_d, t_embed)
+			write_dist_to_averages (e_distances, av_fp)
+			e_distances_sorted = e_distances.sorted (e_distances, key = lambda x: x[1])
+			pdb.set_trace ()
+			write_n_closest (e_distances_sorted, n, av_fp)
 	print_closest (e_dist_d, n)
+	av_fp.close ()
 
 
 ##------------------------------------------------------------
@@ -796,23 +853,59 @@ def flatten_embedsdict (embeds_d) :
 	return e_list
 
 ##------------------------------------------------------------
+## 	embedding = [label, embed_file, embed_floats, , img_file, chip_file]
+##------------------------------------------------------------
+def einfo_get_label (embed_info) :
+	return embed_info[g_e_label_idx]
+
+##------------------------------------------------------------
+## 	embedding = [label, embed_file, embed_floats, , img_file, chip_file]
+#  return filename of embedding e.g. img5_chip_0.dat
+##------------------------------------------------------------
+def einfo_get_file (embed_info) :
+	return embed_info[g_e_file_idx]
+
+##------------------------------------------------------------
+## 	embedding = [label, embed_file, embed_floats, , img_file, chip_file]
+#   returns list of values
+##------------------------------------------------------------
+def einfo_get_vals (embed_info) :
+	return embed_info[g_e_vals_idx]
+
+##------------------------------------------------------------
+## 	embedding = [label, embed_file, embed_floats, , img_file, chip_file]
+##  return original image e.g. img5.jpg
+##------------------------------------------------------------
+def einfo_get_img (embed_info) :
+	return embed_info[g_e_img_idx]
+
+##------------------------------------------------------------
+## 	embedding = [label, embed_file, embed_floats, , img_file, chip_file]
+##  returns name of chip file, e.g. img5_chip_0.jpg
+##------------------------------------------------------------
+def einfo_get_chip (embed_info) :
+	return embed_info[g_e_chip_idx]
+
+##------------------------------------------------------------
 ##  get list of embedding values from embeds list
 ##   given: [[label, filename, embedding, img_filename], ... ]
 ##------------------------------------------------------------
 def get_embed_vals_from_list (e_list) :
 	e_vals_list = []
 	for i in range (len (e_list)) :
-		e_vals_list.append (e_list[i][2])
+		einfo = e_list[i]
+		e_vals_list.append (einfo_get_vals (einfo))
 	return e_vals_list
 		
 ##------------------------------------------------------------
 ##  get list of image filenames from embeds list
 ##   given: [[label, filename, embedding, img_filename], ... ]
 ##------------------------------------------------------------
-def	get_img_files_from_list (e_list):
+def	get_imgs_from_list (e_list):
 	e_imgs_list = []
 	for i in range (len (e_list)) :
-		e_imgs_list.append (e_list[i][3])
+		einfo = e_list[i]
+		e_imgs_list.append (einfo_get_img (einfo))
 	return e_vals_list
 
 ##------------------------------------------------------------
@@ -833,6 +926,105 @@ def subpath (filename, n) :
 			return img_name
 	return img_name
 		
+##------------------------------------------------------------
+##  get AVERAGE embeddings from objs - given dict of embedding tags,
+##   return dictionay
+##   of [label, emtpy_embed_file, av_embed_floats, empty_img_file, empty_chip_file]
+##------------------------------------------------------------
+def get_av_embedding_dict_from_objs (embeds_d) :
+	embedding_d = defaultdict (list)
+	for label, embeds in list (embeds_d.items ()) :
+		embed_array = []
+		for embed_tag in embeds :
+			embed_val = embed_tag.find ('./embed_val')
+			# pdb.set_trace ()
+			vals_str = embed_val.text.split ()
+			embed_floats = [float (i) for i in vals_str]
+			embed_array.append (embed_floats)
+		# do average here
+		e_array = np.array (embed_array)
+		e_mean = np.mean (e_array, axis=0, dtype=np.float64)
+		e_average = e_mean.tolist ()
+		embed_file = ''
+		img_file = ''
+		chip_file = ''
+		embedding = [label, embed_file, e_average, img_file, chip_file]
+		embedding_d[label].append (embedding)
+	return embedding_d
+
+##------------------------------------------------------------
+##  return list of AVERAGE embeddings from vals- given dict of 
+##   average embeddings, orig embed dict,  and probe_inof. 
+##   get new average w/o probe value as: ((av * n) - probe)/(n-1)
+##   return flattened list
+##   of [label, emtpy_embed_file, av_embed_floats, empty_img_file, empty_chip_file]
+##------------------------------------------------------------
+def get_mod_av_embedding_list_from_vals (e_val_d, embeds_d, probe_einfo) :
+	embedding_list = []
+	# extract probe_einfo 
+	probe_label = ''
+	probe_label = einfo_get_label (probe_einfo)
+	probe_vals = einfo_get_vals (probe_einfo)
+	probe_vals_ar = np.array (probe_vals)
+	# pdb.set_trace ()
+	# neg_probe_vals_ar = 0-probe_vals_ar
+	for label, e_vals in list (e_val_d.items ()) :
+		if label != probe_label : 
+			embedding_list.append (e_vals[0])
+			continue
+		# rm probe val from average
+		vals = einfo_get_vals (e_vals[0])
+		cnt = len (embeds_d[label])
+		if cnt == 1 :
+			break
+		# pdb.set_trace ()
+		e_sum_array = np.array (vals) * cnt
+		e_sumnoprobe_array = e_sum_array - probe_vals_ar
+		e_mean_array = e_sumnoprobe_array / (cnt-1)
+		e_average = e_mean_array.tolist ()
+		embed_file = ''
+		img_file = ''
+		chip_file = ''
+		embedding = [label, embed_file, e_average, img_file, chip_file]
+		embedding_list.append (embedding)
+	return embedding_list
+
+##------------------------------------------------------------
+##  get AVERAGE embeddings from objs - given dict of embedding tags,
+##   create flattened list
+##   of [label, emtpy_embed_file, av_embed_floats, empty_img_file, empty_chip_file]
+##------------------------------------------------------------
+def get_av_embedding_list_from_objs (embeds_d, probe_einfo='') :
+	embedding_list = []
+	# extract probe_einfo 
+	probe_label = ''
+	if probe_einfo :
+		probe_label = einfo_get_label (probe_einfo)
+		probe_vals = einfo_get_vals (probe_einfo)
+		probe_vals_ar = np.array (probe_vals)
+		# pdb.set_trace ()
+		neg_probe_vals_ar = 0-probe_vals_ar
+	for label, embeds in list (embeds_d.items ()) :
+		embed_array = []
+		for embed_tag in embeds :
+			embed_val = embed_tag.find ('./embed_val')
+			# pdb.set_trace ()
+			vals_str = embed_val.text.split ()
+			embed_floats = [float (i) for i in vals_str]
+			embed_array.append (embed_floats)
+		# do average here
+		e_array = np.array (embed_array)
+		if label == probe_label : 
+			np.append (e_array, neg_probe_vals_ar)
+		e_mean = np.mean (e_array, axis=0, dtype=np.float64)
+		e_average = e_mean.tolist ()
+		embed_file = ''
+		img_file = ''
+		chip_file = ''
+		embedding = [label, embed_file, e_average, img_file, chip_file]
+		embedding_list.append (embedding)
+	return embedding_list
+
 ##------------------------------------------------------------
 ##  get_embeddings from obj - given dict of embedding tags,
 ##   embed values and filename to create flattened list
@@ -855,6 +1047,27 @@ def get_embedding_list_from_objs (embeds_d) :
 	return embedding_list
 
 ##------------------------------------------------------------
+##  get_embeddings from obj - given dict of embedding tags,
+##   embed values and filename to create flattened list
+##   of [label, embed_file, embed_floats, img_file, chip_file]
+##------------------------------------------------------------
+def get_embedding_dict_from_objs (embeds_d) :
+	einfo_d = default_dict (list)
+	for label, embeds in list (embeds_d.items ()) :
+		for embed_tag in embeds :
+			embed_val = embed_tag.find ('./embed_val')
+			embed_filename = embed_tag.attrib.get ('file')
+			# pdb.set_trace ()
+			embed_file = subpath (embed_filename, 2)
+			vals_str = embed_val.text.split ()
+			embed_floats = [float (i) for i in vals_str]
+			img_file = get_embed_chip_source_file (embed_tag)
+			chip_file = get_embed_chip_file (embed_tag)
+			embedding = [label, embed_file, embed_floats, img_file, chip_file]
+			einfo_d[labe].append (embedding)
+	return einfo_d
+
+##------------------------------------------------------------
 ##------------------------------------------------------------
 def get_embed_chip_source_file (embed_tag) :
 	chip_tag = embed_tag.find ('./chip')
@@ -869,44 +1082,154 @@ def get_embed_chip_file (embed_tag) :
 	return img_filename
 
 ##------------------------------------------------------------
+##  from embed info, return embed dist info [embedding, image_date]]
+##------------------------------------------------------------
+def get_einfo_image_date (einfo, db_df) :
+	einfo_imgname = einfo_get_img  (einfo)
+	einfo_datetime = get_file_datetime ([einfo_imgname], db_df)
+	einfo_date = einfo_datetime [0]
+	return einfo_date
+
+
+##------------------------------------------------------------
+##  write stats tested collective labels to file
+##  label; # train; # test; # right; label matched/#/label_train#; label matched/#/label_train#;
+##------------------------------------------------------------
+def edist_write_label_matches_stats (gallery_d, probe_d, matched_label_d, stats_filename) :
+	fp_matchstats = open (stats_filename, "w")
+	fp_matchstats.write ('label; # train; # test; # correct ; matched1/#/#train; matched2/#/#train; ... \n')
+	write_top_match_cnt = 3
+	for label, all_matched_labels in list (matched_label_d.items()) :
+		# pdb.set_trace ()
+		top_common = Counter(all_matched_labels).most_common()
+		counter_str = ''
+		# creating str for count of labels
+		# pdb.set_trace ()
+		top_match_str = ''
+		max_match = min (write_top_match_cnt, len (top_common))
+		extra_str = ''
+		true_pos = 0
+		for i in range (len (top_common)) :
+			match_label = top_common[i][0] 
+			match_count = top_common[i][1] 
+			if match_label == label :
+				true_pos = match_count
+			top_match_str += ';' + match_label + '/' + str (match_count) + '/' + str (len (gallery_d[match_label]))
+		label_stat = label + ';' + str (len (gallery_d[label])) + ';' + str (len (probe_d[label])) + ';' + str (true_pos) + top_match_str + '\n'
+		fp_matchstats.write (label_stat)
+	fp_matchstats.close ()
+
+##------------------------------------------------------------
+##  write stats top matches of each test to file
+##  label; # train; # test; # right; label matched/#; label matched/#;
+##------------------------------------------------------------
+def edist_write_top_matches_stats (gallery_d, matched_results, stats_filename) :
+	fp_matchstats = open (stats_filename, "w")
+	fp_matchstats.write ('label; # train; matched ; label matched/#; label matched/#\n')
+	write_top_match_cnt = 3
+	for results_pair in matched_results :
+		# pdb.set_trace ()
+		label = results_pair[0]
+		matched_label = results_pair[1]
+		all_matched_labels = results_pair[2]
+		top_common = Counter(all_matched_labels).most_common()
+		counter_str = ''
+		# creating str for count of labels
+		# pdb.set_trace ()
+		if matched_label == label :
+			matched = '1'
+		else :
+			matched = '0'
+		top_match_str = ''
+		max_match = min (write_top_match_cnt, len (top_common))
+		for i in range (max_match) :
+			match_label = top_common[i][0] 
+			match_count = top_common[i][1] 
+			top_match_str += ';' + match_label + '/' + str (match_count) + '/' + str (len (gallery_d[match_label]))
+		label_stat = label + ';' + str (len (gallery_d[label])) + ';' + matched + top_match_str + '\n'
+		fp_matchstats.write (label_stat)
+	fp_matchstats.close ()
+
+##------------------------------------------------------------
 ##  output csv of distances to each train embeddings
 ##   given dist of test embeddings, dict of train embeddings
 ##   and filename, write out matrix all train distances from
 ##   each test embedding
 ##------------------------------------------------------------
-def write_csv_embed_distances (probe_d, gallery_d, csv_file, db) :
+def write_csv_embed_distances (probe_d, gallery_d, csv_file, db, match_n, files_eq, write_stats) :
 	e_probe_list = get_embedding_list_from_objs (probe_d)
-	e_gallery_list = get_embedding_list_from_objs (gallery_d)
-	e_val_probe_list = get_embed_vals_from_list (e_probe_list)
-	e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
-
+	if files_eq :
+		print ('... probe == gallery\n ')
+	if match_n == 0 :   # comparing against average for each label
+		e_gallery_list = get_av_embedding_list_from_objs (gallery_d)
+		e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
+		if files_eq:  # doing average & vs self so get average values
+			e_av_dict = get_av_embedding_dict_from_objs (gallery_d)
+	else : # each embedding
+		e_gallery_list = get_embedding_list_from_objs (gallery_d)
+		e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
 	# pdb.set_trace ()
 	fp = open (csv_file, "w")
 	closest_file = 'closests_' + csv_file
-	matchinfo_file = 'matchinfo_' + current_datetime () + '.csv'
+	filename_datetime = current_datetime () 
+	matchinfo_file = 'matchinfo_' + filename_datetime + '.csv'
 	fp_closest = open (closest_file, "w")
 	fp_matchinfo = open (matchinfo_file, "w")
+	matched_label_d = defaultdict (list)
 	print ('\n... writing nearest matches to', closest_file)
 	# fp_closest.write ('test; idx closest label; closest label; distance; match; test img date; test img time; matched img date; matched img time: same match \n')
-	fp_closest.write ('test; idx closest label; closest label; distance; match')
+	fp_closest.write ('probe; idx closest label; closest label; distance; match\n')
 	# write header
-	for i in range (len (e_gallery_list)) :
-		fp.write (';' + e_gallery_list[i][0])
+	if files_eq :
+		for label, objs in list(gallery_d.items()):
+			fp.write (';' + label)
+	else :
+		for i in range (len (e_gallery_list)) :
+			fp.write (';' + einfo_get_label (e_gallery_list[i]))
 	# fp.write (';' matched)
 	fp.write ('\n')
-	# pdb.set_trace ()
 	# write distances
+	matched_results = []
 	match_count = 0
+	db_df = None
+	if db is not None:
+		db_df = pandas.read_csv (db, sep=';')
+	single_cnt = 0
 	for i in range (len (e_probe_list)) :
 		# write label
-		probe_label = e_probe_list[i][0]
-		probe_imgname = e_probe_list[i][3]
-		probe_embedding = e_val_probe_list[i]
-		fp.write (probe_label)
-		# pdb.set_trace ()
-		min_indices, min_distances = write_dist_csv (probe_embedding,  e_val_gallery_list, fp)
 		probe_info = e_probe_list[i]
-		match_count += write_closests (e_gallery_list, fp_closest, min_indices, min_distances, probe_info, db, fp_matchinfo)
+		probe_label = einfo_get_label (probe_info)
+		# print (i, ': handling probe label', probe_label)
+		probe_embedding = einfo_get_vals (probe_info)
+		probe_distinfo = [probe_embedding]
+		if db is not None: # get embedding's image's date if has db info
+			probe_date = get_einfo_image_date (einfo, db_df)
+			probe_distinfo.append (probe_date)
+		fp.write (probe_label)
+
+		# if comparing vs (average & self), then change average to 
+		# remove self from average
+		if files_eq and match_n == 0 :
+			if len (gallery_d[probe_label]) == 1 :
+				single_cnt += 1
+				print ('... ignoring count of 1 for label:', probe_label)
+				continue
+			e_gallery_list = get_mod_av_embedding_list_from_vals (e_av_dict, gallery_d, probe_info)
+			# pdb.set_trace ()
+			e_val_gallery_list = get_embed_vals_from_list (e_gallery_list)
+		min_indices, min_distances = write_dist_csv (probe_distinfo, e_val_gallery_list, fp, match_n)
+		# pdb.set_trace ()
+		matched_label, all_matched_labels = write_closests_info (e_gallery_list, fp_closest, min_indices, min_distances, probe_info, db_df, fp_matchinfo)
+		matched_label_d[probe_label].append (matched_label)
+		if matched_label == probe_label :
+			match_count += 1
+		matched_results.append ([probe_label, matched_label, all_matched_labels])
+	if write_stats :
+		match_topstats_file = 'matchTopStats_' + current_datetime () + '.csv'
+		match_labelstats_file = 'matchLabelStats_' + current_datetime () + '.csv'
+		##  TODO NOW
+		edist_write_top_matches_stats (gallery_d, matched_results, match_topstats_file)
+		edist_write_label_matches_stats (gallery_d, probe_d, matched_label_d, match_labelstats_file)
 	fp.close ()
 	fp_closest.close ()
 	fp_matchinfo.close ()
@@ -914,9 +1237,14 @@ def write_csv_embed_distances (probe_d, gallery_d, csv_file, db) :
 		print ('\n... generated', closest_file)
 	else :
 		print ('\n... generated', closest_file, 'and', matchinfo_file)
+	if write_stats :
+		print ('\n... generated', match_topstats_file)
+		print ('\n... generated', match_labelstats_file)
 	print ('\n\ttest labels   :', str (len (e_probe_list)))
 	print ('\tmatched labels:', str (match_count))
-	print ('\taccuracy      :', str (match_count / len (e_probe_list)))
+	if files_eq :
+		print ('\tsingle instances:', str (single_cnt))
+	print ('\taccuracy      :', str (match_count / (len (e_probe_list)-single_cnt)))
 	print ('\n')
 
 
@@ -931,7 +1259,7 @@ def write_csv_embed_distances (probe_d, gallery_d, csv_file, db) :
 ##	  returned from get_embedding_list_from_objs
 ##------------------------------------------------------------
 def write_closests (e_gallery_list, fp, min_indices, 
-		min_distances, probe_info, db, fp_matchinfo) :
+		min_distances, probe_info, db_df, fp_matchinfo) :
 	# pdb.set_trace ()
 	label_idx = 0
 	img_idx = 3
@@ -940,9 +1268,7 @@ def write_closests (e_gallery_list, fp, min_indices,
 	probe_label = probe_info[label_idx]
 	probe_image = probe_info[img_idx]
 	probe_chip = probe_info[chip_idx]
-	db_df = None
-	if db is not None :
-		db_df = pandas.read_csv (db, sep=';')
+	if db_df is not None :
 		probe_datetime = get_file_datetime ([probe_image], db_df)
 		probe_date = probe_datetime [0]
 		probe_time = probe_datetime [1]
@@ -958,7 +1284,7 @@ def write_closests (e_gallery_list, fp, min_indices,
 		if min_label == probe_label :
 			match = 1
 			# write out info if labels match and dates match i.e. potential bias
-			if db is not None :
+			if db_df is not None :
 				# pdb.set_trace ()
 				min_datetime = get_file_datetime ([min_image], db_df)
 				min_date = min_datetime [0]
@@ -981,13 +1307,62 @@ def write_closests (e_gallery_list, fp, min_indices,
 		# fp.write (';' + probe_image + ';' + str (probe_date[0]) + ';' + str (probe_time[0]))
 	fp.write ('; ' + str (match) + '\n')
 	return match
+
+##------------------------------------------------------------
+##  write closest info to file.  if match and has file info db,
+##    write data to file for viewing and checking for data bias (leak)
+##  format: label;distance; date1;time1,date2; time2; 
+##			image1, image2, chip1, chip2
+## 
+##  probe_info & e_gallery_list content:
+##       [label, embed_file, embed_floats, img_file, chip_file]
+##	  returned from get_embedding_list_from_objs
+##------------------------------------------------------------
+def write_closests_info (e_gallery_list, fp, min_indices, 
+		min_distances, probe_info, db_df, fp_matchinfo) :
+	# pdb.set_trace ()
+	label_idx = 0
+	img_idx = 3
+	chip_idx = 4
+	match = 0
+	probe_label = probe_info[label_idx]
+	probe_image = probe_info[img_idx]
+	probe_chip = probe_info[chip_idx]
+	matched_labels = []
+	fp.write (probe_label)
+	match_str = ''
+	for i in range (len (min_indices)) :
+		index = min_indices[i]
+		matched_dist = min_distances[i]
+		matched_label = e_gallery_list[index][label_idx]
+		# pdb.set_trace ()
+		match_str += '; ' + str (i) + '; ' + matched_label + '; ' + str (matched_dist)
+		matched_labels.append (matched_label)
+	top_common = Counter(matched_labels).most_common()
+	counter_str = ''
+	# creating str for count of labels
+	# pdb.set_trace ()
+	for i in range (len (top_common)) :
+		counter_str += '{' + top_common[i][0] + ':' + str (top_common[i][1]) + '} '
+		
+	match = 0
+	# need to check for zero top??
+	if len (top_common) == 1 or top_common[0][1] > top_common[1][1] :  # majority
+		matching_label = top_common[0][0]
+		if matching_label == probe_label :
+			match = 1
+	else :  # no majority
+		matching_label = '---'
+	fp.write ('; ' + matching_label + ';' + str (match) + ';' + counter_str + '\n')
+	return matching_label, matched_labels
 ##------------------------------------------------------------
 ##  output csv of distances to each train embeddings
 ##   given filename of test embeddings, filename of train embeddings
 ##   and csv output filename, write out matrix all train distances from
 ##   each test embedding
 ##------------------------------------------------------------
-def gen_embed_dist_csv (test_files, train_files, csv_file, db, filetype="embeds") :
+def gen_embed_dist_csv (test_files, train_files, csv_file, db, match_n, write_stats=False, filetype="embeds") :
+	# pdb.set_trace ()
 	e_test_d = defaultdict (list)
 	e_train_d = defaultdict (list)
 	load_objs_from_files (test_files, e_test_d, filetype)
@@ -999,7 +1374,11 @@ def gen_embed_dist_csv (test_files, train_files, csv_file, db, filetype="embeds"
 			# write train label across top
 			# fp.printf (e_train_list)
 			# write_csv (e_test_list[i], e_train_list, fp)
-	write_csv_embed_distances (e_test_d, e_train_d, csv_file, db)
+	test_files_sort = sorted (test_files)
+	train_files_sort = sorted (train_files)
+	# pdb.set_trace ()
+	files_eq = test_files_sort == train_files_sort
+	write_csv_embed_distances (e_test_d, e_train_d, csv_file, db, match_n, files_eq, write_stats)
 
 ##------------------------------------------------------------
 ##  write_dist_csv - given emedding, list of embeddings,
@@ -1008,26 +1387,39 @@ def gen_embed_dist_csv (test_files, train_files, csv_file, db, filetype="embeds"
 ##     also include min distance and index to its label
 ##	   returns index of nearest neighbor and distance to nearest neighbor
 ##------------------------------------------------------------
-def write_dist_csv (e_test, e_train_list, fp) :
-	e_distance_list = get_embed_distances_e_elist (e_test, e_train_list)
+def write_dist_csv (probe_distinfo, e_gallery, fp, nearest_n) :
+	# pdb.set_trace ()
+	e_probe = probe_distinfo[0]
+	if np.isnan(np.sum(e_probe)) :
+		print ('NaN in probe')
+		pdb.set_trace ()
+	if np.isnan(np.sum(e_gallery)) :
+		print ('NaN in gallery')
+		pdb.set_trace ()
+	e_distance_list = get_embed_distances_e_elist (e_probe, e_gallery)
 	for i in range (len (e_distance_list)) :
 		fp.write ('; ' + str (e_distance_list[i]))
 	index = range (len (e_distance_list))
 	index_list = [list(x) for x in zip(index, e_distance_list)]
 	index_list.sort(key=lambda x:x[1])
-	nearest_n = 1
 	n = 0
 	min_distances = []
 	min_indices = []
+	probe_date = 0
+	if len (probe_distinfo) > 1 :
+		probe_date = probe_distinfo[1]
 	for index_dist in index_list :
+		# pdb.set_trace ()
 		if index_dist[1] == 0.0 :
 			continue
-		min_distances.append (index_dist[1])
-		min_indices.append (index_dist[0])
+		dist = index_dist[1]
+		index = index_dist[0]
+		min_distances.append (dist)
+		min_indices.append (index)
 		n += 1
 		if n == nearest_n :
 			break
-	fp.write ('; ' + str (min_distances) + '; ' + str (min_indices))
+		fp.write ('; ' + str (dist) + '; ' + str (index))
 	fp.write ('\n')
 	return min_indices, min_distances
 
@@ -1093,7 +1485,7 @@ def print_dict (chips_d) :
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True, img_cnt_min=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
+def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 
@@ -1573,7 +1965,7 @@ def extract_single_label_group_image (chip_file, csv_filename, output_file) :
 	df_images_info = get_files_info_df (obj_filenames, csv_filename, parent_path)
 	groups_label_date = df_images_info.groupby (['LABEL', 'DATE'])
 	# [['bc_adeane', 20140905]:1,['bc_also', 20160810],5] .. []]
-	# pdb.set_trace ()
+	pdb.set_trace ()
 	label_day_group_counts = groups_label_date.size () 
 	if get_verbosity () > 0 :
 		print ('number of label-day groups:', len (label_day_group_counts))
@@ -2738,7 +3130,7 @@ def get_YMDT_from_date (image_datetime) :
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
-def get_image_creation_datetime (image_file):
+def get_image_creation_datetime_str (image_file):
 	# pdb.set_trace ()
 	if is_png (image_file) :
 		return ''
@@ -2767,6 +3159,7 @@ def get_image_size (image_file):
 	return w * h
 
 ##------------------------------------------------------------
+##  get an alternate image using specified string substitution
 ##------------------------------------------------------------
 def get_orig_img_by_name (image_file, cur_str, orig_str):
 	str_index = image_file.find (cur_str)
@@ -2830,6 +3223,27 @@ def get_face_size (image_tag):
 	return face_size
 
 ##------------------------------------------------------------
+##  for given image tag, return string of date of image
+##------------------------------------------------------------
+def imgtag_get_creation_datetime_str (image_tag):
+	# pdb.set_trace () 
+	image_file = image_tag.attrib.get ('file')
+	image_creation_date_str = get_image_creation_datetime_str (image_file)
+	# pdb.set_trace () 
+	# FIX: change hard code of directories to original image
+	if image_creation_date_str is '' :
+		orig_image_file = get_orig_img_by_name (image_file, 'imageSourceSmall', 'imageSource')
+		image_creation_date_str = get_image_creation_datetime_str (orig_image_file)
+	return image_creation_date_str
+
+##------------------------------------------------------------
+##  add date str to imgtag
+##------------------------------------------------------------
+def imgtag_add_createdate_str (image_tag, dateTime):
+	datetime_tag = ET.SubElement (image_tag, 'dateTime')
+	datetime_tag.text = dateTime;
+
+##------------------------------------------------------------
 ##  return string with content:
 ##    	file, label, date, size, photo_source,
 ##		nose_xy, nose_source_file, orig_image, permission?, age
@@ -2838,7 +3252,7 @@ def gen_image_csv_str (image_tag):
 	# pdb.set_trace () 
 	image_label = get_obj_label_text (image_tag)
 	image_file = image_tag.attrib.get ('file')
-	image_datetime = get_image_creation_datetime (image_file)
+	image_datetime = get_image_creation_datetime_str (image_file)
 	image_year, image_month, image_day, image_time = get_YMDT_from_date (image_datetime)
 	photo_source = get_photo_source (image_file)
 	image_size = get_image_size (image_file)
@@ -2980,6 +3394,33 @@ def write_image_info_csv (filenames, outfile, filetype):
 	print("... generated file:", outfile)
 	if len (csv_header) :
 		print("... header: ", csv_header)
+
+##------------------------------------------------------------
+##  NOW: add image date time to source/image tag
+##------------------------------------------------------------
+def add_images_datetime (filenames, filetype):
+	objs_d = defaultdict(list)
+	objtype = filetype
+	if objtype == 'derived_faces' or objtype == 'svm':
+		objtype = 'faces'
+	objfiles = load_objs_from_files (filenames, objs_d, objtype)
+	objs = []
+	xml_file = filenames[0]
+	basename, ext = os.path.splitext(xml_file)
+	out_xml_file = basename + "_datetime" + ext
+	for label, tags in list(objs_d.items ()) :
+		for tag in tags:
+			# pdb.set_trace ()
+			if filetype == 'faces' :
+				image_tag = tag
+			elif filetype == 'chips' :
+				image_tag = get_chip_source_tag (tag)
+			datetime_str = imgtag_get_creation_datetime_str (image_tag)
+			# pdb.set_trace ()
+			imgtag_add_createdate_str (image_tag, datetime_str)
+			objs.append (tag)
+	write_xml_file (out_xml_file, objs, filetype)
+	print("... added datetime data to :", out_xml_file)
 
 ##------------------------------------------------------------
 ## write html of bear info: image, label/name, date, and dataset
@@ -3243,13 +3684,21 @@ def get_truth_label (filename) :
 	return label
 
 ##------------------------------------------------------------
+##  given chip tag, return source tag
+##------------------------------------------------------------
+def get_chip_source_tag (chip_tag) :
+	# pdb.set_trace ()
+	source_tag = chip_tag.find ('source')
+	return source_tag
+
+##------------------------------------------------------------
 ##  given chip tag, return name of source file. 
 ##------------------------------------------------------------
 def get_chip_source_file (chip_tag) :
 	# pdb.set_trace ()
-	source_tag = chip_tag.find ('source')
+	source_tag = get_chip_source_tag (chip_tag)
 	if source_tag is None:
-		return ''
+		return  ''
 	source_file = source_tag.attrib.get ('file')
 	return source_file
 
