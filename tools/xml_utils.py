@@ -565,6 +565,44 @@ def load_file (file):
 	tree = ET.parse (file)
 	root = tree.getroot()
 	return root, tree
+
+
+##------------------------------------------------------------
+##  load xml into hier dictionary of 
+##  defaultdict (lambda:defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+##  ex:  d["b-032"] = ["<Element 'chip' at 0x123,..,<Element 'chip' at 0x43]
+##       d["b-747"] = ["<Element 'chip' at 0x987,..,<Element 'chip' at 0x65]
+##  returns ??  list of filenames.  if filename_type == 'source', return 
+##     chip source filenames
+##  expect d_objs to be	: defaultdict (lambda:defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+##------------------------------------------------------------
+def hier_load_objs (root, d_objs, filetype, filename_type='file') :
+	## print "loading chips"
+
+	obj_filenames = []
+	if filetype == 'chips' :
+		for chip in root.findall ('./chips/chip'):
+			label_list = chip.findall ('label')
+			filename = chip.attrib.get ('file')
+			if len (label_list) < 1 :
+				g_stats_zero_append (filename)
+				print("no labels: ", label_list)
+				continue
+			if len (label_list) > 1 :
+				g_stats_many_append (filename)
+				print("too many labels: ", label_list)
+				continue
+			label = label_list[0].text
+			if filename_type == 'source' :
+				source_filename = get_chip_source_file (chip)
+				obj_filenames.append (source_filename)
+			else :
+				obj_filenames.append (filename)
+			datetime_str = tag_get_datetime_str (chip, filetype)
+			hier_add_obj (d_objs, chip, label, datetime_str)
+			#d_objs[label].append(chip)
+	# pdb.set_trace ()
+	return obj_filenames
 	
 ##------------------------------------------------------------
 ##  load xml into dictionary of <string><element_list>
@@ -1451,7 +1489,7 @@ def xml_match_cnt (xml_files, counts_file, xml_out, filetype) :
 	counts.sort (reverse=True)
 	found = False
 	for count in counts:
-		print ("... looking for ", count, "images.")
+		print ("..... searching for", count, "images.")
 		random.shuffle (list(objs_d.items()))
 		for label, objs in list(objs_d.items()):
 			found = False
@@ -1485,17 +1523,25 @@ def print_dict (chips_d) :
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
+def generate_partitions (files, x, y, output, split_by_label=False, split_by_list_file=None, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 
 	chips_d = defaultdict(list)
+	# pdb.set_trace ()
+	if split_by_list_file :
+		xml_split_by_files (files, split_by_list_file, output, 'chips')
+		return
+
 	if split_by_label :
 		split_type = 'by_label'
 	elif split_by_day_grouping :
 		split_type = 'day_grouping'
 	# # load_objs_from_files (files, chips_d, filetype)
-	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
+	# pdb.set_trace ()
+	# chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
+	chunks = partition_xy (files, csv_filename, x, y)
+	print ('files partitioned into:', len (chunks[g_x]), ':', len (chunks[g_y]))
 	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
 	# pdb.set_trace ()
 	file_x = output + "_" + str(x) + ".xml"
@@ -1504,16 +1550,16 @@ def generate_partitions (files, x, y, output, split_by_label=False, shuffle=True
 	if len (chunks) > g_unused :
 		if len (chunks[g_unused]) > 0 :
 			file_unused = output + "_unused" + ".xml"
-			generate_xml_from_objs (chunk[g_unused], file_unused, filetype)
+			generate_xml_from_objs (chunks[g_unused], file_unused, filetype)
 			print('\t', len (list_unused), 'labels unused, failing minimum # of images, written to file : \n\t', file_unused, '\n')
 	if len (chunks) > g_small_img :
 		if len (chunks[g_small_img]) > 0 :
 			file_small_img = output + "_small_faceMeta" + ".xml"
-			generate_xml_from_objs (chunk[g_small_img], file_small_img, filetype)
+			generate_xml_from_objs (chunks[g_small_img], file_small_img, filetype)
 			print(len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n')
 	# generate_partition_files (chunks, filenames, filetype)
-	generate_xml_from_objs (chunk[g_x], file_x, filetype)
-	generate_xml_from_objs (chunk[g_y], file_y, filetype)
+	generate_xml_from_objs (chunks[g_x], file_x, filetype)
+	generate_xml_from_objs (chunks[g_y], file_y, filetype)
 
 ##------------------------------------------------------------
 ##  remove chips with resolution below min
@@ -1829,7 +1875,8 @@ def split_chips_by_images (chips_d, images_x) :
 
 
 ##------------------------------------------------------------
-# given dataframe with column name, return list of images
+## given dataframe with column name, return all values of 
+##    specified column
 ##------------------------------------------------------------
 def	get_image_list_from_df (df, img_column) :
 	vals = []
@@ -1857,6 +1904,8 @@ def get_all_labels (objs_d) :
 	return labels
 
 ##------------------------------------------------------------
+##  given filenames, return list of dates and times.  
+##    (how ordered?? )
 ##------------------------------------------------------------
 def get_file_datetime (obj_filenames, df_all) :
 	parent_path='/home/data/bears/'
@@ -2011,7 +2060,7 @@ def extract_single_label_group_image (chip_file, csv_filename, output_file) :
 ##------------------------------------------------------------
 def partition_files_by_group (obj_filenames, objs_d, x, y, csv_filename, label_group_minimum) :
 	parent_path='/home/data/bears/'
-	pdb.set_trace ()
+	# pdb.set_trace ()
 	df_images_info = get_files_info_df (obj_filenames, csv_filename, parent_path)
 	groups_label_date = df_images_info.groupby (['LABEL', 'DATE'])
 	# [['bc_adeane', 20140905]:1,['bc_also', 20160810],5] .. []]
@@ -2062,6 +2111,310 @@ def remove_labels_too_few (labels, label_day_group_counts, label_group_minimum) 
 			print (dropped_labels[i], '; ', dropped_count[i])
 	return label_day_group_counts, sum (dropped_count)
 
+
+##------------------------------------------------------------
+##  for each label, extract n random objects across year,season
+##   and date.
+##------------------------------------------------------------
+def select_label_minmax (xml_filenames, db, m, n, filetype='chips') :
+	# pdb.set_trace ()
+	db_df = pandas.read_csv (db, sep=';')
+	return 0
+
+
+	hier_d_objs = defaultdict (lambda:defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+	hier_load_objs_from_files (filenames, hier_d_objs)
+	db_df = pandas.read_csv (db, sep=';')
+	count = hier_objs_len (hier_d_objs, [], [], [], [])
+	print ('all iamges (18):', count)
+	count = hier_objs_len (hier_d_objs, [], ['2014', '2016'], [], [])
+	print ('years 2014, 2016 (11):', count)
+	count = hier_objs_len (hier_d_objs, [], [], ['spring'], [])
+	print ('spring (11):', count)
+	count = hier_objs_len (hier_d_objs, ['bf_273', 'bc_toffee'], [], [], [])
+	print ('273 & toffee (7):', count)
+	
+
+	# hier_objs_print (hier_d_objs, filetype='chips')
+
+	return 0
+
+##------------------------------------------------------------
+##   given csv of images and dates, return the most number of 
+##     images of count between m and n, and evenly distributed  
+##	   among years, season and days.
+##------------------------------------------------------------
+def select_labels_minmax (xml_filenames, image_db, m, n, output_file, filetype='chips') :
+	objs_d = defaultdict(list)
+	obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
+	df_db = get_files_info_df (obj_filenames, image_db)
+	min_cnt = int (m)
+	max_cnt = int (n)
+	# print ('... -- reading csv:', image_db)
+	df_db = pandas.read_csv (image_db, sep=';')
+	df_db['MONTH'] = df_db['MONTH'].astype(int)
+	# print ('... -- found', df_len (df_db), 'images')
+	images = []
+	labels = df_get_label_list (df_db)
+	labels_selected = 0
+	if max_cnt == 0 :
+		print ('=== total images in file:', df_len (df_db))
+	for cur_label in labels :
+		# pdb.set_trace ()
+		df_label = df_db_get_label (df_db, cur_label)
+		label_img_cnt = df_len (df_label)
+		# print ('... -- processing label:', cur_label, ':', label_img_cnt, 'images')
+		if label_img_cnt < min_cnt :
+			# print ('... -- Ignoring label', cur_label, 'with too few images:', label_img_cnt)
+			continue
+		label_minmax_images = df_label_get_n (df_label, max_cnt)
+		# print ('... -- received ', len (label_minmax_images), 'images.')
+		if len (label_minmax_images) > 0 :
+			labels_selected += 1
+		images.extend (label_minmax_images)
+	# pdb.set_trace ()
+	objs_selected, objs_not_selected = obj_split (objs_d, images, 'source', 'files')
+	generate_xml_from_objs (objs_selected, output_file)
+	print ('\nFound', labels_selected, 'labels in', len (images), 'images.')
+	print ('\nWriting selected images to:', output_file)
+
+##------------------------------------------------------------
+##   given csv of images and dates, return the most number of 
+##     images of count between m and n, and evenly distributed  
+##	   among years, season and days.
+##   if split_day_images == False, x and y are percentages (for
+##     partitioning)
+##   now:
+##------------------------------------------------------------
+def partition_labels_xy (xml_filenames, image_db, x, y, output_file, filetype='chips', split_day_images=False) :
+	objs_d = defaultdict(list)
+	obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
+	df_db = get_files_info_df (obj_filenames, image_db)
+	file_img_cnt = len (obj_filenames)
+	x_percent = int (x)
+	y_percent = int (y)
+	x_file_img_cnt = int (x_percent / 100 * file_img_cnt)
+	y_file_img_cnt = file_img_cnt - x_file_img_cnt
+	df_db = pandas.read_csv (image_db, sep=';')
+	df_db['MONTH'] = df_db['MONTH'].astype(int)
+	debug = True
+	if debug :
+		print ('... -- found', df_len (df_db), 'images')
+	images = []
+	labels = df_get_label_list (df_db)
+	# TODO: how to fix percent drift
+	for cur_label in labels :
+		# pdb.set_trace ()
+		df_label = df_db_get_label (df_db, cur_label)
+		label_img_cnt = df_len (df_label)
+		x_label_cnt = int (x_percent / 100 * label_img_cnt)
+		if debug :
+			print ('... -- processing label:', cur_label, ':', label_img_cnt, 'images')
+		label_images = df_label_get_n (df_label, x_label_cnt, split_day_images)
+		if debug :
+			print ('... -- received ', len (label_images), 'images, expected', x_label_cnt, 'images.')
+		images.extend (label_images)
+	# pdb.set_trace ()
+
+
+	objs_selected, objs_not_selected = obj_split (objs_d, images, 'source', 'files')
+	if split_day_images is False :
+		print ('\nExpected', x_file_img_cnt, 'images, received', len (images), 'images')
+	generate_xml_from_objs (objs_selected, output_file)
+	generate_xml_from_objs (objs_not_selected, output_file+'y')
+	print ('\nWriting selected images to:', output_file)
+
+##------------------------------------------------------------
+##   given csv of images and dates, print stats for each label
+##------------------------------------------------------------
+def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=True) :
+	print ('\n|-- total images in file:', df_len (df_db))
+	# check for columns
+	cols = ['IMAGE', 'LABEL', 'DATE', 'YEAR', 'MONTH', 'DAY']
+	db_cols = list (df_db)
+	missing_cols = []
+	for col in cols :
+		if col in db_cols :
+			continue
+		missing_cols.append (col)
+	if len (missing_cols) > 0 :
+		print ('... Missing column(s) in CSV:', missing_cols)
+		print ('... Aborting.\n')
+		return
+	df_db['MONTH'] = df_db['MONTH'].astype(int)
+	labels = df_get_label_list (df_db)
+	total_label_img_cnt = 0
+	for cur_label in labels :
+		df_label = df_db_get_label (df_db, cur_label)
+		label_img_cnt = df_len (df_label)
+		total_label_img_cnt += label_img_cnt
+		print ('|   |-- ', cur_label, ':', label_img_cnt, '--------------------')
+		years = df_get_year_list (df_label)
+		year_cnt = len (years)
+		if not print_years :
+			print ('|   |   |-- ', year_cnt, 'years')
+		season_cnt = 0
+		days_cnt = 0
+		for year in years:
+			df_year = df_label_get_year (df_label, year)
+			if print_years :
+				year_img_cnt = df_len (df_year)
+				print ('|   |   |-- ', year, ':', year_img_cnt)
+			df_spring = df_year_get_spring (df_year)
+			spring_cnt = len (df_spring)
+			if print_seasons :
+				print ('|   |   |   |-- spring :', spring_cnt)
+			uniq_days = print_season_details (df_spring, print_days)
+			days_cnt += uniq_days
+			df_fall = df_year_get_fall (df_year)
+			fall_cnt = len (df_fall)
+			print ('|   |   |   |-- fall : ', fall_cnt)
+			uniq_days = print_season_details (df_fall, print_days)
+			days_cnt += uniq_days
+			if spring_cnt : 
+				season_cnt += 1
+			if fall_cnt : 
+				season_cnt += 1
+		if not print_seasons :
+			print ('|   |   |   |-- ', season_cnt, 'seasons')
+		print ('---- ', cur_label, ':', year_cnt, 'years :', season_cnt, 'seasons :', days_cnt, 'days :', label_img_cnt, 'images -----', total_label_img_cnt, '----------')
+
+##------------------------------------------------------------
+##   given xmls and csv of images and dates, partitioni into x and y
+##   now:
+##------------------------------------------------------------
+def partition_xy (xml_filenames, image_db, x, y, filetype='chips') :
+	objs_d = defaultdict(list)
+	obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
+	df_db = get_files_info_df (obj_filenames, image_db)
+	file_img_cnt = len (obj_filenames)
+	x_file_img_cnt = int (x / 100 * file_img_cnt)
+	y_file_img_cnt = file_img_cnt - x_file_img_cnt
+	# df_db = pandas.read_csv (image_db, sep=';')
+	df_db['MONTH'] = df_db['MONTH'].astype(int)
+	print ('\n|-- total images in file:', df_len (df_db), '/', file_img_cnt)
+	# check for columns
+	cols = ['IMAGE', 'LABEL', 'DATE', 'YEAR', 'MONTH', 'DAY']
+	db_cols = list (df_db)
+	missing_cols = []
+	for col in cols :
+		if col not in db_cols :
+			missing_cols.append (col)
+	if len (missing_cols) > 0 :
+		print ('... Missing column(s) in CSV:', missing_cols)
+		print ('... Aborting.\n')
+		return
+	df_db['MONTH'] = df_db['MONTH'].astype(int)
+	labels = df_get_label_list (df_db)
+	x_files = []
+	y_files = []
+	x_unused_cnt = x_file_img_cnt
+	y_unused_cnt = y_file_img_cnt
+	for cur_label in labels :
+		df_label = df_db_get_label (df_db, cur_label)
+		years = df_get_year_list (df_label)
+		season_cnt = 0
+		days_cnt = 0
+		for year in years:
+			# pdb.set_trace ()
+			# if cur_label == 'bf_151' and year == 2015 :
+				# pdb.set_trace ()
+			df_year = df_label_get_year (df_label, year)
+			df_spring = df_year_get_spring (df_year)
+			if len (df_spring) > 0 :
+				x = int (x_unused_cnt / (x_unused_cnt + y_unused_cnt) * 100)
+				y = 100 - x
+				x_partition, y_partition = partition_season_xy (df_spring, x, y)
+				x_files.extend (x_partition)
+				y_files.extend (y_partition)
+				x_got = len (x_partition) / len (df_spring)
+				y_got = len (y_partition)/len (df_spring)
+				x_total = len (x_files) / (len (x_files) + len (y_files))
+				print (cur_label, year, 'spring x:y', x, ':', y, '--', len (x_partition), ':', len (y_partition), '--', "%.2f" % x_got, ':', "%.2f" % y_got, '--', "%.2f" % x_total)
+				x_unused_cnt -= len (x_partition)
+				y_unused_cnt -= len (y_partition)
+			df_fall = df_year_get_fall (df_year)
+			if len (df_fall) > 0 :
+				x = int (x_unused_cnt / (x_unused_cnt + y_unused_cnt) * 100)
+				y = 100 - x
+				x_partition, y_partition = partition_season_xy (df_fall, x, y)
+				x_files.extend (x_partition)
+				y_files.extend (y_partition)
+				x_got = len (x_partition) / len (df_fall)
+				y_got = len (y_partition)/len (df_fall)
+				x_total = len (x_files) / (len (x_files) + len (y_files))
+				print (cur_label, year, 'fall x:y', x, ':', y, '--', len (x_partition), ':', len (y_partition), '--', "%.2f" % x_got, ':', "%.2f" % y_got, '--', "%.2f" % x_total)
+				x_unused_cnt -= len (x_partition)
+				y_unused_cnt -= len (y_partition)
+	filename_type = 'source'
+	x_chunk, y_chunk = obj_split (objs_d, x_files, filename_type)
+	return [x_chunk, y_chunk]
+
+##------------------------------------------------------------
+##  partition season.  grab largest first, then random the rest
+##  now:
+##------------------------------------------------------------
+def partition_season_xy (df_season, x, y) :
+	df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE', ascending=False)
+	# df_dates_group_des = df_season[['IMAGE', 'DATE']].groupby (['DATE'], ascending=False).count().sort_values('IMAGE')
+	if len (df_dates_by_count) == 1 :
+		images = df_get_images (df_season)
+		return images, []
+	# pdb.set_trace ()
+	# -- keep largest, random the rest for some diversity of days.  but too
+	#  many days are going into test set. maybe change 
+	# indices = list (range (1,len (df_dates_by_count)))
+	# random.shuffle (indices)
+	# indices.insert (0, 0)
+	slack_hyper_param = 1.05
+	slack_hyper_param = 1.10
+	slack_hyper_param = 1.075
+	x_season_images = int (len (df_season) * (x*slack_hyper_param) / 100)
+	x_unused_cnt = x_season_images
+	x_images = []
+	y_images = []
+	for i in range (len (df_dates_by_count)) :
+		date = df_dates_by_count.index[i]
+		df_day = df_season_get_day (df_season, date)
+		images = df_get_images (df_day)
+		if i > 0 and (df_len (df_day) > x_unused_cnt) : # goes into y
+			y_images.extend (images)
+			continue
+		x_unused_cnt -= df_len (df_day)
+		x_images.extend (images)
+	return x_images, y_images
+
+##------------------------------------------------------------
+##  df_get_images ()
+##------------------------------------------------------------
+
+
+##------------------------------------------------------------
+##  print details of images by date within season
+##------------------------------------------------------------
+def print_season_details (df_season, print_days) :
+	df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE')
+	if not print_days :
+		print ('|   |   |   |   |-- ', date, ':', date_img_cnt[0])
+		return
+	for i in range (len (df_dates_by_count)):
+		date = df_dates_by_count.index[i]
+		date_img_cnt = df_dates_by_count.iloc[i]
+		if date == 0 :
+			print ('|   |   |   |   |-- 00000000 :', date_img_cnt[0])
+		else :
+			print ('|   |   |   |   |-- ', date, ':', date_img_cnt[0])
+	return len (df_dates_by_count)
+
+##------------------------------------------------------------
+##  partition_hier_obj ()
+##   - get years, divide among count.  if any year has too few, 
+##  unfinished::
+##------------------------------------------------------------
+def partition_hier_obj (hier_obj_d, x, y) :
+	return 0
+
+
 ##------------------------------------------------------------
 ##  partition chips into x and y percent
 ##  will do one of:
@@ -2094,8 +2447,9 @@ def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0
 			filename_type = 'source'
 		obj_filenames = load_objs_from_files (filenames, objs_d, filetype, filename_type)
 		files_x, files_y = partition_files_by_group (obj_filenames, objs_d, x, y, csv_filename, label_group_minimum)
-		objs_x, objs_not_x = obj_split (objs_d, files_x, filename_type)
-		objs_y, objs_not_y = obj_split (objs_d, files_y, filename_type)
+		fix_path = False
+		objs_x, objs_not_x = obj_split (objs_d, files_x, filename_type, 'files', fix_path)
+		objs_y, objs_not_y = obj_split (objs_d, files_y, filename_type, 'files', fix_path)
 		chunks.append (objs_x)
 		chunks.append (objs_y)
 		return chunks
@@ -2427,8 +2781,337 @@ def load_objs_from_files (filenames, objs_d, filetype="chips", filename_type='fi
 	return objfiles
 
 ##------------------------------------------------------------
-##  
+##  hier load objs from list of files into objs_d
+##    if filename is directory, load all its xml files
+##  objs_d is dictionary of <string><element_list>
+##  ex:  d["b-032"] = ["<Element 'chip' at 0x123,..,<Element 'chip' at 0x43]
+##       d["b-747"] = ["<Element 'chip' at 0x987,..,<Element 'chip' at 0x65]
+##  return list of files in metadata
 ##------------------------------------------------------------
+def hier_load_objs_from_files (filenames, hier_objs_d, filetype="chips", filename_type='file'):
+	objfiles = []
+	# print "in hier_load_objs_from_files"
+	## load all chips into objs_d
+	# print("\nLoading", filetype, "for files: ")
+	for file in filenames:
+		print("\nLoading ", file)
+		# pdb.set_trace()
+		root, tree = load_file (file)
+		obj_filenames = hier_load_objs (root, hier_objs_d, filetype, filename_type)
+		objfiles.extend (obj_filenames)
+	# pdb.set_trace()
+	return objfiles
+
+##------------------------------------------------------------
+## tag_get_unpathed_filename (tag)
+##------------------------------------------------------------
+def tag_get_unpathed_filename (tag) :
+	image_file = tag.attrib.get ('file')
+	fnames = os.path.split (image_file)
+	base = fnames[1]
+	path = fnames[0]
+	return base
+
+##------------------------------------------------------------
+##  given df of one label, return n images spread across years,
+##  seasons and dates
+##------------------------------------------------------------
+def df_label_get_n (df_label, n_images, split_day_images=True) :
+	years = df_get_year_list (df_label)
+	# print ('.... -- searching for', n_images, 'images across', len (years), 'years.')
+	images = []
+	label_img_cnt = df_len (df_label)
+	if label_img_cnt < n_images :
+		# print ('.... -- Return max images:', label_img_cnt)
+		images = df_get_images (df_label) # return all images for label.  df -> image list -> objs
+		return images
+	unused = n_images
+	years_len = []
+	df_year_d = {}
+	# make list of [year,#image] and sort by #image
+	#  years with less than quota will allow extras 
+	#  to be used in years with more images
+	year_num_images = []
+	# pdb.set_trace ()
+	for year in years:
+		df_year = df_label_get_year (df_label, year)
+		df_year_d[year] = df_year
+		year_num_images.append ([year, len (df_year)])
+	# sorted_e = sorted(e_dist_d.items(), key=lambda x: x[1])
+	year_num_images.sort(key = lambda x: x[1])
+	for i in range (len (years)) : 
+		images_per_year = int (unused / (len (years) - i))
+		if images_per_year == 0 :
+			continue
+		year = year_num_images[i][0]
+		year_img_cnt = year_num_images[i][1]
+		df_year = df_year_d[year]
+		if year == 0 :
+			year = 'Undated'
+		year_images = df_year_get_n (df_year, images_per_year)
+		# print ('.... -- found for year', year, ': ', len (year_images), 'images' )
+		unused -= len (year_images)
+		# pdb.set_trace ()
+		images.extend (year_images)
+	# print ('.... -- found for all years: ', len (images), '. Unused: ', unused)
+	return images
+
+##------------------------------------------------------------
+##  given df of one label_year, return n images spread across
+##  seasons and dates
+##------------------------------------------------------------
+def df_year_get_n (df_year, n_images) :
+	# print ('...... -- searching for', n_images, 'images a year')
+	year_img_cnt = df_len (df_year)
+	if year_img_cnt <= n_images : # use all for year
+		# print ('...... -- returning max images: ', year_img_cnt)
+		year_images = df_get_images (df_year)
+		return year_images
+	images_per_season = int (n_images / df_year_get_season_cnt (df_year))
+	unused = n_images
+	spring_cnt = df_year_get_spring_count (df_year)
+	fall_cnt = df_year_get_fall_count (df_year)
+	images = []
+	# pdb.set_trace ()
+	if spring_cnt < fall_cnt :
+		if spring_cnt > 0 and images_per_season > 0 :
+			df_spring = df_year_get_spring (df_year)
+			print ('-------- looking for', images_per_season, 'among', len (df_spring), 'spring images')
+			spring_images = df_season_get_n (df_spring, images_per_season)
+			images.extend (spring_images)
+			# print ('..... -- spring: ', len (spring_images), 'images' )
+			unused -= len (spring_images)
+		df_fall = df_year_get_fall (df_year)
+		print ('-------- looking for', images_per_season, 'among', len (df_fall), 'fall images')
+		images_per_season = unused  # grab any extra from previous season
+		fall_images = df_season_get_n (df_fall, images_per_season)
+		images.extend (fall_images)
+		# print ('..... -- fall: ', len (fall_images), 'images' )
+		unused -= len (fall_images)
+	else :
+		if fall_cnt > 0 and images_per_season > 0 :
+			df_fall = df_year_get_fall (df_year)
+			fall_images = df_season_get_n (df_fall, images_per_season)
+			images.extend (fall_images)
+			# print ('..... -- fall: ', len (fall_images), 'images' )
+			unused -= len (fall_images)
+		images_per_season = unused  # grab any extra from previous season
+		df_spring = df_year_get_spring (df_year)
+		spring_images = df_season_get_n (df_spring, images_per_season)
+		images.extend (spring_images)
+		# print ('..... -- spring: ', len (spring_images), 'images' )
+		unused -= len (spring_images)
+	# if unused != 0 and n_images != 0 :
+		# print ('... -- error:', unused, 'images missing.')
+	return images
+
+##------------------------------------------------------------
+##  given df of one label_year, return n images spread across
+##  seasons and dates
+##------------------------------------------------------------
+def df_season_get_n (df_season, n_images) :
+	# print ('....... -- searching for', n_images, 'season images')
+	season_img_cnt = df_len (df_season)
+	if season_img_cnt <= n_images : # use all for season
+		# print ('...... -- returning max images: ', season_img_cnt)
+		season_images = df_get_images (df_season)
+		return season_images
+	images = []
+	unused = n_images
+	# pdb.set_trace ()
+	# df_dates_by_count = df_season.groupby (['DATE']).count ().sort_values (by='c')
+	df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE')
+	for i in range (len (df_dates_by_count)):
+		date = df_dates_by_count.index[i]
+		date_img_cnt = df_dates_by_count.iloc[i]
+		images_per_day = int (unused / (len (df_dates_by_count) - i))
+		if images_per_day == 0 :
+			continue
+		df_day = df_season_get_day (df_season, date)
+		day_images = df_day_get_n (df_day, images_per_day)
+		# print ('....... -- date ', date, ': ', len (day_images), 'images' )
+		unused -= len (day_images)
+		images.extend (day_images)
+	if unused != 0 and n_images != 0 :
+		print ('... error:', unused, 'images missing from season.')
+	return images
+
+##------------------------------------------------------------
+##  given df of one day, return n random images 
+##------------------------------------------------------------
+def df_day_get_n (df_day, n_images) :
+	# pdb.set_trace ()
+	day_image_cnt = df_len (df_day)
+	if day_image_cnt <= n_images :
+		day_images = df_get_images (df_day)
+		return day_images
+	indices = random.sample(range(1, day_image_cnt), n_images)
+	images = []
+	for i in indices :
+		image = df_day.iloc[i]['IMAGE']
+		images.append (image)
+	return images
+
+##------------------------------------------------------------
+#  given df, return list of all images
+#   df['column name'].values.tolist()
+##------------------------------------------------------------
+def df_get_images (df) :
+	# pdb.set_trace ()
+	images_list = df['IMAGE'].values.tolist ()
+	return images_list
+
+##------------------------------------------------------------
+#  given all images, return list of labels
+#    lables = df_all.groupby (['label']).size ()
+##------------------------------------------------------------
+def df_get_label_list (df_all) :
+	df_labels = df_all.groupby (['LABEL']).size ()
+	labels = []
+	for i in range (len (df_labels)) :
+		label = df_labels.index[i]
+		labels.append (label)
+	return labels
+
+##------------------------------------------------------------
+#  given df for label, return list of years
+#  years = df_label.groupby (['year']).size ()
+##------------------------------------------------------------
+def df_get_year_list (df_label) :
+	df_years = df_label.groupby (['YEAR']).size ()
+	years = []
+	for i in range (len (df_years)) :
+		year = df_years.index[i]
+		years.append (year)
+	return years
+		
+##------------------------------------------------------------
+#  given db, return images for label
+#	db_df.query ('label == "bf_000")
+##------------------------------------------------------------
+def df_db_get_label (df_all, label) :
+	df_label = df_all[df_all.LABEL == label]
+	return df_label
+
+##------------------------------------------------------------
+#  given db_label, return df for year
+#	db_df.query ('year == "2020")
+##------------------------------------------------------------
+def df_label_get_year (df_label, year) :
+	df_year = df_label[df_label.YEAR == year]
+	return df_year
+
+##------------------------------------------------------------
+##  given df for year, return df of images in fall
+##  fall is August and later
+##------------------------------------------------------------
+def df_year_get_fall (df_year) :
+	# df_fall = df_year.query ('MONTH > 7')
+	df_fall = df_year[df_year.MONTH > 7]
+	return df_fall
+
+##------------------------------------------------------------
+##  given df for year, return df of images in spring
+##  spring is July and earlier
+##------------------------------------------------------------
+def df_year_get_spring (df_year) :
+	df_spring = df_year.query ('MONTH < 8')
+	return df_spring
+
+##------------------------------------------------------------
+#  given db_seaon, return df for day 
+#	db_df.query ('day == "20201010")
+##------------------------------------------------------------
+def df_season_get_day (df_season, image_date) :
+	df_day = df_season[df_season.DATE == image_date]
+	return df_day
+
+##------------------------------------------------------------
+#  given df, return count
+#	len (df_label)
+##------------------------------------------------------------
+def df_len (df) :
+	return len (df)
+
+##------------------------------------------------------------
+##  given df for year, return number of images in fall
+##  fall is August and later
+##------------------------------------------------------------
+def df_year_get_fall_count (df_year) :
+	df_fall = df_year_get_fall (df_year)
+	return len (df_fall)
+
+##------------------------------------------------------------
+##  given df for year, return number of images in spring
+##  spring is July and earlier
+##------------------------------------------------------------
+def df_year_get_spring_count (df_year) :
+	df_spring = df_year_get_spring (df_year)
+	return len (df_spring)
+
+##------------------------------------------------------------
+##  get count of seasons for given df
+##------------------------------------------------------------
+def df_year_get_season_cnt (df_year) :
+	season_cnt = 0
+	if df_year_get_fall_count (df_year) > 1 :
+		season_cnt += 1
+	if df_year_get_spring_count (df_year) > 1 :
+		season_cnt += 1
+	return season_cnt
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+
+
+##------------------------------------------------------------
+## hier_objs_len () return image count for matching years, seasons
+##  labels and days.  empty list denotes all.
+##------------------------------------------------------------
+def hier_objs_len (hier_obj_d, labels, years, seasons, days) :
+	count = 0
+	for label, year_obj_d in sorted (list (hier_obj_d.items ())) :
+		if len (labels) > 0 and label not in labels :
+			# print ('skipping label:', label)
+			continue
+		for year, season_obj_d in sorted (list (year_obj_d.items ())) :
+			if len (years) > 0 and year not in years :
+				# print ('skipping year:', year)
+				continue
+			for season, day_obj_d in list (season_obj_d.items ()) :
+				if len (seasons) > 0 and season not in seasons :
+					# print ('skipping season:', season)
+					continue
+				for day, objs in sorted (list (day_obj_d.items ())) :
+					if len (days) > 0 and day not in days :
+						# print ('skipping day:', day)
+						continue
+					obj_count = len (objs)
+					# print ('adding ', obj_count, 'for ', label, 'for day ', day)
+					count += len (objs)
+	return count
+
+##------------------------------------------------------------
+##  print content of hier_obj_d
+##------------------------------------------------------------
+def hier_objs_print (hier_obj_d, filetype='chips'):
+	# for label, tags in list(objs_d.items ()) :
+	# image_file = chip_tag.attrib.get ('file')
+	# imgfile_base, imgfile_ext = os.path.splitext (image_file)
+		# fnames = os.path.split (path)
+		# base = fnames[1]
+		# path = fnames[0]
+	for label, year_obj_d in sorted (list (hier_obj_d.items ())) :
+		print ('------ label: ', label)
+		for year, season_obj_d in sorted (list (year_obj_d.items ())) :
+			print ('-- year: ', year)
+			for season, date_obj_d in list (season_obj_d.items ()) :
+				print ('---- season: ', season)
+				for date, objs in sorted (list (date_obj_d.items ())) :
+					print ('-------- date: ', date)
+					for obj in objs :
+						filename = tag_get_unpathed_filename (obj)
+						print ('---------- file :', filename)
 
 ##------------------------------------------------------------
 ##  filter chips :
@@ -3023,9 +3706,9 @@ def print_imgs_stats (img_files) :
 ##------------------------------------------------------------
 ##  return label stats in file
 ##------------------------------------------------------------
-def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, write_stats=False, print_all=False):
+def get_obj_stats (filenames, image_db=None, print_files=False, filetype="chips", verbosity=1, write_stats=False, print_all=False):
 	objs_d = defaultdict(list)
-	objfiles = load_objs_from_files (filenames, objs_d, filetype)
+	objfiles = load_objs_from_files (filenames, objs_d, 'chips', 'source')
 	# pdb.set_trace ()
 	if filetype == "images" :
 		print_imgs_stats (objfiles)
@@ -3097,12 +3780,23 @@ def get_obj_stats (filenames, print_files=False, filetype="chips", verbosity=1, 
 		else :
 			print('\n  ***  unable to show histogram: no access to display.  *** \n')
 
+	if image_db :
+		# pdb.set_trace ()
+		df_db = get_files_info_df (objfiles, image_db)
+		print_db_stats (df_db)
+		
 	if filetype == 'faces':
 		print_faces_stats (write_stats)
 	if print_files :
 		objfiles.sort ()
 		for objfile in objfiles:
 			print('\t', objfile)
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_csv_stats (db_csv_filename, separator=';') :
+	df_db = pandas.read_csv (db_csv_filename, sep=separator)
+	print_db_stats (df_db)
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
@@ -3115,10 +3809,10 @@ def is_png (image_file) :
 		return False
 
 ##------------------------------------------------------------
-#  get_YMDT_from_date - returns year, month, day and time from string
-#     like: "2014:10:13 13:57:50"
+#  get_YMDT_from_dateTime_str - returns year, month, day and time from string
+#     that looks something like: "2014:10:13 13:57:50"
 ##------------------------------------------------------------
-def get_YMDT_from_date (image_datetime) :
+def get_YMDT_from_dateTime_str (image_datetime) :
 	# pdb.set_trace ()
 	if image_datetime is None:
 		return 0, 0, 0, 0
@@ -3130,7 +3824,7 @@ def get_YMDT_from_date (image_datetime) :
 
 ##------------------------------------------------------------
 ##------------------------------------------------------------
-def get_image_creation_datetime_str (image_file):
+def image_find_creation_datetime_str (image_file):
 	# pdb.set_trace ()
 	if is_png (image_file) :
 		return ''
@@ -3225,23 +3919,64 @@ def get_face_size (image_tag):
 ##------------------------------------------------------------
 ##  for given image tag, return string of date of image
 ##------------------------------------------------------------
-def imgtag_get_creation_datetime_str (image_tag):
+def imgtag_find_creation_datetime_str (image_tag):
 	# pdb.set_trace () 
 	image_file = image_tag.attrib.get ('file')
-	image_creation_date_str = get_image_creation_datetime_str (image_file)
+	image_creation_date_str = image_find_creation_datetime_str (image_file)
 	# pdb.set_trace () 
 	# FIX: change hard code of directories to original image
 	if image_creation_date_str is '' :
 		orig_image_file = get_orig_img_by_name (image_file, 'imageSourceSmall', 'imageSource')
-		image_creation_date_str = get_image_creation_datetime_str (orig_image_file)
+		image_creation_date_str = image_find_creation_datetime_str (orig_image_file)
 	return image_creation_date_str
 
 ##------------------------------------------------------------
 ##  add date str to imgtag
 ##------------------------------------------------------------
-def imgtag_add_createdate_str (image_tag, dateTime):
+def imgtag_add_datetime_str (image_tag, dateTime):
 	datetime_tag = ET.SubElement (image_tag, 'dateTime')
 	datetime_tag.text = dateTime;
+
+##------------------------------------------------------------
+##  get date str of tag
+##------------------------------------------------------------
+def tag_get_datetime_str (tag, filetype):
+	if filetype == 'derived_faces' or filetype == 'svm':
+		filetype = 'faces'
+	if filetype == 'faces' :
+		image_tag = tag
+	elif filetype == 'chips' :
+		image_tag = get_chip_source_tag (tag)
+	datetime_tag = image_tag.find ('dateTime')
+	if datetime_tag is None :
+		return '0000:00:00 00:00:00'
+	return datetime_tag.text
+	# image_year, image_month, image_day, image_time = get_YMDT_from_dateTime_str (image_datetime)
+
+##------------------------------------------------------------
+##  add obj to dict by year, season, label, date
+##------------------------------------------------------------
+def hier_add_obj (hier_objs_d, obj, label, datetime_str) :
+	# z = defaultdict (lambda: defaultdict(lambda: defaultdict(list)))
+	# z = defaultdict (lambda: defaultdict(list))
+	year, month, day, time = get_YMDT_from_dateTime_str (datetime_str)
+	if int (month) < 8 :
+		season = 'spring'
+	elif int (month) == 0 :
+		season = 'none'
+	else :
+		season = 'fall'
+	# pdb.set_trace ()
+	date = year + month + day
+	if len (hier_objs_d[label][year][season][date]) == 0 :
+		hier_objs_d[label][year][season][date] = [obj]
+	else :
+		# pdb.set_trace ()
+		hier_objs_d[label][year][season][date].append (obj)
+	return
+	
+##------------------------------------------------------------
+##------------------------------------------------------------
 
 ##------------------------------------------------------------
 ##  return string with content:
@@ -3253,7 +3988,7 @@ def gen_image_csv_str (image_tag):
 	image_label = get_obj_label_text (image_tag)
 	image_file = image_tag.attrib.get ('file')
 	image_datetime = get_image_creation_datetime_str (image_file)
-	image_year, image_month, image_day, image_time = get_YMDT_from_date (image_datetime)
+	image_year, image_month, image_day, image_time = get_YMDT_from_dateTime_str (image_datetime)
 	photo_source = get_photo_source (image_file)
 	image_size = get_image_size (image_file)
 	face_size = get_face_size (image_tag)
@@ -3396,7 +4131,7 @@ def write_image_info_csv (filenames, outfile, filetype):
 		print("... header: ", csv_header)
 
 ##------------------------------------------------------------
-##  NOW: add image date time to source/image tag
+##  add image date time to source/image tag
 ##------------------------------------------------------------
 def add_images_datetime (filenames, filetype):
 	objs_d = defaultdict(list)
@@ -3415,9 +4150,9 @@ def add_images_datetime (filenames, filetype):
 				image_tag = tag
 			elif filetype == 'chips' :
 				image_tag = get_chip_source_tag (tag)
-			datetime_str = imgtag_get_creation_datetime_str (image_tag)
+			datetime_str = imgtag_find_creation_datetime_str (image_tag)
 			# pdb.set_trace ()
-			imgtag_add_createdate_str (image_tag, datetime_str)
+			imgtag_add_datetime_str (image_tag, datetime_str)
 			objs.append (tag)
 	write_xml_file (out_xml_file, objs, filetype)
 	print("... added datetime data to :", out_xml_file)
@@ -3878,8 +4613,8 @@ def	xml_split_by_files (xml_files, split_file, outfile, filetype='faces', type_s
 		filenames_raw = fp.readlines ()
 	filenames = [filename.strip() for filename in filenames_raw]
 	filename_type = 'file'
-	# if filetype == 'chips' :
-		# filename_type = 'source'
+	if filetype == 'chips' :
+		filename_type = 'source'
 	matched_objs, unmatched_objs = obj_split (objs_d, filenames, filename_type, type_split)
 	matched_filename = outfile + '_matched' + '.xml'
 	unmatched_filename = outfile + '_unmatched' + '.xml'
@@ -3914,9 +4649,10 @@ def	xml_split_by_xml (xml_file, split_xml_file, outfile, filetype='faces', type_
 ##    will matching all filenames that contains '_chip_0' like
 ##    '/data/images/chips/IMG_0001_chip_0'
 ##------------------------------------------------------------
-def	obj_split (objs_d, filenames, filename_type='file', type_split='files') :
+def	obj_split (objs_d, filenames, filename_type='file', type_split='files', fix_path=True) :
 	matched_objs = []
 	unmatched_objs = []
+	common_path = 'imageSourceSmall'
 	# pdb.set_trace ()
 	if type_split == 'files' :
 		for label, objs in list(objs_d.items ()) :  ## iterate through objs
@@ -3926,7 +4662,12 @@ def	obj_split (objs_d, filenames, filename_type='file', type_split='files') :
 					obj_filename = get_chip_source_file (obj)
 				else :
 					obj_filename = obj_get_filename (obj)
-				if obj_filename in filenames :
+				filename = obj_filename
+				# remove absolute path
+				if fix_path :
+					n = obj_filename.find (common_path)
+					filename = obj_filename[n:]
+				if filename in filenames :
 					matched_objs.append (obj)
 				else :
 					unmatched_objs.append (obj)
@@ -3959,10 +4700,17 @@ def	obj_split (objs_d, filenames, filename_type='file', type_split='files') :
 ##------------------------------------------------------------
 
 ##------------------------------------------------------------
-##  xml_split_by_list update_path - create file of same list of images with new data
+##  xml_split_by_list  -- same as xml_split_by_files
 ##------------------------------------------------------------
-def xml_split_by_list (orig_file, new_files, output_file, filetype='faces') :
-	a = 5
+def xml_split_by_list (xml_filenames, images_file, output_file, filetype='chips') :
+	objs_d = defaultdict(list)
+	obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
+	with open (split_file, 'r') as fp:
+		images_raw = fp.readlines ()
+		images = [filename.strip() for filename in images_raw]
+		objs_selected, objs_not_selected = obj_split (objs_d, images, 'source', 'files')
+		generate_xml_from_objs (objs_selected, output_file)
+		print ('writing objects from images to:', output_file)
 
 ##------------------------------------------------------------
 ##  update_path - create file of same list of images with new data
