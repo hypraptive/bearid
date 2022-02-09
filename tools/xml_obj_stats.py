@@ -19,6 +19,8 @@ def main (argv) :
 	parser.add_argument ('files', nargs='+')
 	parser.add_argument ('-filetype', '--filetype', default="chips",
 		help='type of xml file: <images,chips,faces,pairs,embeds> .')
+	parser.add_argument ('-db', '--db', 
+		help='file with image exif and details.')
 	parser.add_argument ('-write', '--write', default="",
 		action="store_true",
 		help='write stats into file stats_*_<currentDate> .')
@@ -43,7 +45,7 @@ def main (argv) :
 
 	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.files)
-	u.get_obj_stats (xml_files, args.ls, args.filetype, args.verbosity, args.write, args.print_all_labels)
+	u.get_obj_stats (xml_files, args.db, args.ls, args.filetype, args.verbosity, args.write, args.print_all_labels)
 
 if __name__ == "__main__":
 	main (sys.argv)
