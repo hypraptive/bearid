@@ -460,11 +460,16 @@ int main(int argc, char** argv) try
         total_faces += faces.size();
 		std::string chip_dim = std::to_string(g_chip_size) + " " + std::to_string(g_chip_size);
 		// iterate through each face in image
+	    boost::filesystem::path cur_dir = boost::filesystem::current_path();
         for (size_t i = 0; i < faces.size(); ++i)
         {
 		  // /data/bears/imageSource/bf/fitz/bf480/IMG123.JPG  -> bf/fitz/bf480/IMG123.JPG
           std::string img_subdir_file = erase_first_copy (orig_path, img_root); 
-		  if (!chip_dir.empty ())
+		  if (chip_dir.empty ())
+		  {
+		      img_subdir_file = cur_dir.string() + "/" + img_subdir_file;
+		  }
+		  else
 		  {
 		      img_subdir_file = chip_dir + "/" + img_subdir_file;
 		  }
@@ -479,8 +484,9 @@ int main(int argc, char** argv) try
 		  auto leye = face_features[j];
 		  auto nose = face_features[j+1];
 		  auto reye = face_features[j+2];
-		  boost::filesystem::path cur_dir = boost::filesystem::current_path();
-		  std::string rel_pathed_chip_file = cur_dir.string() + "/" + p_img_subdir.string () + "/" + chip_file;
+
+		  std::string rel_pathed_chip_file = p_img_subdir.string () + "/" + chip_file;
+
 		  populate_chip (xml_chip, boxes[i], leye, nose, reye, chip_dim, transform_features, rel_pathed_chip_file, orig_path);
           cout << "... extracted chip " << to_string(i) << " to " << rel_pathed_chip_file << endl;
 		  boost::filesystem::path chip_file_path (rel_pathed_chip_file);
