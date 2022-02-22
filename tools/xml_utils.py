@@ -1526,21 +1526,24 @@ def print_dict (chips_d) :
 def generate_partitions (files, x, y, output, split_by_label=False, split_by_list_file=None, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
-
+	if x < y :
+		tmp_x = x
+		x = y
+		y = tmp_x
 	chips_d = defaultdict(list)
 	# pdb.set_trace ()
 	if split_by_list_file :
 		xml_split_by_files (files, split_by_list_file, output, 'chips')
 		return
-
+	split_type="by_chips" 
 	if split_by_label :
 		split_type = 'by_label'
 	elif split_by_day_grouping :
 		split_type = 'day_grouping'
 	# # load_objs_from_files (files, chips_d, filetype)
 	# pdb.set_trace ()
-	# chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
-	chunks = partition_xy (files, csv_filename, x, y)
+	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
+	# chunks = partition_xy (files, csv_filename, x, y)
 	print ('files partitioned into:', len (chunks[g_x]), ':', len (chunks[g_y]))
 	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
 	# pdb.set_trace ()
@@ -2442,6 +2445,8 @@ def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0
 			print ("Warning: ignoring unsupported feature to split by label when grouped by day.")
 		# use filenames from chip source since only image names are in db
 		# get partitions by filenames
+		chunks = partition_xy (filenames, csv_filename, x, y)
+		return chunks
 		filename_type = 'file'
 		if filetype == 'chips' :
 			filename_type = 'source'
