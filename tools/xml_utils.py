@@ -48,6 +48,7 @@ g_stats_many = []
 g_objs_zero = []
 g_objs_many = []
 g_multi_ok = False
+g_multi_ok = True
 g_argv = ''
 g_exec_name = 'bearID v0.1'
 g_box_attrs = {'height', 'left', 'top', 'width'} 
@@ -59,15 +60,15 @@ all_labels = []
 bc_labels=[
 	'bc_adeane', 'bc_also', 'bc_amber', 'bc_aurora', 'bc_beatrice', 'bc_bella',
 	'bc_bellanore', 'bc_bracket', 'bc_bruno', 'bc_caramel', 'bc_chestnut', 
-	'bc_cleo', 'bc_clyde', 'bc_coco', 'bc_cross-paw', 'bc_dani-bear', 
-	'bc_diablo', 'bc_fisher', 'bc_flora', 'bc_frank', 'bc_freckles', 'bc_freda', 
-	'bc_freya', 'bc_gary', 'bc_gc', 'bc_glory', 'bc_hoeya', 'bc_jaque', 
-	'bc_kiokh', 'bc_kwatse', 'bc_lenore', 'bc_lillian', 'bc_lil-willy', 
-	'bc_lucky', 'bc_matsui', 'bc_millerd', 'bc_mouse', 'bc_neana', 'bc_no-tail', 
+	'bc_cleo', 'bc_clyde', 'bc_coco', 'bc_cooper', 'bc_cross-paw', 'bc_dani-bear', 
+	'bc_das-auto', 'bc_diablo', 'bc_fisher', 'bc_flora', 'bc_frank', 'bc_freckles', 'bc_freda', 
+	'bc_freya', 'bc_gary', 'bc_gc', 'bc_glory', 'bc_hero', 'bc_hoeya', 'bc_jaque', 
+	'bc_kiokh', 'bc_kwatse', 'bc_lenore', 'bc_lil-willy', 'bc_lillian', 
+	'bc_lucky', 'bc_matsui', 'bc_millerd', 'bc_mouse', 'bc_mouse_lookalike', 'bc_neana', 'bc_no-tail', 
 	'bc_old-girl', 'bc_oso', 'bc_peanut', 'bc_pete', 'bc_pirate', 
 	'bc_pretty-boy', 'bc_river', 'bc_sallie', 'bc_santa', 'bc_shaniqua', 
 	'bc_simoom', 'bc_stella', 'bc_steve', 'bc_teddy-blonde', 'bc_teddy-brown', 
-	'bc_toffee', 'bc_topaz', 'bc_trouble', 'bc_tuna', 'bc_ursa', 
+	'bc_thimble', 'bc_thumper', 'bc_toffee', 'bc_topaz', 'bc_trouble', 'bc_tuna', 'bc_ursa', 
 	'kb_bc_m034'
 	]
 bf_labels = [
@@ -648,15 +649,15 @@ def load_objs (root, d_objs, filetype, filename_type='file') :
 			box = image.findall ('box')
 			facefile = image.attrib.get ('file')
 			multi_faces[len(box)] += 1
-			if g_multi_ok is False :
-				if len (box) == 0 :
-					g_stats_zero_append (facefile)
-					g_objs_zero_append (image)
-					continue
-				if len (box) > 1 :
-					g_stats_many_append (facefile)
-					g_objs_many_append (image)
-					print ("Warning:", len (box), "boxes (faces) in file ", facefile)
+			if len (box) == 0 :
+				g_stats_zero_append (facefile)
+				g_objs_zero_append (image)
+				continue
+			if len (box) > 1 :
+				g_stats_many_append (facefile)
+				g_objs_many_append (image)
+				print ("Warning:", len (box), "boxes (faces) in file ", facefile)
+				if g_multi_ok is False :
 					continue
 			label_list = box[0].findall ('label')
 			if len (label_list) == 0:
@@ -1358,7 +1359,7 @@ def write_closests (e_gallery_list, fp, min_indices,
 ##------------------------------------------------------------
 def write_closests_info (e_gallery_list, fp, min_indices, 
 		min_distances, probe_info, db_df, fp_matchinfo) :
-	# pdb.set_trace ()
+	pdb.set_trace ()
 	label_idx = 0
 	img_idx = 3
 	chip_idx = 4
@@ -1523,7 +1524,50 @@ def print_dict (chips_d) :
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, split_by_label=False, split_by_list_file=None, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
+def generate_partitions (files, x, y, output, split_type, split_arg, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips") :
+	# print "partitioning chips into: ", x, " ", y
+	# pdb.set_trace ()
+	if x < y :
+		tmp_x = x
+		x = y
+		y = tmp_x
+	chips_d = defaultdict(list)
+	# pdb.set_trace ()
+	if split_type == 'list' :
+		xml_split_by_files (files, split_arg, output, 'chips')
+		return
+	if split_type == 'pattern' :
+		xml_split_by_patterns (files, split_arg, output, 'chips')
+		return
+	# # load_objs_from_files (files, chips_d, filetype)
+	# pdb.set_trace ()
+	csv_filename = split_arg
+	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
+	# chunks = partition_xy_with_dates (files, csv_filename, x, y)
+	print ('files partitioned into:', len (chunks[g_x]), ':', len (chunks[g_y]))
+	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
+	# pdb.set_trace ()
+	file_x = output + "_" + str(x) + ".xml"
+	file_y = output + "_" + str(y) + ".xml"
+	file_small_img = file_unused = None
+	if len (chunks) > g_unused :
+		if len (chunks[g_unused]) > 0 :
+			file_unused = output + "_unused" + ".xml"
+			generate_xml_from_objs (chunks[g_unused], file_unused, filetype)
+			print('\t', len (list_unused), 'labels unused, failing minimum # of images, written to file : \n\t', file_unused, '\n')
+	if len (chunks) > g_small_img :
+		if len (chunks[g_small_img]) > 0 :
+			file_small_img = output + "_small_faceMeta" + ".xml"
+			generate_xml_from_objs (chunks[g_small_img], file_small_img, filetype)
+			print(len (list_small_img), 'unused chips below min size written to file : \n\t', file_small_img, '\n')
+	# generate_partition_files (chunks, filenames, filetype)
+	generate_xml_from_objs (chunks[g_x], file_x, filetype)
+	generate_xml_from_objs (chunks[g_y], file_y, filetype)
+
+##------------------------------------------------------------
+##  partition all files into x and y percent
+##------------------------------------------------------------
+def generate_partitions_old (files, x, y, output, split_by_label=False, split_by_list_file=None, shuffle=True, img_cnt_min=0, img_cnt_cap=0, test_min=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_by_day_grouping=False, csv_filename=None) :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
 	if x < y :
@@ -1535,7 +1579,7 @@ def generate_partitions (files, x, y, output, split_by_label=False, split_by_lis
 	if split_by_list_file :
 		xml_split_by_files (files, split_by_list_file, output, 'chips')
 		return
-	split_type="by_chips" 
+	split_type="chips" 
 	if split_by_label :
 		split_type = 'by_label'
 	elif split_by_day_grouping :
@@ -1543,7 +1587,7 @@ def generate_partitions (files, x, y, output, split_by_label=False, split_by_lis
 	# # load_objs_from_files (files, chips_d, filetype)
 	# pdb.set_trace ()
 	chunks = partition_objs (files, x, y, shuffle, img_cnt_min, test_min, image_size_min, label_group_minimum, filetype, split_type, csv_filename)
-	# chunks = partition_xy (files, csv_filename, x, y)
+	# chunks = partition_xy_with_dates (files, csv_filename, x, y)
 	print ('files partitioned into:', len (chunks[g_x]), ':', len (chunks[g_y]))
 	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
 	# pdb.set_trace ()
@@ -1912,6 +1956,7 @@ def get_all_labels (objs_d) :
 ##------------------------------------------------------------
 def get_file_datetime (obj_filenames, df_all) :
 	parent_path='/home/data/bears/'
+	parent_path='/data/bears/'
 	# pdb.set_trace ()
 	### fix path to ensure filename will match image field in csv
 	filenames = [f.replace (parent_path, '') for f in obj_filenames]
@@ -1928,9 +1973,11 @@ def get_file_datetime (obj_filenames, df_all) :
 ##------------------------------------------------------------
 ##  given list of image filenames and csv of image info
 ##  return dataframe of info for specified images
+##  if the data is not in db, then no information is returned.
 ##------------------------------------------------------------
 def get_files_info_df (obj_filenames, db_csv_filename, 
 	parent_path='/home/data/bears/') :
+	# print ('parent path set to:', parent_path)
 	# pdb.set_trace ()
 	### fix path to ensure filename will match image field in csv
 	filenames = [f.replace (parent_path, '') for f in obj_filenames]
@@ -2251,7 +2298,7 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 		df_label = df_db_get_label (df_db, cur_label)
 		label_img_cnt = df_len (df_label)
 		total_label_img_cnt += label_img_cnt
-		print ('|   |-- ', cur_label, ':', label_img_cnt, '--------------------')
+		print ('|   |-- ', cur_label, ':', label_img_cnt, '-----------------------------------------------')
 		years = df_get_year_list (df_label)
 		year_cnt = len (years)
 		if not print_years :
@@ -2267,12 +2314,12 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 			spring_cnt = len (df_spring)
 			if print_seasons :
 				print ('|   |   |   |-- spring :', spring_cnt)
-			uniq_days = print_season_details (df_spring, print_days)
+			uniq_days = print_season_details (df_spring, print_days, '----')
 			days_cnt += uniq_days
 			df_fall = df_year_get_fall (df_year)
 			fall_cnt = len (df_fall)
 			print ('|   |   |   |-- fall : ', fall_cnt)
-			uniq_days = print_season_details (df_fall, print_days)
+			uniq_days = print_season_details (df_fall, print_days, '++++')
 			days_cnt += uniq_days
 			if spring_cnt : 
 				season_cnt += 1
@@ -2280,16 +2327,18 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 				season_cnt += 1
 		if not print_seasons :
 			print ('|   |   |   |-- ', season_cnt, 'seasons')
-		print ('---- ', cur_label, ':', year_cnt, 'years :', season_cnt, 'seasons :', days_cnt, 'days :', label_img_cnt, 'images -----', total_label_img_cnt, '----------')
+		print ('------- ', cur_label, 'summary:', year_cnt, 'years :', season_cnt, 'seasons :', days_cnt, 'days :', label_img_cnt, 'total:', total_label_img_cnt)
+		print ('----------------------------------------------------------------------')
 
 ##------------------------------------------------------------
 ##   given xmls and csv of images and dates, partitioni into x and y
 ##   now:
 ##------------------------------------------------------------
-def partition_xy (xml_filenames, image_db, x, y, filetype='chips') :
+def partition_xy_with_dates (xml_filenames, image_db, x, y, filetype='chips') :
+	# pdb.set_trace ()
 	objs_d = defaultdict(list)
 	obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
-	df_db = get_files_info_df (obj_filenames, image_db)
+	df_db = get_files_info_df (obj_filenames, image_db, '/data/bears/')
 	file_img_cnt = len (obj_filenames)
 	x_file_img_cnt = int (x / 100 * file_img_cnt)
 	y_file_img_cnt = file_img_cnt - x_file_img_cnt
@@ -2349,6 +2398,7 @@ def partition_xy (xml_filenames, image_db, x, y, filetype='chips') :
 				print (cur_label, year, 'fall x:y', x, ':', y, '--', len (x_partition), ':', len (y_partition), '--', "%.2f" % x_got, ':', "%.2f" % y_got, '--', "%.2f" % x_total)
 				x_unused_cnt -= len (x_partition)
 				y_unused_cnt -= len (y_partition)
+	# pdb.set_trace ()
 	filename_type = 'source'
 	x_chunk, y_chunk = obj_split (objs_d, x_files, filename_type)
 	return [x_chunk, y_chunk]
@@ -2395,18 +2445,18 @@ def partition_season_xy (df_season, x, y) :
 ##------------------------------------------------------------
 ##  print details of images by date within season
 ##------------------------------------------------------------
-def print_season_details (df_season, print_days) :
+def print_season_details (df_season, print_days, season_delim=':') :
 	df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE')
 	if not print_days :
 		print ('|   |   |   |   |-- ', date, ':', date_img_cnt[0])
 		return
 	for i in range (len (df_dates_by_count)):
-		date = df_dates_by_count.index[i]
+		date = int (df_dates_by_count.index[i])
 		date_img_cnt = df_dates_by_count.iloc[i]
 		if date == 0 :
-			print ('|   |   |   |   |-- 00000000 :', date_img_cnt[0])
+			print ('|   |   |   |   |-- 00000000 ', season_delim, date_img_cnt[0])
 		else :
-			print ('|   |   |   |   |-- ', date, ':', date_img_cnt[0])
+			print ('|   |   |   |   |-- ', date, season_delim, date_img_cnt[0])
 	return len (df_dates_by_count)
 
 ##------------------------------------------------------------
@@ -2427,13 +2477,19 @@ def partition_hier_obj (hier_obj_d, x, y) :
 ##	- split across all labels afer grouping images by date for each label
 ##  returns two lists of
 ##------------------------------------------------------------
-def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_type="by_chips", csv_filename=None) :
+def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0, image_size_min=0, label_group_minimum=0, filetype="chips", split_type="chips", csv_filename=None) :
+	if x < y :
+		x_tmp = x
+		x = y
+		y = x_tmp
 	if get_verbosity () > 0 :
 		print ("partitioning chips into: ", x, " ", y)
 		print ('split type:', split_type)
 	chunks = []
 	objs_d = defaultdict(list)
-	if split_type == 'by_label' :
+	if split_type == 'pattern' :
+		filename_type = 'file'
+	if split_type == 'label' :
 		filename_type = 'file'
 		obj_filenames = load_objs_from_files (filenames, objs_d, filetype, filename_type)
 		objs_x, objs_y = partition_files_by_label (objs_d, len (obj_filenames), x, y)
@@ -2445,8 +2501,11 @@ def partition_objs (filenames, x, y, shuffle=True, img_cnt_min=0, test_minimum=0
 			print ("Warning: ignoring unsupported feature to split by label when grouped by day.")
 		# use filenames from chip source since only image names are in db
 		# get partitions by filenames
-		chunks = partition_xy (filenames, csv_filename, x, y)
+		chunks = partition_xy_with_dates (filenames, csv_filename, x, y)
 		return chunks
+
+
+		#----- old code here, not reachable -------#
 		filename_type = 'file'
 		if filetype == 'chips' :
 			filename_type = 'source'
@@ -3673,12 +3732,13 @@ def print_pairs_stats (objs_d, verbosity) :
 ##------------------------------------------------------------
 def print_imgs_stats (img_files) :
 	imgs_d = defaultdict(int)
-	# print (len (img_files), ': ', img_files)
+	print ('# images: ', len (img_files))
+	mpo_file = []
 	for i in range (len (img_files)) : 	# all labels
 		img = Image.open (img_files[i])
 		imgs_d [img.format] += 1
-		if img.format == 'MPO' :
-			mpo_file = img_files[i]
+		# if img.format == 'MPO' :
+			# mpo_file.append (img_files[i])
 		width, height = img.size
 		size = width * height
 		if i == 0 :
@@ -3696,7 +3756,7 @@ def print_imgs_stats (img_files) :
 			max_size = size
 			max_img = img
 			max_img_file = img_files[i]
-	print ('min image : ', min_img_file)
+	print ('\nmin image : ', min_img_file)
 	print ('resolution: ', min_img.width, min_img.height)
 	print ('min size  : ', min_size)
 	print ('max image : ', max_img_file)
@@ -3705,15 +3765,15 @@ def print_imgs_stats (img_files) :
 
 	for img_format, count in imgs_d.items () :  ## iterate through all chips
 		print (img_format, ' : ', count)
-	print ('\n\t MPO : ', mpo_file)
+	# print ('\n\t MPO : ', mpo_file)
 	return
 
 ##------------------------------------------------------------
-##  return label stats in file
+##  get stats for xml
 ##------------------------------------------------------------
-def get_obj_stats (filenames, image_db=None, print_files=False, filetype="chips", verbosity=1, write_stats=False, print_all=False):
+def get_obj_stats (filenames, filename_type='source', image_db=None, parent_path=None, print_files=False, filetype="chips", verbosity=1, write_stats=False, print_all=False):
 	objs_d = defaultdict(list)
-	objfiles = load_objs_from_files (filenames, objs_d, 'chips', 'source')
+	objfiles = load_objs_from_files (filenames, objs_d, filetype, 'source')
 	# pdb.set_trace ()
 	if filetype == "images" :
 		print_imgs_stats (objfiles)
@@ -3787,7 +3847,7 @@ def get_obj_stats (filenames, image_db=None, print_files=False, filetype="chips"
 
 	if image_db :
 		# pdb.set_trace ()
-		df_db = get_files_info_df (objfiles, image_db)
+		df_db = get_files_info_df (objfiles, image_db, parent_path)
 		print_db_stats (df_db)
 		
 	if filetype == 'faces':
@@ -3992,8 +4052,8 @@ def gen_image_csv_str (image_tag):
 	# pdb.set_trace () 
 	image_label = get_obj_label_text (image_tag)
 	image_file = image_tag.attrib.get ('file')
-	image_datetime = get_image_creation_datetime_str (image_file)
-	image_year, image_month, image_day, image_time = get_YMDT_from_dateTime_str (image_datetime)
+	image_creation_date_str = image_find_creation_datetime_str (image_file)
+	image_year, image_month, image_day, image_time = get_YMDT_from_dateTime_str (image_creation_date_str)
 	photo_source = get_photo_source (image_file)
 	image_size = get_image_size (image_file)
 	face_size = get_face_size (image_tag)
@@ -4001,7 +4061,7 @@ def gen_image_csv_str (image_tag):
 	if get_verbosity () > 1 :
 		print ('file   : ', image_file)
 		print ('label  : ', image_label)
-		print ('date   : ', image_datetime)
+		print ('date   : ', image_creation_date_str)
 		print ('source : ', photo_source)
 		print ('size   : ', image_size)
 		print('-----------------------------')
@@ -4104,6 +4164,7 @@ def gen_derived_image_csv_str (image_tag):
 def write_image_info_csv (filenames, outfile, filetype):
 	objs_d = defaultdict(list)
 	objtype = filetype
+	# pdb.set_trace ()
 	if objtype == 'derived_faces' or objtype == 'svm':
 		objtype = 'faces'
 	objfiles = load_objs_from_files (filenames, objs_d, objtype)
@@ -4600,10 +4661,13 @@ def xml_to_files (xml_files, outfile, filetype, filename_type='file') :
 	objs_d = defaultdict(list)
 	# pdb.set_trace ()
 	source_filenames = load_objs_from_files (xml_files, objs_d, filetype, filename_type)
+	if not outfile :
+		return source_filenames
 	outfile_fp = open (outfile, "w")
 	for filename in source_filenames :
 		outfile_fp.write (filename + '\n')
 	outfile_fp.close ()
+	return source_filenames
 
 ##------------------------------------------------------------
 ##  xml_split_by_files - write matched and unmatched
@@ -4634,6 +4698,29 @@ def	xml_split_by_files (xml_files, split_file, outfile, filetype='faces', type_s
 	print('     many', filetype, 'written to :', many_filename)
 	print('     zero', filetype, 'written to :', zero_filename)
 
+
+##------------------------------------------------------------
+##  xml_split_by_patterns - write matched and unmatched
+##     xml files given file of patterns for matching 
+##------------------------------------------------------------
+def	xml_split_by_patterns (xml_files, pattern_file, outfile, filetype='chips') :
+	objs_d = defaultdict(list)
+	source_filenames = load_objs_from_files (xml_files, objs_d, filetype)
+	# pdb.set_trace ()
+	with open (pattern_file, 'r') as fp:
+		filenames_raw = fp.readlines ()
+	patterns = [filename.strip() for filename in filenames_raw]
+	filename_type = 'file'
+	if filetype == 'chips' :
+		filename_type = 'source'
+	matched_objs, unmatched_objs = obj_split (objs_d, patterns, filename_type, 'patterns')
+	matched_filename = outfile + '_matched' + '.xml'
+	unmatched_filename = outfile + '_unmatched' + '.xml'
+	write_xml_file (matched_filename, matched_objs, filetype)
+	write_xml_file (unmatched_filename, unmatched_objs, filetype)
+	print('unmatched', filetype, 'written to :', unmatched_filename)
+	print('  matched', filetype, 'written to :', matched_filename)
+
 ##------------------------------------------------------------
 ##  xml_split_by_xml - write matched and unmatched
 ##     	xml given xml file for matching.  filetype of two
@@ -4654,50 +4741,73 @@ def	xml_split_by_xml (xml_file, split_xml_file, outfile, filetype='faces', type_
 ##    will matching all filenames that contains '_chip_0' like
 ##    '/data/images/chips/IMG_0001_chip_0'
 ##------------------------------------------------------------
-def	obj_split (objs_d, filenames, filename_type='file', type_split='files', fix_path=True) :
+def	obj_split (objs_d, split_arg, filename_type='file', type_split='files', fix_path=True) :
 	matched_objs = []
 	unmatched_objs = []
 	common_path = 'imageSourceSmall'
+	common_path = 'imageSource'
 	# pdb.set_trace ()
-	if type_split == 'files' :
+	if type_split == 'labels' :
+		labels = split_arg
+		for label, objs in list(objs_d.items ()) :  ## iterate through objs
+			if label in labels :
+				matched_objs.extend (objs)
+			else :
+				unmatched_objs.extend (objs)
+	elif type_split == 'files':
+		filenames = split_arg.copy ()
 		for label, objs in list(objs_d.items ()) :  ## iterate through objs
 			for obj in objs :
-				# pdb.set_trace ()
-				if filename_type == 'source' :
-					obj_filename = get_chip_source_file (obj)
-				else :
-					obj_filename = obj_get_filename (obj)
-				filename = obj_filename
-				# remove absolute path
-				if fix_path :
-					n = obj_filename.find (common_path)
-					filename = obj_filename[n:]
+				filename = get_filename (obj, filename_type, common_path)
 				if filename in filenames :
 					matched_objs.append (obj)
+					filenames.remove (filename)
 				else :
 					unmatched_objs.append (obj)
+		if len (filenames) > 0 :
+			print ('not all files were matched.  Unmatched files:')
+			for filename in filenames:
+				print ('\t', filename)
 
 	## ---------------  need to test ------------
 	## TODO: implement pattern match
 	elif type_split == 'patterns' :
-		split_patterns = filenames
+		# pdb.set_trace ()
+		patterns = split_arg
 		for label, objs in list(objs_d.items ()) :  ## iterate through objs
 			for obj in objs :
 				# pdb.set_trace ()
-				if filename_type == 'source' :
-					obj_filename = get_chip_source_file (obj)
-				else :
-					obj_filename = obj_get_filename (obj)
-				for pattern in split_patterns :
-					if pattern in obj_filename :
+				filename = get_filename (obj, filename_type, None)
+				matched = False
+				for pattern in patterns :
+					if pattern in filename :
 						matched_objs.append (obj)
-					else :
-						unmatched_objs.append (obj)
+						matched = True
+						break
+				if not matched :
+					unmatched_objs.append (obj)
+		print ('patterns matched   :', len (matched_objs))
+		print ('patterns unmatched :', len (unmatched_objs))
 	else:
 		print ('Error: Unimplemented split option:',  type_split)
 
+	if len (matched_objs) != len (split_arg) and type_split != 'patterns' :
+		print ('Warning: splitting of objects had count of ', type_split, 'is: ', len (filenames), ', but found: ', len (matched_objs))
 	return matched_objs, unmatched_objs
 
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_filename (obj, filename_type, common_path) :
+	if filename_type == 'source' :
+		obj_filename = get_chip_source_file (obj)
+	else :
+		obj_filename = obj_get_filename (obj)
+	filename = obj_filename
+	# remove absolute path
+	if common_path :
+		n = obj_filename.find (common_path)
+		filename = obj_filename[n:]
+	return filename
 ##------------------------------------------------------------
 ##  
 ##  
@@ -5102,61 +5212,47 @@ def extract_bc_embeddings (input_files) :
 ##------------------------------------------------------------
 ##  split bc bf objects
 ##------------------------------------------------------------
-def split_objects_by_locales (input_files, obj_path='images/image', label_path='box/label') :
+def split_objects_by_locales (filenames, output_file, filetype="chips") :
 	bc_objs = []
 	bf_objs = []
 	unknown_objs = []
-	xml_files = generate_xml_file_list (input_files)
-	print ('\nextracting faces from file: ')
-	for x_file in xml_files:
-		print("\t", x_file)
-		# pdb.set_trace()
-		root, tree = load_file (x_file)
-		# separate out bc & bf bears
-		for obj in root.findall (obj_path):
-			label = obj.find (label_path)
-			# pdb.set_trace ()
-			if label.text[:2] == 'bc' : # bc bear
-				bc_objs.append (obj)
-			elif label.text[:2] == 'bf' : # brooks bear
-				bf_objs.append (obj)
-			else :
-				unknown_objs.append (obj)
-	# write out bc bears
-	print ('\t... # bc bears: ', len (bc_objs))
-	print ('\t... # bf bears: ', len (bf_objs))
+
+	objs_d = defaultdict(list)
+	objfiles = load_objs_from_files (filenames, objs_d, filetype, 'source')
+	# pdb.set_trace ()
+	print('')
+	for label, objs in list(objs_d.items ()) :
+		if label[:3] == 'bc_' : # bc bear
+			bc_objs.extend (objs)
+		elif label[:3] == 'bf_' : # brooks bear
+			bf_objs.extend (objs)
+		else :
+			unknown_objs.extend (objs)
+	# write out bear counts
+	print ('\t... # all     bears: ', len (objfiles))
+	print ('\t... # bc      bears: ', len (bc_objs))
+	print ('\t... # bf      bears: ', len (bf_objs))
 	print ('\t... # unknown bears: ', len (unknown_objs))
 	# pdb.set_trace ()
 	# for locale in [] :
-	t_root, t_embeds = create_new_tree_w_element ("images")
-	for i in range (len (bc_objs)) :
-		embed = bc_objs[i]
-		t_embeds.append (embed)
-	tree = ET.ElementTree (t_root)
-	t_name = "bc1_faces.xml"
-	indent (t_root)
-	tree.write (t_name)
-	print ('wrote faces to ', t_name)
 
-	t_root, t_embeds = create_new_tree_w_element ("images")
-	for i in range (len (bc_objs)) :
-		embed = bc_objs[i]
-		t_embeds.append (embed)
+	t_root, t_objs = create_new_tree_w_element (filetype)
+	for obj in bc_objs :
+		t_objs.append (obj)
 	tree = ET.ElementTree (t_root)
-	t_name = "bc_faces.xml"
+	t_name = output_file + '_bc.xml'
 	indent (t_root)
 	tree.write (t_name)
-	print ('wrote faces to ', t_name)
+	print ('wrote bc', filetype, 'file :' , t_name)
 
-	t_root, t_embeds = create_new_tree_w_element ("images")
-	for i in range (len (bf_embeds)) :
-		embed = bf_embeds[i]
-		t_embeds.append (embed)
+	t_root, t_objs = create_new_tree_w_element (filetype)
+	for obj in bf_objs :
+		t_objs.append (obj)
 	tree = ET.ElementTree (t_root)
-	t_name = "bf_faces.xml"
+	t_name = output_file + '_bf.xml'
 	indent (t_root)
 	tree.write (t_name)
-	print ('wrote faces to ', t_name)
+	print ('wrote bf', filetype, 'file :' , t_name)
 
 ##------------------------------------------------------------
 ##  split faces by count (0, 1, multi)
