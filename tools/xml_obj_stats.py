@@ -9,8 +9,7 @@ from argparse import RawTextHelpFormatter
 from collections import defaultdict
 
 ##------------------------------------------------------------
-##  can be called with:
-##    xml_obj_stats -f *.xml dirs
+##  can be called with: ##    xml_obj_stats -f *.xml dirs
 ##------------------------------------------------------------
 def main (argv) :
 	parser = argparse.ArgumentParser(description='\nPrint combined stats for all input files/directory.\n\texample: xml_obj_stats  xxx_*_xml outputdir',
@@ -21,12 +20,16 @@ def main (argv) :
 		help='type of xml file: <images,chips,faces,pairs,embeds> .')
 	parser.add_argument ('-db', '--db', 
 		help='file with image exif and details.')
+	parser.add_argument ('-ppath', '--parent_path', default='/data/bears/',
+		help='path to strip when matching filenames.')
+	parser.add_argument ('-vdb', '--videodb', 
+		help='file with video date and time.')
 	parser.add_argument ('-write', '--write', default="",
 		action="store_true",
 		help='write stats into file stats_*_<currentDate> .')
 	parser.add_argument ('-p', '--print_all_labels', default=False,
 		action="store_true",
-		help='print ordered list of filenames.')
+		help='print ordered list of all labels.')
 	parser.add_argument ('-l', '--ls', default="",
 		action="store_true",
 		help='print ordered list of filenames.')
@@ -45,7 +48,8 @@ def main (argv) :
 
 	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.files)
-	u.get_obj_stats (xml_files, args.db, args.ls, args.filetype, args.verbosity, args.write, args.print_all_labels)
+	print ('need to set get_Files_info_df.parent_path')
+	u.get_obj_stats (xml_files, "source", args.db, args.parent_path, args.ls, args.filetype, args.verbosity, args.write, args.print_all_labels)
 
 if __name__ == "__main__":
 	main (sys.argv)
