@@ -27,6 +27,9 @@ def main (argv) :
 	parser.add_argument ('y', default=20,
 		help='Percent of second set.')
 	parser.add_argument ('input', nargs='+')
+	# do this in xml_split since no x y are required
+	group.add_argument ('-by_pattern', '--by_pattern', 
+		help='partition using specified patterns to match anywhere in image path')
 	group.add_argument ('-by_list', '--by_list')
 	group.add_argument ('-by_label', '--by_label', default=False,
 		help='Put all images of each label in either of two groups. If set to true, all other partition options will be ignored.  Defaults to False.')
@@ -72,10 +75,23 @@ def main (argv) :
 	if x + y != 100 :
 		print("Error: (x + y) needs to be 100")
 		return
-	if args.by_list == True :
+	split_type = None
+	split_arg = None
+	if args.by_list is not None :
 		print ("splitting by list.")
-	if args.by_label == True :
+		split_type = 'list'
+		split_arg = args.by_list
+	elif args.by_label == True :
 		print ("splitting by label.")
+		split_type = 'label'
+		split_arg = None
+	elif args.group_date_db != None :
+		split_type = 'group_date'
+		split_arg = args.group_date_db
+	elif args.by_pattern is not None :
+		print ("splitting by pattern.")
+		split_type = 'pattern'
+		split_arg = args.by_pattern
 	filetypes = ['chips', 'faces']
 	filetype = args.filetype
 	if filetype not in filetypes :
@@ -84,15 +100,12 @@ def main (argv) :
 
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("part_%Y%m%d_%H%M")
-	do_grouping = False
-	if args.group_date_db != None :
-		do_grouping = True
 	if verbose > 2 :
 		print()
 		print("x: ", x)
 		print("y: ", y)
 		print("sum: ", x + y)
-		if do_grouping :
+		if args.group_date_db != None :
 			print ("------- partitioning grouped by date ------")
 			print("group date db: ", args.group_date_db)
 		print("output: ", args.output)
@@ -100,7 +113,8 @@ def main (argv) :
 
 	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.input)
-	u.generate_partitions (xml_files, x, y, args.output, args.by_label, args.by_list, args.shuffle, int(args.image_count_minimum), int(args.image_count_cap), int(args.test_count_minimum), int (args.image_size_minimum), int (args.label_group_minimum), filetype, do_grouping, args.group_date_db)
+	# pdb.set_trace ()
+	u.generate_partitions (xml_files, x, y, args.output, split_type, split_arg, args.shuffle, int(args.image_count_minimum), int(args.image_count_cap), int(args.test_count_minimum), int (args.image_size_minimum), int (args.label_group_minimum), filetype)
 
 
 if __name__ == "__main__":
