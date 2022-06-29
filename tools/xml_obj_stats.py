@@ -40,7 +40,7 @@ def main (argv) :
 	args = parser.parse_args()
 	# print "ls : ", args.ls
 	# print "files: ", args.files
-	filetypes = ['chips', 'faces', 'pairs', 'images', 'embeds']
+	filetypes = ['chips', 'faces', 'pairs', 'images', 'embeds', 'video_chips']
 	filetype = args.filetype
 	if filetype not in filetypes :
 		print('unrecognized filetype :', filetype, 'should be one of:', filetypes)
@@ -48,8 +48,11 @@ def main (argv) :
 
 	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.files)
-	print ('need to set get_Files_info_df.parent_path')
-	u.get_obj_stats (xml_files, "source", args.db, args.parent_path, args.ls, args.filetype, args.verbosity, args.write, args.print_all_labels)
+	# print ('need to set get_Files_info_df.parent_path')
+	if filetype == 'video_chips' :
+		u.get_obj_stats (xml_files, "source", args.videodb, args.parent_path, args.ls, args.filetype, args.write, args.print_all_labels)
+	else :
+		u.get_obj_stats (xml_files, "source", args.db, args.parent_path, args.ls, args.filetype, args.write, args.print_all_labels)
 
 if __name__ == "__main__":
 	main (sys.argv)
