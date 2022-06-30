@@ -2369,6 +2369,7 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 			print ('|   |   |-- ', year_cnt, 'years')
 		season_cnt = 0
 		days_cnt = 0
+		day_locs_cnt = 0
 		for year in years:
 			df_year = df_label_get_year (df_label, year)
 			if print_years :
@@ -2378,12 +2379,14 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 			spring_cnt = len (df_spring)
 			if print_seasons :
 				print ('|   |   |   |-- spring :', spring_cnt)
-			uniq_days = print_season_details (df_spring, print_days, '----')
+			uniq_days, uniq_day_locs = print_season_details (df_spring, print_days, '----')
+			day_locs_cnt += uniq_day_locs
 			days_cnt += uniq_days
 			df_fall = df_year_get_fall (df_year)
 			fall_cnt = len (df_fall)
 			print ('|   |   |   |-- fall : ', fall_cnt)
-			uniq_days = print_season_details (df_fall, print_days, '++++')
+			uniq_days, uniq_day_locs = print_season_details (df_fall, print_days, '++++')
+			day_locs_cnt += uniq_day_locs
 			days_cnt += uniq_days
 			if spring_cnt : 
 				season_cnt += 1
@@ -2391,8 +2394,8 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 				season_cnt += 1
 		if not print_seasons :
 			print ('|   |   |   |-- ', season_cnt, 'seasons')
-		print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', label_img_cnt, 'image(s)')
-		# print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', label_img_cnt, 'total|', total_label_img_cnt)
+		print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', day_locs_cnt, 'days-locations |', label_img_cnt, 'image(s)')
+		# print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days-locations |', label_img_cnt, 'total|', total_label_img_cnt)
 		print ('----------------------------------------------------------------------')
 
 ##------------------------------------------------------------
@@ -2532,20 +2535,34 @@ def partition_season_xy (df_season, x, y, filetype) :
 
 ##------------------------------------------------------------
 ##  print details of images by date within season
+##  now:
 ##------------------------------------------------------------
 def print_season_details (df_season, print_days, season_delim=':') :
 	df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE')
+	date_location_count = 0
 	if not print_days :
 		print ('|   |   |   |   |-- ', date, ':', date_img_cnt[0])
 		return
 	for i in range (len (df_dates_by_count)):
-		date = int (df_dates_by_count.index[i])
+		# pdb.set_trace ()
+		date = df_dates_by_count.index[i]
 		date_img_cnt = df_dates_by_count.iloc[i]
-		if date == 0 :
+		if int (date) == 0 :
 			print ('|   |   |   |   |-- 00000000 ', season_delim, date_img_cnt[0])
 		else :
 			print ('|   |   |   |   |-- ', date, season_delim, date_img_cnt[0])
-	return len (df_dates_by_count)
+
+		# pdb.set_trace ()
+		df_day = df_season_get_day (df_season, date)
+		locations = df_get_location_list (df_day)
+		if len (locations) > 1 :
+			for location in locations :
+				df_location = df_day_get_location (df_day, location)
+				print ('|   |   |   |   |   |-- ', location, season_delim, len (df_location))
+			date_location_count += len (locations)
+		else :
+			date_location_count += 1
+	return len (df_dates_by_count), date_location_count
 
 ##------------------------------------------------------------
 ##  partition_hier_obj ()
@@ -3131,6 +3148,18 @@ def df_get_year_list (df_label) :
 	return years
 		
 ##------------------------------------------------------------
+#  given df for day for label, return list of locations
+#  locations = df_day.groupby (['LOCATION']).size ()
+##------------------------------------------------------------
+def df_get_location_list (df_day) :
+	df_locations = df_day.groupby (['LOCATION']).size ()
+	locations = []
+	for i in range (len (df_locations)) :
+		location = df_locations.index[i]
+		locations.append (location)
+	return locations
+		
+##------------------------------------------------------------
 #  given db, return images for label
 #	db_df.query ('label == "bf_000")
 ##------------------------------------------------------------
@@ -3170,6 +3199,23 @@ def df_year_get_spring (df_year) :
 def df_season_get_day (df_season, image_date) :
 	df_day = df_season[df_season.DATE == image_date]
 	return df_day
+
+##------------------------------------------------------------
+#  given db_seaon, return df for day 
+#	db_df.query ('day == "20201010")
+##------------------------------------------------------------
+def df_season_get_day_location (df_season, image_date, location) :
+	df_day = df_season[df_season.DATE == image_date &
+		df_season.LOCATION == location]
+	return df_day_location
+
+##------------------------------------------------------------
+#  given db_day, return df for location
+#	db_df.query ('day == "20201010")
+##------------------------------------------------------------
+def df_day_get_location (df_day, location) :
+	df_location = df_day[df_day.LOCATION == location]
+	return df_location
 
 ##------------------------------------------------------------
 #  given df, return count
