@@ -2370,6 +2370,8 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 		season_cnt = 0
 		days_cnt = 0
 		day_locs_cnt = 0
+		# pdb.set_trace ()
+		df_videos = df_label[['IMAGE', 'VIDEO', 'DATE']].groupby (['VIDEO']).count().sort_values('IMAGE')
 		for year in years:
 			df_year = df_label_get_year (df_label, year)
 			if print_years :
@@ -2394,7 +2396,7 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 				season_cnt += 1
 		if not print_seasons :
 			print ('|   |   |   |-- ', season_cnt, 'seasons')
-		print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', day_locs_cnt, 'days-locations |', label_img_cnt, 'image(s)')
+		print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', day_locs_cnt, 'days-locations |', len (df_videos), 'uniq videos |', label_img_cnt, 'image(s)')
 		# print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days-locations |', label_img_cnt, 'total|', total_label_img_cnt)
 		print ('----------------------------------------------------------------------')
 
@@ -2881,11 +2883,13 @@ def get_video_chips_info_df (filenames, vdb, vdb_d, parent_path='/data/videos/')
 		dates = [dt.split()[0] for dt in datetimes]
 		months = [date[4:6] for date in dates]
 		years = [date[0:4] for date in dates]
+		videos = ['/'.join (name.split('/')[:-1]) for name in chip_filenames]
 		df_chips['YEAR'] = years
 		df_chips['LABEL'] = labels
 		df_chips['MONTH'] = months
 		df_chips['DATE'] = dates
 		df_chips['DATETIME'] = datetimes
+		df_chips['VIDEO'] = videos
 		dates = df_chips['DATE'].values.tolist ()
 		df_chips.rename(columns = {'CHIPFILE':'IMAGE'}, inplace = True)
 		num_empty = dates.count('00000000')
