@@ -18,7 +18,17 @@ from argparse import RawTextHelpFormatter
 ##------------------------------------------------------------
 def main (argv) :
 	prog_name = os.path.basename(__file__)
-	desc = 'Partitions objects into x and y percents.\nIf shuffle is set to False, each label will be split as specified.\nIf -group is set, will use db argument to partition after grouped by date.\nx and y can be set to 100 and 0, respectively, for no partitioning (to combine multiple XMLs.)\n\nExample: ' + prog_name + ' -shuffle False -file faces 80 20 images.xml\n\t ' + prog_name + ' -group faces.csv 75 25 chips.xml'
+	filetypes = ['chips', 'faces', 'video_chips']
+	filetypes_str = u.filetypes_to_str (filetypes)
+	desc = 'Partitions each label into into x and y percents.  \
+x and y can be set to 100 and 0, \n\
+respectively, to combine multiple XMLs together.\n\n\
+Example: ' + prog_name + ' 80 20 images.xml\n \
+\t ' + prog_name + ' -grouping_duration 1 -db videos.csv 75 25 chips.xml'
+
+# If -grouping_duration is set, will use date information either\
+# from -db file or in the object data. \
+# To group by days, use -grouping_duration 24.\n \
 	parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
     # parser.formatter.max_help_position = 50
 	group = parser.add_mutually_exclusive_group()
@@ -26,31 +36,15 @@ def main (argv) :
 		help='Percent of first set.')
 	parser.add_argument ('y', type=int, default=20,
 		help='Percent of second set.')
-	parser.add_argument ('input', nargs='+')
-	# do this in xml_split since no x y are required
-	group.add_argument ('-by_pattern', '--by_pattern', 
-		help='partition using specified patterns to match anywhere in image path')
-	group.add_argument ('-by_years', '--by_years', nargs=2,
-		help='partition by each year.  Requires date information (in chip or in csv')
-	# group.add_argument ('-by_list', '--by_list')
-	group.add_argument ('-by_label', '--by_label', default=False,
-		help='Put all images of each label in either of two groups. If set to true, all other partition options will be ignored.  Defaults to False.')
-	parser.add_argument ('-shuffle', '--shuffle', default=True,
-		help='Determines whether all objects are mixed before partition. If set to False, each label wil be split as specified.  Defaults to True.')
-	# parser.add_argument ('--test_count_minimum', default=0,
-		# help='Minimum test images per label, overrides partition percentage. Defaults to 0.')
-	# parser.add_argument ('-label_group_minimum', '--label_group_minimum', default=0,
-		# help='Minimum number of day groups per label. Defaults to 0.')
-	# parser.add_argument ('-image_count_minimum', '--image_count_minimum', default=0,
-		# help='Minimum number of images per label. Defaults to 0.')
-	parser.add_argument ('-image_count_cap', '--image_count_cap', default=0,
-		help='Cap number of images per label. Defaults to no cap.')
-	# parser.add_argument ('-image_size_minimum', '--image_size_minimum', default=0,
-		# help='Minimum size of image. Defaults to 0.')
+	parser.add_argument ('input', nargs='+',
+		help='xml files and directories.  All xmls under each specified directory will be included. ')
+	filetype_help = 'Type of input file. Should be one of ' + filetypes_str + 'Defaults to "chips".'
 	parser.add_argument ('-filetype', '--filetype', default="chips",
-		help='Type of file to partition. <faces|chips>. Defaults to "chips".')
-	group.add_argument ('-group', '--group_date_db',
-		help='Group images with same date and label together before partitioning using csv (\';\' separated) for date/label information.')
+		help=filetype_help)
+	group.add_argument ('-by_label', '--by_label', action='store_true',
+		help='All images a label will be togther in one partition.')
+	group.add_argument ('-grouping_duration', '--grouping_duration',
+		help='Group images within specified hour duration together before partitioning. Requires date time information from xml or via csv specified with -db.')
 	parser.add_argument ('-db', '--db', default="",
 		help='csv (\';\' separated) for date/label information.')
 	parser.add_argument ('-out', '--output', default="",
@@ -64,33 +58,20 @@ def main (argv) :
 	### -------------- validate arguments -------- ###
 	split_type = None
 	split_arg = None
-	# if args.by_list is not None :
-		# print ("splitting by list.")
-		# split_type = 'list'
-		# split_arg = args.by_list
 	if args.by_label is not False :
 		print ("splitting by label.")
 		split_type = 'label'
 		split_arg = None
-	elif args.by_years is not None:
-		split_type = 'years'
-		split_arg = args.by_years
-	elif args.group_date_db != None :
-		split_type = 'group_date'
-		split_arg = args.group_date_db
-	elif args.by_pattern is not None :
-		print ("splitting by pattern.")
-		split_type = 'pattern'
-		split_arg = args.by_pattern
+	elif args.grouping_duration is not None :
+		split_type = 'grouping_duration'
+		split_arg = args.grouping_duration
 	elif args.x + args.y != 100 :
 		print("Error: (x + y) needs to be 100")
 		return
-	filetypes = ['chips', 'faces', 'video_chips']
 	filetype = args.filetype
 	if filetype not in filetypes :
-		print('unrecognized filetype :', filetype, 'should be one of:', filetypes)
+		print('unrecognized filetype :', filetype, 'should be one of:', filetypes_str)
 		return
-
 	if not args.output :
 		args.output = datetime.datetime.now().strftime("part_%Y%m%d_%H%M")
 	if verbose > 2 :
@@ -98,17 +79,18 @@ def main (argv) :
 		print("x: ", args.x)
 		print("y: ", args.y)
 		print("sum: ", args.x + args.y)
-		if args.group_date_db != None :
-			print ("------- partitioning grouped by date ------")
-			print("group date db: ", args.group_date_db)
+		if args.grouping_duration :
+			msg = "------- images per label grouped in ' + args.grouping_duration + '-hr windows ------"
+			print (msg)
+		if args.db != None :
+			print("db: ", args.db)
 		print("output: ", args.output)
 		print("input: ", args.input)
 
 	u.set_verbosity (args.verbosity)
 	xml_files = u.generate_xml_file_list (args.input)
 	# pdb.set_trace ()
-	u.generate_partitions (xml_files, args.x, args.y, args.output, split_type, split_arg, filetype)
-
+	u.generate_partitions (xml_files, args.x, args.output, split_type, split_arg, args.db, filetype)
 
 if __name__ == "__main__":
 	main (sys.argv)
