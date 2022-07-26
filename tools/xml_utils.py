@@ -108,6 +108,16 @@ md_classes = ['animal', 'person', 'vehicle']
 object_classes_d = defaultdict ()
 
 ##------------------------------------------------------------
+##  create user readable string from list of filetypes
+##------------------------------------------------------------
+def filetypes_to_str (filetypes) :
+	filetypes_str = '<'+filetypes[0]
+	for filetype in filetypes[1:-1] :
+		filetypes_str += '|'+filetype
+	filetypes_str += '|'+filetypes[-1]+'>'
+	return filetypes_str
+
+##------------------------------------------------------------
 ##  add indentations to xml content for readability
 ##------------------------------------------------------------
 def prettify(elem) :
@@ -645,13 +655,13 @@ def load_video_chip_objs (root, vchips_d) : # , parent_path) :
 		video_filename = get_chip_source_file (chip, 'video_chips')
 		# filename = filename.replace (parent_path, '')
 		# video_filename = video_filename.replace (parent_path, '')
+		# pdb.set_trace ()
 		location = video_chip_get_location (chip_filename)
 		dateTime = tag_get_datetime_str (chip, 'video_chips')
 		video_filenames.append (video_filename)
 		chip_filenames.append (chip_filename)
 		locations.append (location)
 		datetimes.append (dateTime)
-		# pdb.set_trace ()
 		labels.append (label)
 		vchips_d[label].append(chip)
 		g_vchipnames_d[chip_filename] = chip
@@ -1585,44 +1595,91 @@ def print_dict (chips_d) :
 ##  ^^^^^^^^^^ END COMMENT ^^^^^^^^^^^^^^^^^^^^^^
 
 ##------------------------------------------------------------
+##                   -pattern <pattern_file>
+##                   -list <list_file>
+##                   -years <start_year> <end_year>
+##                   -label_minmax <min> <max> 
+##                   -label_video_minmax <min> <max> 
+##                   -video_image_percent <percent_per_video>
+##                   -video_image_count <count_per_video>
+##                   -labels <list>
+## now:
+##------------------------------------------------------------
+def extract_subsets  (files, output, extract_type, extract_arg, db, parent_path, filetype="chips") :
+	# pdb.set_trace ()
+	chips_d = defaultdict(list)
+	if extract_type == 'pattern' :
+		xml_split_by_patterns (files, extract_arg, output, filetype)
+	elif extract_type == 'list' :
+		xml_split_by_files (files, extract_arg, output, filetype)
+	elif extract_type == 'years' :
+		xml_split_by_years (files, extract_arg, output, filetype)
+	elif extract_type == 'label_minmax' :
+		label_min = extract_arg[0]
+		label_max = extract_arg[1]
+		extract_labels_minmax (files, db, label_min, label_max, output, filetype)
+	elif extract_type == 'label_video_minmax' :
+		video_min = extract_arg[0]
+		video_max = extract_arg[1]
+		# TODO code up
+		extract_video_labels_minmax (files, db, label_min, label_max, output, filetype)
+	elif extract_type == 'video_image_percent' :
+		vimage_percent = extract_arg
+		extract_video_image_percent (files, db, vimage_percent, parent_path, output)
+	elif extract_type == 'video_image_count' :
+		vimage_count = extract_arg
+		extract_video_image_count (files, db, vimage_count, output)
+	elif extract_type == 'labels' :
+		labels = extract_arg
+		extract_labels (files, labels, output)
+	else :
+		print ('Error: unrecgnized extract type', extract_type)
+		return
+	return
+
+##------------------------------------------------------------
 ##  partition all files into x and y percent
 ##------------------------------------------------------------
-def generate_partitions (files, x, y, output, split_type, split_arg, filetype="chips") :
+def generate_partitions (files, x, output, split_type, split_arg, db, filetype="chips") :
 	# print "partitioning chips into: ", x, " ", y
 	# pdb.set_trace ()
-	if x < y :
-		tmp_x = x
-		x = y
-		y = tmp_x
+	y = x if x < 50 else 100 - x
+	x = 100 - y
 	chips_d = defaultdict(list)
 	# pdb.set_trace ()
-	if split_type == 'years' :
-		if output is None:
-			output = files[0]
-		xml_split_by_years (files, split_arg, output, filetype)
-		return
-	if split_type == 'list' :
-		xml_split_by_files (files, split_arg, output, 'chips')
-		return
-	if split_type == 'pattern' :
-		xml_split_by_patterns (files, split_arg, output, 'chips')
-		return
-	# # load_objs_from_files (files, chips_d, filetype)
+	if 0 : ## this should be in extract_subset
+		if split_type == 'years' :
+			if output is None:
+				output = files[0]
+			xml_split_by_years (files, split_arg, output, filetype)
+			return
+		if split_type == 'list' :
+			xml_split_by_files (files, split_arg, output, 'chips')
+			return
+		if split_type == 'pattern' :
+			xml_split_by_patterns (files, split_arg, output, 'chips')
+			return
+	# load_objs_from_files (files, chips_d, filetype)
 	# pdb.set_trace ()
 	csv_filename = split_arg
-	chunks = partition_objs (files, x, y, filetype, split_type, csv_filename)
+	chunks = partition_objs (files, x, y, filetype, split_type, split_arg, db)
 	# chunks = partition_xy_with_dates (files, csv_filename, x, y)
-	print ('files partitioned into:', len (chunks[g_x]), ':', len (chunks[g_y]))
 	# chunks = partition_objs (chips_d, x, y, shuffle, img_cnt_min, test_min, image_size_min, filetype, day_grouping, csv_filename)
 	# pdb.set_trace ()
-	file_x = output + "_" + str(x) + ".xml"
-	file_y = output + "_" + str(y) + ".xml"
+	file_x = make_new_name (output, '_'+str (x))
+	file_y = make_new_name (output, '_'+str (y))
 	file_small_img = file_unused = None
 	# generate_partition_files (chunks, filenames, filetype)
 	if filetype == 'video_chips' :
 		filetype = 'chips'
 	generate_xml_from_objs (chunks[g_x], file_x, filetype)
 	generate_xml_from_objs (chunks[g_y], file_y, filetype)
+	total_images = len (chunks[g_x]) + len (chunks[g_y])
+	print ('Partitioned', total_images, 'images into', len (chunks[g_x]), ':', len (chunks[g_y]))
+	print ('Partition files generated.')
+	print ('\t', str (len (chunks[g_x])), 'chips written to', file_x)
+	print ('\t', str (len (chunks[g_y])), 'chips written to', file_y)
+	print ()
 
 ##------------------------------------------------------------
 ##  partition all files into x and y percent
@@ -1922,7 +1979,7 @@ def get_min_nom_max (count, x, y, margin=.5) :
 	return val_min, val_nom, val_max
 	
 ##------------------------------------------------------------
-##  image = df.loc[i]['IMAGE']
+##  image = df.iloc[i]['IMAGE']
 ##  given grouped dataframe, extract image names
 ##  e.g. 
 ##               IMAGE     LABEL      DATE TEST_TRAIN            DATE_TIME
@@ -2254,11 +2311,114 @@ def select_label_minmax (xml_filenames, db, m, n, filetype='chips') :
 	return 0
 
 ##------------------------------------------------------------
+##   return the most number of 
+##     videos of count between m and n, and evenly distributed  
+##	   among years, season and days.
+##------------------------------------------------------------
+def extract_video_labels_minmax (xml_filenames, image_db, m, n, output_file, filetype='chips') :
+	print ('empty function extract_video_labels_minmax')
+	return
+
+##------------------------------------------------------------
+##   return a percent of images in a video
+##   now:
+##------------------------------------------------------------
+def extract_video_image_percent (filenames, vdb, vimage_percent, parent_path, output) :
+	print ('in extract_video_image_percent')
+	vchips_d = defaultdict (list)  
+	df_db = get_video_chips_info_df (filenames, vdb, vchips_d, parent_path)
+	videos = df_get_video_list (df_db)
+	all_images = []
+	matched_cnt = 0
+	for video in videos :
+		df_video_images = df_get_video_images (df_db, video)
+		step = int (100 / vimage_percent)
+		indices = list (range (0, len (df_video_images), step))
+		# pdb.set_trace ()
+		matched_cnt += len (indices)
+		print ('... grabbing', len (indices), 'images out of', len (df_video_images), 'in video')
+		# TODO : images = [df_video_images.iloc[i]['IMAGE'] for i in indices]
+		images = []
+		for i in indices :
+			images.append (df_video_images.iloc[i]['IMAGE'])
+		all_images.extend  (images)
+	print ('\n... total selected', matched_cnt, 'images out of', len (df_db), 'total.')
+	matched_objs, unmatched_objs = split_objs_by_filenames (vchips_d, all_images)
+	matched_filename = make_new_name (output, '_'+str (vimage_percent))
+	unmatched_filename = make_new_name (output, '_'+str (100-vimage_percent))
+	generate_xml_from_objs (matched_objs, matched_filename, 'chips')
+	generate_xml_from_objs (unmatched_objs, unmatched_filename, 'chips')
+	print ('Extracted', vimage_percent, 'percent of the video images.')
+	print ('\t', str (len (matched_objs)), 'chips written to', matched_filename)
+	print ('\t', str (len (unmatched_objs)), 'chips written to', unmatched_filename)
+	return
+
+##------------------------------------------------------------
+##   return a max number of images in a video
+##   same as percent, but for each video percent = max_img / num_images
+##------------------------------------------------------------
+def extract_video_image_count (filenames, vdb, count, output) :
+	print ('in extract_video_image_count')
+	vchips_d = defaultdict (list)  
+	df_db = get_video_chips_info_df (filenames, vdb, vchips_d)
+	videos = df_get_video_list (df_db)
+	all_images = []
+	for video in videos :
+		df_video_images = df_get_video_images (df_db, video)
+		num_imgs = len (df_video_images)
+		if num_imgs <= count :
+			images = df_video_images['IMAGE'].values.tolist ()
+			all_images.extend  (images)
+			print ('... using all', num_imgs, 'images in video')
+			continue
+		step = (num_imgs+1)/count
+		indices_f = np.arange (0, num_imgs, step)
+		indices = [int (round (f)) for f in indices_f]
+		if len (indices) != count :
+			print ('Expecting', count, 'images, getting', len (indices))
+			pdb.set_trace ()
+		print ('... grabbing', len (indices), 'images out of', len (df_video_images), 'in video')
+		# TODO : images = [df_video_images.iloc[i]['IMAGE'] for i in indices]
+		images = []
+		# pdb.set_trace ()
+		for i in indices :
+			images.append (df_video_images.iloc[i]['IMAGE'])
+		all_images.extend  (images)
+	print ('\n... total selected', len (all_images), 'images out of', len (df_db), 'total.')
+	matched_objs, unmatched_objs = split_objs_by_filenames (vchips_d, all_images)
+	matched_filename = make_new_name (output, '_max'+str (count))
+	unmatched_filename = make_new_name (output, '_max'+str (count)+'_remainder')
+	generate_xml_from_objs (matched_objs, matched_filename, 'chips')
+	generate_xml_from_objs (unmatched_objs, unmatched_filename, 'chips')
+	print ('Extracted max', count, 'of video images.')
+	print ('\t', str (len (matched_objs)), 'chips written to', matched_filename)
+	print ('\t', str (len (unmatched_objs)), 'chips written to', unmatched_filename)
+	return
+
+##------------------------------------------------------------
+##   extract all chips with specified labels
+##------------------------------------------------------------
+def extract_labels (files, labels, output) :
+	objs_d = defaultdict(list)
+	obj_filenames = load_objs_from_files (files, objs_d, 'chips', 'source')
+	matched_objs, unmatched_objs = obj_split (objs_d, labels, 'file', 'labels')
+	matched_filename = make_new_name (output, '_matched')
+	unmatched_filename = make_new_name (output, '_unmatched')
+	generate_xml_from_objs (matched_objs, matched_filename, 'chips')
+	generate_xml_from_objs (unmatched_objs, unmatched_filename, 'chips')
+	all_labels = list (objs_d.keys())
+	matched_labels = set (all_labels) & set (labels)
+	print ('Extracted files based on labels.')
+	print ('\t', str (len (matched_objs)), 'chips with', len (matched_labels), 'labels written to', matched_filename)
+	print ('\t', str (len (unmatched_objs)), 'chips with', len (all_labels) - len (matched_labels), 'labels written to', unmatched_filename)
+	return
+
+##------------------------------------------------------------
 ##   given csv of images and dates, return the most number of 
 ##     images of count between m and n, and evenly distributed  
 ##	   among years, season and days.
 ##------------------------------------------------------------
-def select_labels_minmax (xml_filenames, image_db, m, n, output_file, filetype='chips') :
+def extract_labels_minmax (xml_filenames, image_db, m, n, output_file, filetype='chips') :
 	objs_d = defaultdict(list)
 	obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
 	df_db = get_files_info_df (obj_filenames, image_db)
@@ -2340,7 +2500,7 @@ def partition_labels_xy (xml_filenames, image_db, x, y, output_file, filetype='c
 ##------------------------------------------------------------
 ##   given csv of images and dates, print stats for each label
 ##------------------------------------------------------------
-def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=True) :
+def print_db_stats  (df_db, filetype='chips',print_years=True, print_seasons=True, print_days=True) :
 	print ('\n|-- total images in file:', df_len (df_db))
 	# check for columns
 	cols = ['IMAGE', 'LABEL', 'DATE', 'YEAR', 'MONTH']
@@ -2371,7 +2531,10 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 		days_cnt = 0
 		day_locs_cnt = 0
 		# pdb.set_trace ()
-		df_videos = df_label[['IMAGE', 'VIDEO', 'DATE']].groupby (['VIDEO']).count().sort_values('IMAGE')
+		video_cnt = 0
+		if filetype == 'video_chips' :
+			dfg_videos = df_label[['IMAGE', 'VIDEO', 'DATE']].groupby (['VIDEO']).count().sort_values('IMAGE')
+			video_cnt = len (dfg_videos)
 		for year in years:
 			df_year = df_label_get_year (df_label, year)
 			if print_years :
@@ -2381,13 +2544,13 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 			spring_cnt = len (df_spring)
 			if print_seasons :
 				print ('|   |   |   |-- spring :', spring_cnt)
-			uniq_days, uniq_day_locs = print_season_details (df_spring, print_days, '----')
+			uniq_days, uniq_day_locs = print_season_details (df_spring, print_days, '----', filetype)
 			day_locs_cnt += uniq_day_locs
 			days_cnt += uniq_days
 			df_fall = df_year_get_fall (df_year)
 			fall_cnt = len (df_fall)
 			print ('|   |   |   |-- fall : ', fall_cnt)
-			uniq_days, uniq_day_locs = print_season_details (df_fall, print_days, '++++')
+			uniq_days, uniq_day_locs = print_season_details (df_fall, print_days, '++++', filetype)
 			day_locs_cnt += uniq_day_locs
 			days_cnt += uniq_days
 			if spring_cnt : 
@@ -2396,7 +2559,7 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 				season_cnt += 1
 		if not print_seasons :
 			print ('|   |   |   |-- ', season_cnt, 'seasons')
-		print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', day_locs_cnt, 'days-locations |', len (df_videos), 'uniq videos |', label_img_cnt, 'image(s)')
+		print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days |', day_locs_cnt, 'days-locations |', video_cnt, 'uniq videos |', label_img_cnt, 'image(s)')
 		# print ('------- ', cur_label, 'summary:', year_cnt, 'years |', season_cnt, 'seasons |', days_cnt, 'days-locations |', label_img_cnt, 'total|', total_label_img_cnt)
 		print ('----------------------------------------------------------------------')
 
@@ -2407,31 +2570,36 @@ def print_db_stats  (df_db, print_years=True, print_seasons=True, print_days=Tru
 ##	    partition_season (spring), partition_season (fall)
 ##   now: TODO partition to support video_chips using (label,date,location)
 ##------------------------------------------------------------
-def partition_xy_with_dates (xml_filenames, image_db, x, y, filetype='chips') :
+def partition_xy_with_dates (xml_filenames, image_db, x, filetype='chips', duration=24, ppath=None) :
 	# pdb.set_trace ()
 	objs_d = defaultdict(list)
 	if filetype == 'video_chips' :
-		parent_path = '/video/bears/videoFrames/britishColumbia/'
-		df_db = get_video_chips_info_df (xml_filenames, image_db, objs_d, parent_path)
+		if ppath is None:
+			ppath = '/video/bears/videoFrames/britishColumbia/'
+		df_db = get_video_chips_info_df (xml_filenames, image_db, objs_d, ppath)
+		filename_type = 'file'
 	else :
+		filename_type = 'source'
 		obj_filenames = load_objs_from_files (xml_filenames, objs_d, 'chips', 'source')
-		df_db = get_files_info_df (obj_filenames, image_db, '/data/bears/')
+		if ppath is None :
+			ppath = '/data/bears/'
+		df_db = get_files_info_df (obj_filenames, image_db, ppath)
 	file_img_cnt = len (df_db)
 	x_file_img_cnt = int (x / 100 * file_img_cnt)
 	y_file_img_cnt = file_img_cnt - x_file_img_cnt
-	print ('\n|-- total images in file:', df_len (df_db), '/', file_img_cnt)
 	# check for columns
-	cols = ['LABEL', 'DATE', 'MONTH']
-	db_cols = list (df_db)
-	missing_cols = []
-	for col in cols :
-		if col not in db_cols :
-			missing_cols.append (col)
+	cols = ['LABEL', 'DATE', 'MONTH', 'TIME']
+	missing_cols = list (set (cols) - set (df_db))
 	if len (missing_cols) > 0 :
 		print ('... Unable to locate required column(s) in CSV:', missing_cols)
 		print ('... Aborting.\n')
 		return
 	df_db['MONTH'] = df_db['MONTH'].astype(int)
+	df_db['TIME'] = df_db['TIME'].astype(int)
+	# pdb.set_trace ()
+	df_db['GROUP'] = df_db['TIME'].div(10000).div(int(duration)).astype(int)
+	# df_db['GROUP1'] = df_db['TIME'].div(10000)
+	# df_db['GROUP2'] = df_db['GROUP1'].div(duration).astype(int)
 	labels = g_get_labels ()
 	x_files = []
 	y_files = []
@@ -2445,7 +2613,7 @@ def partition_xy_with_dates (xml_filenames, image_db, x, y, filetype='chips') :
 			df_year = df_label_get_year (df_label, year)
 			df_spring = df_year_get_spring (df_year)
 			if len (df_spring) > 0 :
-				x, y = get_unused_xy (x_unused_cnt, y_unused_cnt)
+				x, y = recalc_xy (x_unused_cnt, y_unused_cnt)
 				x_partition, y_partition = partition_season_xy (df_spring, x, y, filetype)
 				x_files.extend (x_partition)
 				y_files.extend (y_partition)
@@ -2455,7 +2623,7 @@ def partition_xy_with_dates (xml_filenames, image_db, x, y, filetype='chips') :
 				y_unused_cnt -= len (y_partition)
 			df_fall = df_year_get_fall (df_year)
 			if len (df_fall) > 0 :
-				x, y = get_unused_xy (x_unused_cnt, y_unused_cnt)
+				x, y = recalc_xy (x_unused_cnt, y_unused_cnt)
 				x_partition, y_partition = partition_season_xy (df_fall, x, y, filetype)
 				x_files.extend (x_partition)
 				y_files.extend (y_partition)
@@ -2464,7 +2632,6 @@ def partition_xy_with_dates (xml_filenames, image_db, x, y, filetype='chips') :
 				x_unused_cnt -= len (x_partition)
 				y_unused_cnt -= len (y_partition)
 	# pdb.set_trace ()
-	filename_type = 'source'
 	x_chunk, y_chunk = obj_split (objs_d, x_files, filename_type)
 	return [x_chunk, y_chunk]
 
@@ -2480,13 +2647,16 @@ def print_partition_info (x_cur_len, y_cur_len, x_len, y_len, season) :
 ##------------------------------------------------------------
 ##  get new ratios based on unfulfilled counts
 ##------------------------------------------------------------
-def get_unused_xy (x_unused_cnt, y_unused_cnt) :
+def recalc_xy (x_unused_cnt, y_unused_cnt) :
 	x = int (x_unused_cnt / (x_unused_cnt + y_unused_cnt) * 100)
 	y = 100 - x
 	return x, y
 ##------------------------------------------------------------
 ##  partition season.  group into chunks by date, sort largest first
 ##  option 1: keep largest first, then random the rest
+##		 indices = list (range (1,len (dfg_groups)))
+##		 random.shuffle (indices)
+##		 indices.insert (0, 0)
 ##  option 2: leave sorted by largest first
 ##  method:
 ##    for each chunk put into x if doesn't go over goal, else
@@ -2496,75 +2666,142 @@ def get_unused_xy (x_unused_cnt, y_unused_cnt) :
 ##  now: TODO partition to support video_chips (consider location)
 ##------------------------------------------------------------
 def partition_season_xy (df_season, x, y, filetype) :
-	print ('check df_dates_by_count')
-	pdb.set_trace ()
 	if filetype == 'video_chips' :
-		df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE', ascending=False)
+		dfg_groups = df_season[['IMAGE', 'DATE', 'GROUP', 'TIME', 'LOCATION']].groupby (['DATE', 'LOCATION', 'GROUP']).count().sort_values('IMAGE', ascending=False)
 	else :
-		df_dates_by_count = df_season[['IMAGE', 'DATE', 'LOCATION']].groupby (['DATE']).count().sort_values('IMAGE', ascending=False)
+		dfg_groups = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('DATE', ascending=False)
 	# df_dates_group_des = df_season[['IMAGE', 'DATE']].groupby (['DATE'], ascending=False).count().sort_values('IMAGE')
-	if len (df_dates_by_count) == 1 :
+	# pdb.set_trace ()
+	if len (dfg_groups) == 1 :
 		images = df_get_images (df_season)
 		return images, []
 	# pdb.set_trace ()
 	# -- keep largest, random the rest for some diversity of days.  but too
-	#  many days are going into test set. maybe change 
-	# indices = list (range (1,len (df_dates_by_count)))
-	# random.shuffle (indices)
-	# indices.insert (0, 0)
+	#  many groups are going into test set. maybe change 
 	slack_hyper_param = 1.05
 	slack_hyper_param = 1.10
 	slack_hyper_param = 1.075
 	x_season_images = int (len (df_season) * (x*slack_hyper_param) / 100)
+	debug = True
+	debug = False
+	if debug :
+		print ('x:', x, '-- season images:', len (df_season), '-- date/location/time groups:', len (dfg_groups))
 	x_unused_cnt = x_season_images
 	x_images = []
 	y_images = []
-	for i in range (len (df_dates_by_count)) :
-		date = df_dates_by_count.index[i]
-		df_day = df_season_get_day (df_season, date)
-		images = df_get_images (df_day)
-		if i > 0 and (df_len (df_day) > x_unused_cnt) : # goes into y
+	# pdb.set_trace ()
+	group_vals = dfg_groups.index.values.tolist ()
+	first = True
+	for group_val in group_vals :
+		df_group = dfg_get_group_df (df_season, group_val)
+		images = df_get_images (df_group)
+		if debug :
+			print ('x_unused_cnt: ', x_unused_cnt)
+		if not first and (df_len (images) > x_unused_cnt) : # goes into y
+			if debug :
+				print ('putting group of', len (images), 'into group y')
 			y_images.extend (images)
+			first = False
 			continue
-		x_unused_cnt -= df_len (df_day)
+		if debug :
+			print ('putting group of', len (images), 'into group x')
+		x_unused_cnt -= len (images)
 		x_images.extend (images)
+		first = False
+
+	if debug :
+		print ('----------------------------------------')
+		print ('season x:', len (x_images), '-- season y:', len (y_images))
+		print ('----------------------------------------')
+	x_new = len (x_images)/len (df_season)*100
+	# pdb.set_trace ()
+	if x_new > x*1.1 or x_new < x*.9 :
+		print ('Warning: partition result outside of expected bounds.  Expected:', x, 'achieved: ', round(x_new))
 	return x_images, y_images
 
 ##------------------------------------------------------------
-##  df_get_images ()
+##  dfg_get_group_df (df, group_info)
 ##------------------------------------------------------------
-
+def  dfg_get_group_df(df, group_info) :
+	date = group_info[0]
+	location = group_info[1]
+	group = group_info[2]
+	df_group = df[(df.DATE==date) & (df.LOCATION==location) & (df.GROUP==group)]
+	return df_group
 
 ##------------------------------------------------------------
 ##  print details of images by date within season
-##  now:
+##  if there are multiple locations, print each separately
 ##------------------------------------------------------------
-def print_season_details (df_season, print_days, season_delim=':') :
-	df_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE')
+def print_season_details (df_season, print_days, season_delim=':', filetype='chips') :
+	dfg_dates_by_count = df_season[['IMAGE', 'DATE']].groupby (['DATE']).count().sort_values('IMAGE')
 	date_location_count = 0
+	video_timestr = ''
+	is_video_chips = filetype == 'video_chips'
 	if not print_days :
 		print ('|   |   |   |   |-- ', date, ':', date_img_cnt[0])
 		return
-	for i in range (len (df_dates_by_count)):
+	for i in range (len (dfg_dates_by_count)):
 		# pdb.set_trace ()
-		date = df_dates_by_count.index[i]
-		date_img_cnt = df_dates_by_count.iloc[i]
-		if int (date) == 0 :
-			print ('|   |   |   |   |-- 00000000 ', season_delim, date_img_cnt[0])
-		else :
-			print ('|   |   |   |   |-- ', date, season_delim, date_img_cnt[0])
-
-		# pdb.set_trace ()
+		date = dfg_dates_by_count.index[i]
+		date_img_cnt = dfg_dates_by_count.iloc[i]
 		df_day = df_season_get_day (df_season, date)
+		video_cnt = 0
+		if is_video_chips :
+			# dfg_videos = df_day.groupby (['VIDEO']).count()
+
+#----------
+			video_cnt, video_timestr = df_get_video_time_info (df_day)
+#----------
+
+		if int (date) == 0 :
+			print ('|   |   |   |   |-- 00000000 ', end='')
+		else :
+			print ('|   |   |   |   |-- ', date, end='')   
+		print ( season_delim, date_img_cnt[0], 'images,', video_cnt, 'videos', end='')
+		if video_cnt > 1 :
+			print (video_timestr)
+		else :
+			print ()
+		# pdb.set_trace ()
+		if not is_video_chips :
+			continue
 		locations = df_get_location_list (df_day)
 		if len (locations) > 1 :
 			for location in locations :
 				df_location = df_day_get_location (df_day, location)
+				df_get_video_time_info ()
 				print ('|   |   |   |   |   |-- ', location, season_delim, len (df_location))
+				print_videos (df_location)
 			date_location_count += len (locations)
 		else :
+			print_videos (df_day)
 			date_location_count += 1
-	return len (df_dates_by_count), date_location_count
+	return len (dfg_dates_by_count), date_location_count
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def df_get_video_time_info (df) :
+	videos = df_get_video_list (df)
+	video_cnt = len (videos)
+	if video_cnt > 1 :
+		video_timestr = df_day_get_videos_timestr (df, videos)
+	return video_cnt, video_times_str
+
+##------------------------------------------------------------
+##  print videos
+##------------------------------------------------------------
+def print_videos (df) :
+	if get_verbosity () < 4 :
+		return
+	dfg_videos = df.groupby (['VIDEO']).count()
+	videos = dfg_videos.index.values.tolist ()
+	for video in videos :
+		# pdb.set_trace ()
+		df_video_images = df_get_video_images (df, video)
+		vname = video.split ('/')[-1]
+		print ('|   |   |   |   |   |   |-- ', vname, ':', len (df_video_images), 'images')
+	return
 
 ##------------------------------------------------------------
 ##  partition_hier_obj ()
@@ -2578,13 +2815,14 @@ def partition_hier_obj (hier_obj_d, x, y) :
 ##------------------------------------------------------------
 ##  partition chips into x and y percent
 ##  will do one of:
-##	- split by label
-##	- split across label, not using dates
-##	- split across all labels afer grouping images by date for each label
-##  returns two lists of
+##	- put all of a label into one of two parts
+##	- split each label into parts , not using dates
+##	- split across all labels afer grouping images by specified duration
+##  returns two lists of objects
 ##------------------------------------------------------------
-def partition_objs (filenames, x, y, filetype="chips", split_type="chips", csv_filename=None) :
-	if get_verbosity () > 0 :
+def partition_objs (filenames, x, y, filetype="chips", split_type="chips", split_arg=24, db=None) :
+	if get_verbosity () > 1 :
+		print ('loading files:', filenames)
 		print ("partitioning chips into: ", x, " ", y)
 		print ('split type:', split_type)
 	chunks = []
@@ -2592,8 +2830,8 @@ def partition_objs (filenames, x, y, filetype="chips", split_type="chips", csv_f
 	if split_type == 'label' :
 		chunks = partition_files_by_label (filenames, x, y, filetype)
 		return chunks
-	if split_type == 'day_grouping' : ##  
-		chunks = partition_xy_with_dates (filenames, csv_filename, x, y)
+	if split_type == 'grouping_duration' : ##  
+		chunks = partition_xy_with_dates (filenames, db, x, filetype, split_arg)
 		return chunks
 	# only here if doing rndom partitioning (no grouping by day)
 	chip_files = load_objs_from_files (filenames, objs_d, filetype)
@@ -2733,7 +2971,7 @@ def generate_xml_from_objs (obj_list, filename, filetype="chips") :
 	indent (root)
 	tree_x = ET.ElementTree (root)
 	tree_x.write (filename, encoding='ISO-8859-1')
-	print("\nGenerated xml file: \n\t", filename, "\n")
+	# print("\nGenerated xml file: \n\t", filename, "\n")
 
 ##------------------------------------------------------------
 ##  create n sets of train & validate files
@@ -2852,7 +3090,7 @@ def get_dirs_images (filenames, exts=['.jpg', '.jpeg', '.png']):
 ##  from vdb, save into dictionary by chipname, get
 ##      list of chip files and video files. Clean video path,
 ##  	merge with csv info
-##  return df with chipfile, location, date, datetime, month, label
+##  return df with chipfile, location, date, datetime, month, label, video
 ##  now: TODO check on parent_path
 ##------------------------------------------------------------
 def get_video_chips_info_df (filenames, vdb, vdb_d, parent_path='/data/videos/') :
@@ -2869,6 +3107,7 @@ def get_video_chips_info_df (filenames, vdb, vdb_d, parent_path='/data/videos/')
 		# get table from list of images
 		df_chips_info = pandas.merge (df_all, df_chips, on=['IMAGE'], how='inner')
 		df_chips_info['DATE'] = df_chips_info['DATE'].astype(str)
+		df_chips_info['TIME'] = df_chips_info['TIME'].astype(str)
 		df_chips_info['DATETIME'] = df_chips_info['DATE'].astype(str) + ' ' + df_chips_info['TIME'].astype(str)
 		dates = df_chips_info['DATE'].values.tolist ()
 		df_chips_info.rename(columns = {'IMAGE':'VIDEO', 'CHIPFILE':'IMAGE'}, inplace = True)
@@ -2881,6 +3120,7 @@ def get_video_chips_info_df (filenames, vdb, vdb_d, parent_path='/data/videos/')
 	else : ## no db, use dateTime info from chip tag
 		# num_empty = datetimes.count('00000000 000000')
 		dates = [dt.split()[0] for dt in datetimes]
+		times = [dt.split()[1] for dt in datetimes]
 		months = [date[4:6] for date in dates]
 		years = [date[0:4] for date in dates]
 		videos = ['/'.join (name.split('/')[:-1]) for name in chip_filenames]
@@ -2888,6 +3128,7 @@ def get_video_chips_info_df (filenames, vdb, vdb_d, parent_path='/data/videos/')
 		df_chips['LABEL'] = labels
 		df_chips['MONTH'] = months
 		df_chips['DATE'] = dates
+		df_chips['TIME'] = times
 		df_chips['DATETIME'] = datetimes
 		df_chips['VIDEO'] = videos
 		dates = df_chips['DATE'].values.tolist ()
@@ -3140,27 +3381,47 @@ def df_get_label_list (df_all) :
 	return labels
 
 ##------------------------------------------------------------
+##------------------------------------------------------------
+def df_day_get_videos_timestr (df_day, videos) :
+	times = []
+	for video in videos :
+		df_video_images = df_get_video_images (df_day, video)
+		if len (df_video_images) > 0 :
+			time = df_video_images.iloc[0]['TIME']
+			time_str = time[-6:-4] + ':' + time[-4:-2]
+			times.append (time_str)
+			# pdb.set_trace ()
+	times_str = '(' + ' '.join(times) + ')'
+	return times_str
+
+##------------------------------------------------------------
+#  given df , return list of videos
+#  videos = = df.groupby (['VIDEO']).size ()
+##------------------------------------------------------------
+def df_get_video_list (df_db) :
+	videos = []
+	dfg_videos = df_db[['VIDEO', 'IMAGE']].groupby (['VIDEO']).count().sort_values('IMAGE')
+	videos = dfg_videos.index.values.tolist()
+	return videos
+		
+##------------------------------------------------------------
 #  given df for label, return list of years
 #  years = df_label.groupby (['year']).size ()
 ##------------------------------------------------------------
 def df_get_year_list (df_label) :
-	df_years = df_label.groupby (['YEAR']).size ()
-	years = []
-	for i in range (len (df_years)) :
-		year = df_years.index[i]
-		years.append (year)
+	dfg_years = df_label.groupby (['YEAR']).size ()
+	years = dfg_years.index.values.tolist()
 	return years
 		
 ##------------------------------------------------------------
 #  given df for day for label, return list of locations
 #  locations = df_day.groupby (['LOCATION']).size ()
+	# dates = df_db['DATE'].values.tolist ()
+	# videos = df_videos.index.values.tolist()
 ##------------------------------------------------------------
 def df_get_location_list (df_day) :
-	df_locations = df_day.groupby (['LOCATION']).size ()
-	locations = []
-	for i in range (len (df_locations)) :
-		location = df_locations.index[i]
-		locations.append (location)
+	dfg_locations = df_day.groupby (['LOCATION']).size ()
+	locations = dfg_locations.index.values.tolist()
 	return locations
 		
 ##------------------------------------------------------------
@@ -3178,6 +3439,14 @@ def df_db_get_label (df_all, label) :
 def df_label_get_year (df_label, year) :
 	df_year = df_label[df_label.YEAR == year]
 	return df_year
+
+##------------------------------------------------------------
+##  given df for year, return df of images in fall
+##  fall is August and later
+##------------------------------------------------------------
+def df_get_video_images (df_db, video) :
+	df_video_images = df_db[df_db.VIDEO == video].sort_values('IMAGE')
+	return df_video_images
 
 ##------------------------------------------------------------
 ##  given df for year, return df of images in fall
@@ -3988,7 +4257,7 @@ def get_obj_stats (filenames, filename_type='source', image_db=None, parent_path
 		if filetype != 'video_chips' :
 			df_db = get_files_info_df (objfiles, image_db, parent_path, filetype)
 		# pdb.set_trace ()
-		print_db_stats (df_db)
+		print_db_stats (df_db, filetype)
 		
 	if filetype == 'faces':
 		print_faces_stats (write_stats)
@@ -4162,7 +4431,6 @@ def imgtag_find_creation_datetime_str (image_tag):
 
 ##------------------------------------------------------------
 ##  remove source tag from chips
-##  now:
 ##------------------------------------------------------------
 def remove_chip_source (filename, outfile) :
 	if outfile is None :
@@ -4195,8 +4463,11 @@ def datetime_empty_inc():
 ##  get date str of tag
 ##------------------------------------------------------------
 def tag_get_datetime_str (tag, filetype):
-	if filetype == 'chips' :
-		tag = get_chip_source_tag (tag)
+	# pdb.set_trace ()
+	if filetype in ['chips', 'video_chips'] :
+		src_tag = get_chip_source_tag (tag)
+		if src_tag :
+			tag = src_tag
 	datetime_tag = tag.find ('dateTime')
 	if datetime_tag is None :
 		if filetype == 'video_chips' :
@@ -4908,7 +5179,6 @@ def xml_to_files (xml_files, outfile, filetype, filename_type='file') :
 
 ##------------------------------------------------------------
 ##  xml_split_by_years - write xml file for each year
-##  now:
 ##------------------------------------------------------------
 def	xml_split_by_years (filenames, years, outfile, filetype='faces') :
 	# pdb.set_trace ()
@@ -5031,7 +5301,7 @@ def	print_video_stats (filenames, image_db, parent_path, print_all) :
 		dates = df_db['DATE'].values.tolist ()
 		years = [date[0:4] for date in dates]
 		df_db['YEAR'] = years
-		print_db_stats (df_db)
+		print_db_stats (df_db, 'video_chips')
 
 ##------------------------------------------------------------
 ##  split_filename_dicts - return list of matched and unmatched
@@ -5060,7 +5330,7 @@ def	split_filename_dicts (objs_d, filehames) :
 ##  expect dict as keyed by label
 ##  split_label_dicts - return list of matched and unmatched
 ##------------------------------------------------------------
-def	obj_split (objs_d, split_arg, filename_type='file', type_split='files', fix_path=True) :
+def obj_split (objs_d, split_arg, filename_type='file', type_split='files', fix_path=True) :
 	matched_objs = []
 	unmatched_objs = []
 	common_path = 'imageSourceSmall'
@@ -5077,15 +5347,19 @@ def	obj_split (objs_d, split_arg, filename_type='file', type_split='files', fix_
 		filenames = split_arg.copy ()
 		for label, objs in list(objs_d.items ()) :  ## iterate through objs
 			for obj in objs :
-				filename = get_filename (obj, filename_type, common_path)
+				filename = get_filename (obj, filename_type)
+				if common_path and filename.startswith (common_path) :
+					filename = filename[len(common_name):]
 				if filename in filenames :
 					matched_objs.append (obj)
 					filenames.remove (filename)
 				else :
 					unmatched_objs.append (obj)
 		if len (filenames) > 0 :
-			print ('not all files were matched.  Unmatched files:')
-			for filename in filenames:
+
+			print ('Warning: splitting by names encountered', len (filenames), 'unmatched files.  Printing first few: ')
+			print ('not all files were matched.', len (filenames), 'unmatched files:')
+			for filename in filenames[:5]:
 				print ('\t', filename)
 
 	## ---------------  need to test ------------
@@ -5096,7 +5370,7 @@ def	obj_split (objs_d, split_arg, filename_type='file', type_split='files', fix_
 		for label, objs in list(objs_d.items ()) :  ## iterate through objs
 			for obj in objs :
 				# pdb.set_trace ()
-				filename = get_filename (obj, filename_type, None)
+				filename = get_filename (obj, filename_type)
 				matched = False
 				for pattern in patterns :
 					if pattern in filename :
@@ -5109,24 +5383,41 @@ def	obj_split (objs_d, split_arg, filename_type='file', type_split='files', fix_
 		print ('patterns unmatched :', len (unmatched_objs))
 	else:
 		print ('Error: Unimplemented split option:',  type_split)
-
-	if len (matched_objs) != len (split_arg) and type_split != 'patterns' :
+	if len (matched_objs) != len (split_arg) and type_split == 'files' :
 		print ('Warning: splitting of objects had count of ', type_split, 'is: ', len (filenames), ', but found: ', len (matched_objs))
 	return matched_objs, unmatched_objs
 
 ##------------------------------------------------------------
+##  split_objs_by_filenames - return list of matched and unmatched objs
+##	only matches full strings when spliting by files
 ##------------------------------------------------------------
-def get_filename (obj, filename_type, common_path) :
+def	split_objs_by_filenames (objs_d, obj_filenames, common_path=None) :
+	matched_objs = []
+	unmatched_objs = []
+	filenames = obj_filenames.copy ()
+	for label, objs in list(objs_d.items ()) :  ## iterate through objs
+		for obj in objs :
+			filename = get_filename (obj)
+			if filename in filenames :
+				matched_objs.append (obj)
+				filenames.remove (filename)
+			else :
+				unmatched_objs.append (obj)
+	if len (filenames) > 0 :
+		print ('Warning: Splitting by file did not match', len (filenames), 'out of the requested', len (obj_filenames), 'filenames.')
+		print ('First few unmatched files:')
+		for filename in filenames[:5] :
+			print ('\t', filename)
+	return matched_objs, unmatched_objs
+
+##------------------------------------------------------------
+##------------------------------------------------------------
+def get_filename (obj, filename_type='file') :
 	if filename_type == 'source' :
 		obj_filename = get_chip_source_file (obj)
 	else :
 		obj_filename = obj_get_filename (obj)
-	filename = obj_filename
-	# remove absolute path
-	if common_path :
-		n = obj_filename.find (common_path)
-		filename = obj_filename[n:]
-	return filename
+	return obj_filename
 ##------------------------------------------------------------
 ##  
 ##  
