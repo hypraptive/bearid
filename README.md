@@ -1,3 +1,6 @@
+**The repository is forked and further updated/maintained here:** [https://github.com/bearid/bearid-dlib]
+
+
 # bearid
 [BearID Project](http://bearresearch.org/) code repository. For more information, read the [hypraptive blog](https://hypraptive.github.io/).
 
